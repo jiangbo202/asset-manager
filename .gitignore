@@ -1,0 +1,23 @@
+# Cloudflare / Wrangler
+.wrangler/
+.dev.vars*
+!.dev.vars.example
+
+# 构建产物
+dist/
+node_modules/
+*.tsbuildinfo
+
+# 本地备份导出（含个人资产数据，绝不入库）
+backup*.json
+backup*.sql
+
+# 编辑器 / 系统
+.DS_Store
+.vscode/*
+!.vscode/extensions.json
+.idea/
+
+# 日志
+*.log
+npm-debug.log*

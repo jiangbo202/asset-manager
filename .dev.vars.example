@@ -1,0 +1,13 @@
+# 复制本文件为 .dev.vars 后本地开发即可使用（.dev.vars 已被 git 忽略）
+#
+# 线上部署时不需要手动执行 secret put：
+#   - 一键部署按钮：部署向导会让你把下面两个值填进表单
+#   - 命令行：`npm run deploy:safe` 会自动生成并写入
+
+# 初始化口令：首次打开网页时用它完成初始化（只使用一次）
+# 生成方式： openssl rand -hex 32
+SETUP_TOKEN=dev-setup-token-please-change
+
+# 会话签名密钥
+# 生成方式： openssl rand -hex 32
+SESSION_SECRET=dev-session-secret-please-change

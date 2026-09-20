@@ -1,0 +1,25 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "asset-manager",
+  "main": "./src/worker/index.ts",
+  // 设为今天的日期（首次创建项目时）
+  "compatibility_date": "2026-09-20",
+  "assets": {
+    // directory 由 Vite 插件的客户端构建产物自动决定，无需手写
+    "not_found_handling": "single-page-application"
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      // 资源名与 id 都是「默认占位值」：
+      // - Deploy to Cloudflare 按钮会在向导里让用户改名，并回写真实 id
+      // - 命令行路径由 `npm run setup:d1` 创建/查找到真实 id 后回写本文件
+      "database_name": "asset-manager-db",
+      "database_id": "REPLACE_WITH_YOUR_D1_ID",
+      "migrations_dir": "migrations"
+    }
+  ],
+  "observability": {
+    "enabled": true
+  }
+}

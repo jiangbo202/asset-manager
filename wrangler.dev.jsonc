@@ -1,0 +1,20 @@
+{
+  // 本地开发 / 单元测试专用配置。
+  // 与 wrangler.jsonc 的区别：数据库 id 固定为占位值，本地 D1 数据落在 .wrangler/state，
+  // 因此跑 `npm run setup:d1`（会改写 wrangler.jsonc）不会影响你本地的开发数据。
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "asset-manager-dev",
+  "main": "./src/worker/index.ts",
+  "compatibility_date": "2026-09-20",
+  "assets": {
+    "not_found_handling": "single-page-application"
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "asset-manager-db-local",
+      "database_id": "local-dev-db",
+      "migrations_dir": "migrations"
+    }
+  ]
+}
