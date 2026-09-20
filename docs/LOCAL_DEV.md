@@ -106,6 +106,28 @@ tests/                Vitest（api 集成 + services 单测）
 
 ## 7. 常见问题
 
+**Q：报 `You installed workerd on another platform`**
+`node_modules` 是用另一种架构的 node 装的（典型场景：Apple Silicon 上先用 x64 的 node 装过一次，
+之后切到 nvm 的 arm64 node）。修法：
+
+```bash
+rm -rf node_modules && npm install    # 用你当前要用的那个 node
+```
+
+`npm run dev` / `build` / `test` 前会自动跑 `scripts/check-env.cjs`，遇到这种情况会直接告诉你。
+
+**Q：构建报 `ENOTEMPTY` 或 `EACCES`（dist / node_modules）**
+这些目录里有不属于当前用户的文件，通常是用 `sudo` 或别的用户跑过安装/构建。修法：
+
+```bash
+sudo chown -R $(whoami) node_modules dist .wrangler
+```
+
+**Q：`npm install` 警告 "N packages have install scripts not yet covered by allowScripts"**
+这是 npm 11.19+ 的供应链保护：默认不自动执行依赖的 postinstall 脚本。
+本项目不依赖这些脚本（workerd / esbuild 的平台二进制在各自的平台包里）。
+构建与测试都能正常跑就可以忽略；确实需要执行时用 `npm install-scripts approve <pkg>`。
+
 **Q：`npm run dev` 报 `EBADENGINE`**
 用 Node 24 LTS（见 §0）。
 
