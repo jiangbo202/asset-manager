@@ -57,8 +57,26 @@ export function MarketDataSection({ settings, onSaved }: { settings: SettingsDto
 		});
 	}, [settings]);
 
-	const providers = settings?.providers ?? [];
 	const keysSet = new Set(settings?.providerKeysSet ?? []);
+
+	/**
+	 * 数据源列表有两个来源：
+	 *  - settings.providers：静态元信息（标签、覆盖范围、说明）
+	 *  - status.providers：运行时状态（是否在限流冷却、上次错误）
+	 * 合并后渲染，避免两边各画一份表格。
+	 */
+	const providers = (settings?.providers ?? []).map((meta) => {
+		const runtime = status.data?.providers.find((item) => item.id === meta.id);
+		return {
+			...meta,
+			enabled: enabled[meta.id] ?? runtime?.enabled ?? meta.defaultEnabled,
+			coolingDown: runtime?.coolingDown ?? false,
+			cooldownMinutesLeft: runtime?.cooldownMinutesLeft ?? 0,
+			cooldownReason: runtime?.cooldownReason ?? null,
+			lastError: runtime?.lastError ?? null,
+			hasKey: runtime?.hasKey ?? keysSet.has(meta.id),
+		};
+	});
 
 	const saveAll = async () => {
 		await save.run(async () => {
@@ -244,7 +262,7 @@ export function MarketDataSection({ settings, onSaved }: { settings: SettingsDto
 					</thead>
 					<tbody>
 						{providers.map((provider) => {
-							const on = enabled[provider.id] ?? provider.defaultEnabled;
+							const on = provider.enabled;
 							return (
 								<tr key={provider.id}>
 									<td className="left">
@@ -256,6 +274,11 @@ export function MarketDataSection({ settings, onSaved }: { settings: SettingsDto
 											provider.label
 										)}
 										{provider.batch && <span className="badge" style={{ marginLeft: 6 }}>批量</span>}
+										{provider.coolingDown && (
+											<span className="badge warn" style={{ marginLeft: 6 }} title={provider.cooldownReason ?? ""}>
+												限流冷却 {provider.cooldownMinutesLeft} 分钟
+											</span>
+										)}
 									</td>
 									<td className="left hide-sm">{provider.kinds.join(" / ")}</td>
 									<td className="left">
@@ -272,13 +295,16 @@ export function MarketDataSection({ settings, onSaved }: { settings: SettingsDto
 										) : provider.needsKey ? (
 											<input
 												type="password"
-												placeholder={keysSet.has(provider.id) ? "已设置（留空不修改）" : "填写 Key"}
+												placeholder={provider.hasKey ? "已设置（留空不修改）" : "填写 Key"}
 												value={keys[provider.id] ?? ""}
 												onChange={(e) => setKeys({ ...keys, [provider.id]: e.target.value })}
 												style={{ minWidth: 180 }}
 											/>
 										) : (
 											<span className="muted small">无需</span>
+										)}
+										{provider.lastError && !provider.coolingDown && (
+											<div className="small muted">上次错误：{provider.lastError}</div>
 										)}
 									</td>
 									<td className="left hide-sm muted small">{provider.note}</td>
@@ -350,6 +376,13 @@ export function MarketDataSection({ settings, onSaved }: { settings: SettingsDto
 					</p>
 				)}
 			</div>
+
+			{lastReport && lastReport.coolingDown.length > 0 && (
+				<div className="alert" style={{ marginTop: 12 }}>
+					以下数据源被暂时跳过：
+					{lastReport.coolingDown.map((item) => `${item.provider}（${item.reason}，约 ${item.minutesLeft} 分钟后恢复）`).join("；")}
+				</div>
+			)}
 
 			{lastReport && lastReport.failed.length > 0 && (
 				<div className="alert error" style={{ marginTop: 12 }}>

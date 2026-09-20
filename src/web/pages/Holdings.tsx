@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { api, type AccountDto, type HoldingListDto } from "../lib/api";
+import { api, type AccountDto, type HoldingListDto, type LookupCandidate } from "../lib/api";
 import { useAsync, useSubmit } from "../lib/useAsync";
 import { BrandIcon } from "../lib/icons";
 import { money, number, relativeDays, stalenessClass } from "../lib/format";
@@ -81,6 +81,12 @@ export function HoldingsPage() {
 	const [form, setForm] = useState<FormState | null>(null);
 	const [editingId, setEditingId] = useState<string | null>(null);
 	const [prices, setPrices] = useState<Record<string, string>>({});
+	const [lookup, setLookup] = useState<{
+		loading: boolean;
+		message: string | null;
+		error: string | null;
+		candidates: LookupCandidate[];
+	}>({ loading: false, message: null, error: null, candidates: [] });
 	const { pending, error, setError, run } = useSubmit();
 	const bulk = useSubmit();
 
@@ -166,6 +172,65 @@ export function HoldingsPage() {
 			quoteSymbol: holding.quote_symbol ?? "",
 			note: holding.note ?? "",
 		});
+	};
+
+	/**
+	 * 代码查询：填名称/币种/市场，也可以顺便把最新价填进价格框
+	 * 走 /api/quotes/lookup（服务端缓存 24h，避免反复打第三方接口被限流）
+	 */
+	const runLookup = async (options: { fillPrice: boolean; force?: boolean; symbolOverride?: string }) => {
+		if (!form) return;
+		const symbol = (options.symbolOverride ?? form.symbol).trim();
+		if (!symbol) {
+			setLookup({ loading: false, message: null, error: "请先填写代码", candidates: [] });
+			return;
+		}
+		setLookup({ loading: true, message: null, error: null, candidates: [] });
+		try {
+			const result = await api.quotes.lookup({
+				symbol,
+				market: form.market || null,
+				class: form.class,
+				force: options.force,
+			});
+			if (result.candidates.length === 0) {
+				setLookup({
+					loading: false,
+					message: null,
+					error: result.rateLimited
+						? "行情接口暂时被限流，稍后再试（或到设置页换一个数据源）"
+						: result.errors[0] ?? "没有找到这个代码",
+					candidates: [],
+				});
+				return;
+			}
+
+			const best = result.candidates[0];
+			const patch: Partial<FormState> = {};
+			// 名称只在为空时自动填，避免覆盖用户自己起的名字
+			if (!form.name.trim() && best.name) patch.name = best.name;
+			if (best.currency) patch.currency = best.currency;
+			if (best.market) patch.market = best.market as Market;
+			if (best.class && best.class !== "crypto" && best.class !== "cash") patch.class = best.class as AssetClass;
+			if (options.fillPrice && best.price !== null) patch.price = String(best.price);
+			if (best.symbol && (!form.symbol.trim() || options.fillPrice)) patch.symbol = best.symbol;
+			setForm((current) => (current ? { ...current, ...patch } : current));
+
+			const priceNote = best.price !== null ? `，最新价 ${best.price} ${best.currency ?? ""}` : "";
+			setLookup({
+				loading: false,
+				message: `${result.cached ? "（缓存）" : ""}已从 ${best.source} 匹配：${best.name}${priceNote}`,
+				error: null,
+				candidates: result.candidates,
+			});
+		} catch (lookupError) {
+			setLookup({
+				loading: false,
+				message: null,
+				error: lookupError instanceof Error ? lookupError.message : "查询失败",
+				candidates: [],
+			});
+		}
 	};
 
 	const changeAccount = (accountId: string) => {
@@ -371,12 +436,24 @@ export function HoldingsPage() {
 					<div className="row">
 						{form.class !== "cash" && (
 							<label className="field">
-								<span>代码（如 AAPL / 0700.HK / BTC）</span>
-								<input
-									value={form.symbol}
-									onChange={(e) => setForm({ ...form, symbol: e.target.value })}
-									placeholder="可留空，但填了更好认"
-								/>
+								<span>代码（如 AAPL / 0700.HK / BTC）——填完自动查名称</span>
+								<div className="input-with-button">
+									<input
+										value={form.symbol}
+										onChange={(e) => setForm({ ...form, symbol: e.target.value })}
+										onBlur={() => {
+											if (form.symbol.trim() && !form.name.trim()) void runLookup({ fillPrice: false });
+										}}
+										placeholder="输入代码后点右侧按钮查询"
+									/>
+									<button
+										type="button"
+										onClick={() => void runLookup({ fillPrice: false })}
+										disabled={lookup.loading || !form.symbol.trim()}
+									>
+										{lookup.loading ? "查询中…" : "查名称"}
+									</button>
+								</div>
 							</label>
 						)}
 						<label className="field">
@@ -399,14 +476,24 @@ export function HoldingsPage() {
 						{form.class !== "cash" && (
 							<>
 								<label className="field">
-									<span>当前价格（v1 手动录入）</span>
-									<input
-										type="number"
-										step="any"
-										value={form.price}
-										onChange={(e) => setForm({ ...form, price: e.target.value })}
-										required
-									/>
+									<span>当前价格（可手动填，也可点按钮取最新价）</span>
+									<div className="input-with-button">
+										<input
+											type="number"
+											step="any"
+											value={form.price}
+											onChange={(e) => setForm({ ...form, price: e.target.value })}
+											required
+										/>
+										<button
+											type="button"
+											onClick={() => void runLookup({ fillPrice: true, force: true })}
+											disabled={lookup.loading || !form.symbol.trim()}
+											title="立即联网取一次最新价（不走缓存）"
+										>
+											{lookup.loading ? "…" : "取最新价"}
+										</button>
+									</div>
 								</label>
 								<label className="field">
 									<span>平均成本（可选，用于算盈亏）</span>
@@ -425,6 +512,44 @@ export function HoldingsPage() {
 					{form.class === "cash" && (
 						<div className="small muted" style={{ marginBottom: 12 }}>
 							现金只需填余额，价格恒为 1
+						</div>
+					)}
+
+					{lookup.error && <div className="alert error">{lookup.error}</div>}
+					{lookup.message && (
+						<div className="small" style={{ marginBottom: 12 }}>
+							{lookup.message}
+						</div>
+					)}
+					{lookup.candidates.length > 1 && (
+						<div style={{ marginBottom: 12 }}>
+							<div className="small muted">其它匹配结果（点一下替换）：</div>
+							<div className="chips">
+								{lookup.candidates.slice(1, 6).map((candidate) => (
+									<button
+										key={candidate.symbol}
+										type="button"
+										onClick={() => {
+											setForm((current) =>
+												current
+													? {
+															...current,
+															symbol: candidate.symbol,
+															name: candidate.name,
+															currency: candidate.currency ?? current.currency,
+															market: (candidate.market as Market) ?? current.market,
+															price: candidate.price !== null ? String(candidate.price) : current.price,
+														}
+													: current,
+											);
+											setLookup({ loading: false, message: null, error: null, candidates: [] });
+										}}
+									>
+										{candidate.symbol}
+										{candidate.exchange ? ` · ${candidate.exchange}` : ""}
+									</button>
+								))}
+							</div>
 						</div>
 					)}
 

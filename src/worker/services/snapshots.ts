@@ -95,26 +95,42 @@ export async function takeSnapshot(
 		return { date, total: record.total, currency: displayCurrency, created: false, holdings: detail.length };
 	}
 
-	await db
-		.prepare(
-			`INSERT INTO snapshots (date, base_currency, total, by_currency_json, by_class_json, by_account_json, detail_json, created_at)
-			 VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-			 ON CONFLICT(date) DO UPDATE SET base_currency = excluded.base_currency, total = excluded.total,
-			   by_currency_json = excluded.by_currency_json, by_class_json = excluded.by_class_json,
-			   by_account_json = excluded.by_account_json, detail_json = excluded.detail_json,
-			   created_at = excluded.created_at`,
-		)
-		.bind(
-			record.date,
-			record.base_currency,
-			record.total,
-			record.by_currency_json,
-			record.by_class_json,
-			record.by_account_json,
-			record.detail_json,
-			record.created_at,
-		)
-		.run();
+	const statements: D1PreparedStatement[] = [
+		db
+			.prepare(
+				`INSERT INTO snapshots (date, base_currency, total, by_currency_json, by_class_json, by_account_json, detail_json, created_at)
+				 VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+				 ON CONFLICT(date) DO UPDATE SET base_currency = excluded.base_currency, total = excluded.total,
+				   by_currency_json = excluded.by_currency_json, by_class_json = excluded.by_class_json,
+				   by_account_json = excluded.by_account_json, detail_json = excluded.detail_json,
+				   created_at = excluded.created_at`,
+			)
+			.bind(
+				record.date,
+				record.base_currency,
+				record.total,
+				record.by_currency_json,
+				record.by_class_json,
+				record.by_account_json,
+				record.detail_json,
+				record.created_at,
+			),
+	];
+
+	// 把"当天生效的汇率"冻结下来（v0.11）：以后改汇率不会再平移历史曲线
+	for (const rate of fxRates) {
+		statements.push(
+			db
+				.prepare(
+					`INSERT INTO fx_daily (date, base, quote, rate, source, created_at) VALUES (?, ?, ?, ?, ?, ?)
+					 ON CONFLICT(date, base, quote) DO UPDATE SET rate = excluded.rate, source = excluded.source,
+					   created_at = excluded.created_at`,
+				)
+				.bind(record.date, rate.base, rate.quote, rate.rate, rate.source, record.created_at),
+		);
+	}
+
+	await db.batch(statements);
 
 	return { date, total: record.total, currency: displayCurrency, created: true, holdings: detail.length };
 }
@@ -137,6 +153,8 @@ export interface TrendSeries {
 	missingFxCurrencies: string[];
 	/** 采样间隔（1=日，7=周，30=月） */
 	bucketDays: number;
+	/** 历史点用的是"当天冻结汇率"还是"当前汇率" */
+	rateMode: "frozen" | "current" | "mixed";
 }
 
 export type TrendRange = "1M" | "3M" | "6M" | "1Y" | "ALL";
@@ -149,6 +167,20 @@ const RANGE_DAYS: Record<Exclude<TrendRange, "ALL">, number> = {
 };
 
 const MAX_POINTS = 400;
+
+/** 按日冻结的汇率表（date -> "BASE:QUOTE" -> rate） */
+async function loadDailyRates(db: D1Database): Promise<Map<string, Map<string, number>>> {
+	const { results } = await db
+		.prepare(`SELECT date, base, quote, rate FROM fx_daily ORDER BY date`)
+		.all<{ date: string; base: string; quote: string; rate: number }>();
+	const byDate = new Map<string, Map<string, number>>();
+	for (const row of results ?? []) {
+		const bucket = byDate.get(row.date) ?? new Map<string, number>();
+		bucket.set(`${row.base}:${row.quote}`, row.rate);
+		byDate.set(row.date, bucket);
+	}
+	return byDate;
+}
 
 export function rangeToFromDate(range: TrendRange, today = todayUtc()): string | null {
 	if (range === "ALL") return null;
@@ -175,6 +207,30 @@ export async function buildTrendSeries(
 	const lookup = buildFxLookup(fxRates);
 	const missingFx = new Set<string>();
 
+	// 按日冻结的汇率：优先使用，缺失时回退到当前汇率
+	const dailyRates = await loadDailyRates(db);
+	const dailyDates = [...dailyRates.keys()].sort();
+	const rateFor = (date: string, from: string, to: string): { rate: number | null; frozen: boolean } => {
+		if (from === to) return { rate: 1, frozen: true };
+		// 取"不晚于该快照日期"的最近一批冻结汇率（forward fill）
+		let bucket: Map<string, number> | undefined;
+		for (let index = dailyDates.length - 1; index >= 0; index -= 1) {
+			if (dailyDates[index] <= date) {
+				bucket = dailyRates.get(dailyDates[index]);
+				break;
+			}
+		}
+		if (bucket) {
+			const direct = bucket.get(`${from}:${to}`);
+			if (direct !== undefined) return { rate: direct, frozen: true };
+			const reverse = bucket.get(`${to}:${from}`);
+			if (reverse !== undefined && reverse !== 0) return { rate: 1 / reverse, frozen: true };
+		}
+		return { rate: lookup(from, to), frozen: false };
+	};
+	let frozenHits = 0;
+	let currentHits = 0;
+
 	const from = rangeToFromDate(options.range);
 	const { results } = from
 		? await db
@@ -193,6 +249,7 @@ export async function buildTrendSeries(
 			lastDate: null,
 			missingFxCurrencies: [],
 			bucketDays: 1,
+			rateMode: "current",
 		};
 	}
 
@@ -218,7 +275,10 @@ export async function buildTrendSeries(
 				if (filters.class && entry.c !== filters.class) continue;
 				if (filters.accountId && entry.a !== filters.accountId) continue;
 				if (filters.markets && filters.markets.length > 0 && (!entry.m || !filters.markets.includes(entry.m))) continue;
-				const rate = lookup(entry.u, displayCurrency);
+				const resolved = rateFor(row.date, entry.u, displayCurrency);
+				if (resolved.frozen) frozenHits += 1;
+				else if (resolved.rate !== null) currentHits += 1;
+				const rate = resolved.rate;
 				if (rate === null) {
 					missingFx.add(entry.u);
 					continue;
@@ -233,7 +293,10 @@ export async function buildTrendSeries(
 			try {
 				const byCurrency = JSON.parse(row.by_currency_json) as Record<string, number>;
 				for (const [currency, value] of Object.entries(byCurrency)) {
-					const rate = lookup(currency, displayCurrency);
+					const resolved = rateFor(row.date, currency, displayCurrency);
+					if (resolved.frozen) frozenHits += 1;
+					else if (resolved.rate !== null) currentHits += 1;
+					const rate = resolved.rate;
 					if (rate === null) {
 						missingFx.add(currency);
 						continue;
@@ -288,6 +351,9 @@ export async function buildTrendSeries(
 		}
 	}
 
+	const rateMode: TrendSeries["rateMode"] =
+		frozenHits > 0 && currentHits > 0 ? "mixed" : frozenHits > 0 ? "frozen" : "current";
+
 	return {
 		displayCurrency,
 		points,
@@ -296,6 +362,7 @@ export async function buildTrendSeries(
 		lastDate,
 		missingFxCurrencies: [...missingFx],
 		bucketDays,
+		rateMode,
 	};
 }
 

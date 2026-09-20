@@ -3,6 +3,7 @@ import { decryptSecret } from "../../core/secrets";
 import { getSetting, setSetting, SETTING_DISPLAY_CURRENCY } from "../../data/settings.repo";
 import { listHoldings } from "../../data/accounts.repo";
 import { listFxRates, upsertAutoFxRate } from "../../data/fx.repo";
+import { applyHealth, cooldownOf, parseHealth, type ProviderHealth } from "./health";
 import {
 	DEFAULT_PRIORITY,
 	planProviders,
@@ -36,6 +37,8 @@ export interface RefreshReport {
 	sources: Record<string, number>;
 	failed: Array<{ symbol: string; reason: string }>;
 	skipped: string[];
+	/** 因为限流/连续失败被暂时跳过的数据源 */
+	coolingDown: Array<{ provider: string; minutesLeft: number; reason: string }>;
 	startedAt: string;
 	finishedAt: string;
 }
@@ -129,6 +132,7 @@ export async function refreshQuotes(
 		sources: {},
 		failed: [],
 		skipped: [],
+		coolingDown: [],
 		startedAt,
 		finishedAt: startedAt,
 	};
@@ -141,6 +145,7 @@ export async function refreshQuotes(
 
 	const displayCurrency = (await getSetting(db, SETTING_DISPLAY_CURRENCY)) ?? "USD";
 	const settings = await loadProviderSettings(db, env.SESSION_SECRET);
+	let health: ProviderHealth = parseHealth(await getSetting(db, "provider_health"));
 	// 注意：Workers 里 fetch 必须绑定到全局作用域调用，直接当方法传递会报 "Illegal invocation"
 	const ctx: FetchContext = {
 		fetcher: options.fetcher ?? ((input, init) => fetch(input, init)),
@@ -179,12 +184,38 @@ export async function refreshQuotes(
 			continue;
 		}
 
+		// 全都在冷却里就别白跑了，直接说明原因
+		const available = providers.filter((provider) => !cooldownOf(health, provider).cooling);
+		if (available.length === 0 && providers.length > 0) {
+			const soonest = providers
+				.map((provider) => ({ provider, state: cooldownOf(health, provider) }))
+				.sort((a, b) => a.state.minutesLeft - b.state.minutesLeft)[0];
+			for (const target of remaining) {
+				report.failed.push({
+					symbol: target.symbol,
+					reason: `所有数据源都在限流冷却中（最快 ${soonest.state.minutesLeft} 分钟后恢复）`,
+				});
+			}
+			continue;
+		}
+
 		for (const provider of providers) {
 			remaining = remaining.filter((target) => !resolvedKeys.has(target.key));
 			if (remaining.length === 0) break;
 
 			const meta = PROVIDER_MAP.get(provider);
 			if (!meta) continue;
+
+			// 冷却期内跳过（但如果是唯一可用的源，仍然试一次，宁可慢也别完全没数据）
+			const cooldown = cooldownOf(health, provider);
+			if (cooldown.cooling && available.length > 0 && available.length < providers.length) {
+				report.coolingDown.push({
+					provider: meta.label,
+					minutesLeft: cooldown.minutesLeft,
+					reason: cooldown.reason ?? "限流冷却中",
+				});
+				continue;
+			}
 
 			// 预算检查
 			const needed = meta.batch ? 1 : remaining.length;
@@ -205,6 +236,13 @@ export async function refreshQuotes(
 
 			const result = await runAdapter(provider, applicable, ctx, settings);
 			report.requests += meta.batch ? 1 : applicable.length;
+
+			// 更新数据源健康度：成功清零，限流/连续失败则进入冷却
+			health = applyHealth(health, provider, {
+				ok: result.quotes.length > 0,
+				status: result.status,
+				error: result.errors[0],
+			});
 
 			for (const quote of result.quotes) {
 				resolvedKeys.add(quote.key);
@@ -277,6 +315,7 @@ export async function refreshQuotes(
 
 	report.finishedAt = nowIso();
 	await setSetting(db, "market_data_last_run", report.finishedAt);
+	await setSetting(db, "provider_health", JSON.stringify(health));
 	await db
 		.prepare(
 			`INSERT INTO quote_runs (id, started_at, finished_at, trigger, updated, failed, requests, report_json)
@@ -310,6 +349,12 @@ export interface QuoteStatus {
 		kindLabel: string;
 		priority: number;
 		hasKey: boolean;
+		/** 是否处于限流冷却中 */
+		coolingDown: boolean;
+		cooldownMinutesLeft: number;
+		cooldownReason: string | null;
+		lastError: string | null;
+		lastSuccessAt: string | null;
 	}>;
 	cache: Array<{ key: string; source: string; symbol: string; price: number; currency: string; fetched_at: string }>;
 	recentRuns: Array<{ id: string; started_at: string; trigger: string; updated: number; failed: number; requests: number }>;
@@ -330,6 +375,7 @@ export async function getQuoteStatus(env: { DB: D1Database; SESSION_SECRET: stri
 		.all<{ id: string; started_at: string; trigger: string; updated: number; failed: number; requests: number }>();
 
 	const KIND_LABEL: Record<string, string> = { crypto: "加密", stock: "股票", fx: "汇率" };
+	const health = parseHealth(await getSetting(db, "provider_health"));
 
 	return {
 		enabled: (await getSetting(db, "market_data_enabled")) !== "0",
@@ -344,6 +390,16 @@ export async function getQuoteStatus(env: { DB: D1Database; SESSION_SECRET: stri
 			kindLabel: meta.kinds.map((kind) => KIND_LABEL[kind] ?? kind).join(" / "),
 			priority: DEFAULT_PRIORITY[meta.kinds[0]].indexOf(meta.id) + 1,
 			hasKey: Boolean(keys[meta.id]),
+			...(() => {
+				const state = cooldownOf(health, meta.id);
+				return {
+					coolingDown: state.cooling,
+					cooldownMinutesLeft: state.minutesLeft,
+					cooldownReason: state.reason,
+					lastError: health[meta.id]?.lastError ?? null,
+					lastSuccessAt: health[meta.id]?.lastSuccessAt ?? null,
+				};
+			})(),
 		})),
 		cache: cache.results ?? [],
 		recentRuns: runs.results ?? [],

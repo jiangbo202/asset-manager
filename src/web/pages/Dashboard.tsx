@@ -311,6 +311,11 @@ export function DashboardPage() {
 								{trend.data.snapshotCount} 天快照
 								{trend.data.firstDate && ` · ${trend.data.firstDate} ~ ${trend.data.lastDate}`}
 								{trend.data.bucketDays > 1 && ` · 已按${trend.data.bucketDays === 7 ? "周" : "月"}采样`}
+								{trend.data.rateMode === "frozen"
+									? " · 使用当日冻结汇率"
+									: trend.data.rateMode === "mixed"
+										? " · 部分日期使用当日冻结汇率"
+										: " · 使用当前汇率"}
 								{trend.data.missingFxCurrencies.length > 0 &&
 									` · 缺汇率未计入：${trend.data.missingFxCurrencies.join("、")}`}
 							</div>

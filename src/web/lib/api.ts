@@ -6,6 +6,7 @@ import type {
 	HoldingDto,
 	HoldingListDto,
 	ImportResult,
+	LookupResultDto,
 	OverviewDto,
 	Portfolio,
 	ProviderId,
@@ -109,6 +110,14 @@ export const api = {
 		refresh: () => request<{ report: RefreshReportDto }>("/api/quotes/refresh", { method: "POST" }),
 		test: (body: { provider: ProviderId | string; symbol: string; kind: string; currency: string; market?: string | null }) =>
 			request<{ ok: boolean; quotes: unknown[]; errors: string[] }>("/api/quotes/test", json(body)),
+		/** 代码 → 名称/价格/币种（持仓表单的自动填充与一键取价） */
+		lookup: (query: { symbol: string; market?: string | null; class?: string | null; force?: boolean }) => {
+			const search = new URLSearchParams({ symbol: query.symbol });
+			if (query.market) search.set("market", query.market);
+			if (query.class) search.set("class", query.class);
+			if (query.force) search.set("force", "true");
+			return request<LookupResultDto>(`/api/quotes/lookup?${search}`);
+		},
 	},
 
 	snapshots: {
@@ -191,6 +200,8 @@ export type {
 	HoldingListDto,
 	ImportPreview,
 	ImportResult,
+	LookupCandidate,
+	LookupResultDto,
 	Portfolio,
 	ProviderId,
 	QuoteStatusDto,

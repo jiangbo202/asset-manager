@@ -157,6 +157,30 @@ export interface ProviderStatusDto {
 	kindLabel: string;
 	priority: number;
 	hasKey: boolean;
+	coolingDown: boolean;
+	cooldownMinutesLeft: number;
+	cooldownReason: string | null;
+	lastError: string | null;
+	lastSuccessAt: string | null;
+}
+
+export interface LookupCandidate {
+	symbol: string;
+	name: string;
+	price: number | null;
+	currency: string | null;
+	source: string;
+	market: string;
+	class: string;
+	exchange?: string | null;
+}
+
+export interface LookupResultDto {
+	symbol: string;
+	candidates: LookupCandidate[];
+	cached: boolean;
+	rateLimited: boolean;
+	errors: string[];
 }
 
 export interface QuoteStatusDto {
@@ -183,6 +207,7 @@ export interface RefreshReportDto {
 	sources: Record<string, number>;
 	failed: Array<{ symbol: string; reason: string }>;
 	skipped: string[];
+	coolingDown: Array<{ provider: string; minutesLeft: number; reason: string }>;
 	startedAt: string;
 	finishedAt: string;
 }
@@ -204,6 +229,8 @@ export interface TrendSeriesDto {
 	lastDate: string | null;
 	missingFxCurrencies: string[];
 	bucketDays: number;
+	/** 历史点用的是"当天冻结汇率"还是"当前汇率" */
+	rateMode: "frozen" | "current" | "mixed";
 	range: string;
 	from: string | null;
 }

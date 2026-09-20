@@ -647,6 +647,16 @@ th.sortable {
 	color: #fff;
 }
 
+.input-with-button {
+	display: flex;
+	gap: 6px;
+}
+
+.input-with-button button {
+	flex: none;
+	white-space: nowrap;
+}
+
 .chips {
 	display: flex;
 	flex-wrap: wrap;

@@ -4,6 +4,7 @@ import { badRequest, ok } from "../core/errors";
 import { writeAudit } from "../core/audit";
 import { getQuoteStatus, refreshQuotes } from "../services/quotes";
 import { parseProviderSettings, runAdapter, type ProviderId, type QuoteKind, type QuoteTarget } from "../services/quotes/providers";
+import { lookupSymbol } from "../services/quotes/lookup";
 import { getSetting } from "../data/settings.repo";
 import { decryptSecret } from "../core/secrets";
 import { asRecord, requireString } from "./validate";
@@ -34,6 +35,24 @@ quotes.post("/refresh", async (c) => {
 /** 数据源与最近运行情况 */
 quotes.get("/status", async (c) => {
 	return ok(c, await getQuoteStatus(c.env));
+});
+
+/**
+ * 代码查询：输入代码 → 名称 / 当前价 / 币种 / 市场
+ * 持仓表单用它做"输入代码自动填名称"与"一键取最新价"
+ */
+quotes.get("/lookup", async (c) => {
+	const symbol = (c.req.query("symbol") ?? "").trim();
+	if (!symbol) throw badRequest("请提供 symbol 参数");
+	if (symbol.length > 40) throw badRequest("代码过长");
+
+	const result = await lookupSymbol(c.env, {
+		symbol,
+		market: c.req.query("market") ?? null,
+		classHint: c.req.query("class") ?? null,
+		force: c.req.query("force") === "true",
+	});
+	return ok(c, result);
 });
 
 /** 单点测试：设置页里验证某个数据源对某个代码能不能取到价 */

@@ -133,6 +133,8 @@ export interface Quote {
 	currency: string;
 	source: ProviderId;
 	symbol: string;
+	/** 上游顺带返回的名称（Yahoo 的 chart 接口会带），用于"输入代码自动填名称" */
+	name?: string;
 }
 
 export interface CustomProviderConfig {
@@ -157,6 +159,19 @@ export interface FetchContext {
 export interface AdapterResult {
 	quotes: Quote[];
 	errors: string[];
+	/** 整次调用失败时的上游 HTTP 状态（用于限流判定） */
+	status?: number;
+}
+
+/** 上游接口错误：保留状态码，便于区分"限流"与"代码写错了" */
+export class UpstreamError extends Error {
+	readonly status: number;
+
+	constructor(status: number, message?: string) {
+		super(message ?? `HTTP ${status}`);
+		this.name = "UpstreamError";
+		this.status = status;
+	}
 }
 
 /* ── 通用工具 ─────────────────────────────────────────────── */
@@ -177,12 +192,19 @@ export async function mapLimit<T, R>(items: T[], limit: number, fn: (item: T) =>
 	return results;
 }
 
+const describeStatus = (status: number): string => {
+	if (status === 429) return "HTTP 429（被限流，稍后会自动重试其它数据源）";
+	if (status === 403) return "HTTP 403（对方拒绝了这次请求，可能是限流或需要 Key）";
+	if (status === 404) return "HTTP 404（对方没有这个代码）";
+	return `HTTP ${status}`;
+};
+
 async function requestJson(url: string, ctx: FetchContext, headers?: Record<string, string>): Promise<unknown> {
 	const response = await ctx.fetcher(url, {
 		headers,
 		signal: AbortSignal.timeout(ctx.timeoutMs ?? 8_000),
 	});
-	if (!response.ok) throw new Error(`HTTP ${response.status}`);
+	if (!response.ok) throw new UpstreamError(response.status, describeStatus(response.status));
 	return response.json();
 }
 
@@ -191,8 +213,16 @@ async function requestText(url: string, ctx: FetchContext, headers?: Record<stri
 		headers,
 		signal: AbortSignal.timeout(ctx.timeoutMs ?? 8_000),
 	});
-	if (!response.ok) throw new Error(`HTTP ${response.status}`);
+	if (!response.ok) throw new UpstreamError(response.status, describeStatus(response.status));
 	return response.text();
+}
+
+/** 从一堆 per-symbol 结果里挑出最值得上报的状态码（429 优先） */
+function pickStatus(errors: Array<{ status?: number }>): number | undefined {
+	const statuses = errors.map((item) => item.status).filter((value): value is number => typeof value === "number");
+	if (statuses.includes(429)) return 429;
+	if (statuses.includes(403)) return 403;
+	return statuses[0];
 }
 
 const num = (value: unknown): number | null => {
@@ -208,7 +238,8 @@ function baseSymbol(target: QuoteTarget): string {
 
 /* ── 代码映射（纯函数，单测覆盖） ─────────────────────────── */
 
-const COINGECKO_IDS: Record<string, string> = {
+/** 常见币种的 CoinGecko id 映射（代码查询与取价共用） */
+export const COINGECKO_IDS: Record<string, string> = {
 	BTC: "bitcoin",
 	XBT: "bitcoin",
 	ETH: "ethereum",
@@ -399,6 +430,7 @@ const YAHOO_HEADERS = {
 
 async function yahooQuotes(targets: QuoteTarget[], ctx: FetchContext): Promise<AdapterResult> {
 	const errors: string[] = [];
+	const statuses: Array<{ status?: number }> = [];
 	const results = await mapLimit(targets, CONCURRENCY, async (target) => {
 		const symbol = yahooSymbol(target);
 		if (!symbol) return { target, error: "无法推导 Yahoo 代码" };
@@ -416,15 +448,17 @@ async function yahooQuotes(targets: QuoteTarget[], ctx: FetchContext): Promise<A
 			return {
 				quote: {
 					key: target.key,
-					// 换算到持仓币种：Yahoo 返回的是该标的的计价币种
+					// Yahoo 返回的是该标的的计价币种
 					price,
 					currency: typeof info?.currency === "string" ? info.currency : target.currency,
 					source: "yahoo" as ProviderId,
 					symbol,
+					name: typeof info?.longName === "string" ? info.longName : typeof info?.shortName === "string" ? info.shortName : undefined,
 				},
 				actualSymbol: symbol,
 			};
 		} catch (error) {
+			statuses.push({ status: error instanceof UpstreamError ? error.status : undefined });
 			return { target, error: error instanceof Error ? error.message : "请求失败" };
 		}
 	});
@@ -434,7 +468,7 @@ async function yahooQuotes(targets: QuoteTarget[], ctx: FetchContext): Promise<A
 		if ("quote" in result && result.quote) quotes.push(result.quote);
 		else errors.push(`${result.target.symbol}：${"error" in result ? result.error : "未知错误"}`);
 	}
-	return { quotes, errors };
+	return { quotes, errors, status: pickStatus(statuses) };
 }
 
 async function tencentQuotes(targets: QuoteTarget[], ctx: FetchContext): Promise<AdapterResult> {
@@ -597,6 +631,7 @@ async function customQuotes(
 	}
 
 	const errors: string[] = [];
+	const statuses: Array<{ status?: number }> = [];
 	const results = await mapLimit(targets, CONCURRENCY, async (target) => {
 		const symbol = target.symbolOverride ?? target.symbol;
 		const url = config.urlTemplate
@@ -618,6 +653,7 @@ async function customQuotes(
 				},
 			};
 		} catch (error) {
+			statuses.push({ status: error instanceof UpstreamError ? error.status : undefined });
 			return { target, error: error instanceof Error ? error.message : "请求失败" };
 		}
 	});
@@ -627,7 +663,7 @@ async function customQuotes(
 		if ("quote" in result && result.quote) quotes.push(result.quote);
 		else errors.push(`${result.target.symbol}：${"error" in result ? result.error : "未知错误"}`);
 	}
-	return { quotes, errors };
+	return { quotes, errors, status: pickStatus(statuses) };
 }
 
 /* ── 统一入口 ─────────────────────────────────────────────── */
@@ -663,7 +699,11 @@ export async function runAdapter(
 				return { quotes: [], errors: [`数据源 ${providerId} 尚未实现`] };
 		}
 	} catch (error) {
-		return { quotes: [], errors: [`${meta.label}：${error instanceof Error ? error.message : "请求失败"}`] };
+		return {
+			quotes: [],
+			errors: [`${meta.label}：${error instanceof Error ? error.message : "请求失败"}`],
+			status: error instanceof UpstreamError ? error.status : undefined,
+		};
 	}
 }
 
