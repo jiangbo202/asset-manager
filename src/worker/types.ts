@@ -58,6 +58,8 @@ export interface HoldingRow {
 	price: number;
 	avg_cost: number | null;
 	price_updated_at: string | null;
+	quote_source: string | null;
+	quote_symbol: string | null;
 	archived: number;
 	note: string | null;
 	created_at: string;

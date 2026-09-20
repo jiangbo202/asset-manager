@@ -35,6 +35,8 @@ export interface HoldingDto {
 	price: number;
 	avg_cost: number | null;
 	price_updated_at: string | null;
+	quote_source: string | null;
+	quote_symbol: string | null;
 	archived: number;
 	note: string | null;
 	created_at: string;
@@ -108,6 +110,114 @@ export interface SettingsDto {
 	fx: FxRateDto[];
 	builtInCurrencies: string[];
 	currencies: string[];
+	providers: ProviderMetaDto[];
+	providerConfig: { enabled: Record<string, boolean>; custom: CustomProviderDto | null };
+	/** 哪些数据源已经填过 API Key（不回传 Key 本身） */
+	providerKeysSet: string[];
+}
+
+/* ── v0.10：行情与快照 ─────────────────────────────────────── */
+
+export type ProviderId =
+	| "custom"
+	| "coingecko"
+	| "binance"
+	| "yahoo"
+	| "tencent"
+	| "frankfurter"
+	| "erapi";
+
+export interface ProviderMetaDto {
+	id: ProviderId;
+	label: string;
+	kinds: string[];
+	needsKey: boolean;
+	keyHint?: string;
+	docs?: string;
+	note: string;
+	defaultEnabled: boolean;
+	batch: boolean;
+}
+
+export interface CustomProviderDto {
+	urlTemplate: string;
+	pricePath: string;
+	currencyPath?: string;
+	headers?: string;
+	key?: string;
+}
+
+export interface ProviderStatusDto {
+	id: ProviderId;
+	label: string;
+	enabled: boolean;
+	needsKey: boolean;
+	note: string;
+	docs?: string;
+	kindLabel: string;
+	priority: number;
+	hasKey: boolean;
+}
+
+export interface QuoteStatusDto {
+	enabled: boolean;
+	lastRunAt: string | null;
+	providers: ProviderStatusDto[];
+	cache: Array<{ key: string; source: string; symbol: string; price: number; currency: string; fetched_at: string }>;
+	recentRuns: Array<{
+		id: string;
+		started_at: string;
+		trigger: string;
+		updated: number;
+		failed: number;
+		requests: number;
+	}>;
+	custom: CustomProviderDto | null;
+}
+
+export interface RefreshReportDto {
+	trigger: "cron" | "manual";
+	updated: number;
+	fxUpdated: number;
+	requests: number;
+	sources: Record<string, number>;
+	failed: Array<{ symbol: string; reason: string }>;
+	skipped: string[];
+	startedAt: string;
+	finishedAt: string;
+}
+
+export interface TrendPoint {
+	date: string;
+	total: number;
+	byClass: Record<string, number>;
+	byAccount: Record<string, number>;
+	/** 当日没有快照，沿用前一日 */
+	filled: boolean;
+}
+
+export interface TrendSeriesDto {
+	displayCurrency: string;
+	points: TrendPoint[];
+	snapshotCount: number;
+	firstDate: string | null;
+	lastDate: string | null;
+	missingFxCurrencies: string[];
+	bucketDays: number;
+	range: string;
+	from: string | null;
+}
+
+export interface SnapshotItemDto {
+	date: string;
+	base_currency: string;
+	total: number;
+	created_at: string;
+	by_currency_json: string;
+	by_class_json: string;
+	by_account_json: string;
+	detail_bytes: number;
+	snapshots?: number;
 }
 
 export interface AuditItemDto {

@@ -1,17 +1,19 @@
 import type {
 	AccountDto,
-	AssetClass,
 	AuditItemDto,
 	AuthMeDto,
-	EntityDiff,
 	FxRateDto,
 	HoldingDto,
 	HoldingListDto,
-	ImportPreview,
 	ImportResult,
 	OverviewDto,
 	Portfolio,
+	ProviderId,
+	QuoteStatusDto,
+	RefreshReportDto,
 	SettingsDto,
+	SnapshotItemDto,
+	TrendSeriesDto,
 } from "../../shared/api-types";
 
 /** 统一 API 客户端：自动带 cookie、统一错误信息 */
@@ -102,6 +104,22 @@ export const api = {
 			request<{ updated: number }>("/api/holdings/bulk-price", json({ items })),
 	},
 
+	quotes: {
+		status: () => request<QuoteStatusDto>("/api/quotes/status"),
+		refresh: () => request<{ report: RefreshReportDto }>("/api/quotes/refresh", { method: "POST" }),
+		test: (body: { provider: ProviderId | string; symbol: string; kind: string; currency: string; market?: string | null }) =>
+			request<{ ok: boolean; quotes: unknown[]; errors: string[] }>("/api/quotes/test", json(body)),
+	},
+
+	snapshots: {
+		list: (limit = 60) => request<{ items: SnapshotItemDto[] }>(`/api/portfolio/snapshots?limit=${limit}`),
+		take: (date?: string) => request<{ date: string; total: number; currency: string }>(
+			"/api/portfolio/snapshots",
+			json(date ? { date } : {}),
+		),
+		remove: (date: string) => request<{ deleted: boolean }>(`/api/portfolio/snapshots/${date}`, { method: "DELETE" }),
+	},
+
 	portfolio: (
 		filter: { currency?: string; class?: string; market?: string; accountId?: string; currencyFilter?: string } = {},
 	) => {
@@ -112,6 +130,13 @@ export const api = {
 		}
 		const suffix = query.toString() ? `?${query}` : "";
 		return request<Portfolio>(`/api/portfolio${suffix}`);
+	},
+
+	trend: (query: { range?: string; currency?: string; class?: string; accountId?: string; market?: string } = {}) => {
+		const search = new URLSearchParams();
+		for (const [key, value] of Object.entries(query)) if (value) search.set(key, value);
+		const suffix = search.toString() ? `?${search}` : "";
+		return request<TrendSeriesDto>(`/api/portfolio/history${suffix}`);
 	},
 
 	settings: {
@@ -167,5 +192,11 @@ export type {
 	ImportPreview,
 	ImportResult,
 	Portfolio,
+	ProviderId,
+	QuoteStatusDto,
+	RefreshReportDto,
 	SettingsDto,
-};
+	SnapshotItemDto,
+	TrendPoint,
+	TrendSeriesDto,
+} from "../../shared/api-types";

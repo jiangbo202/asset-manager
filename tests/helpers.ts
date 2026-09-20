@@ -86,6 +86,9 @@ export async function clearAll(): Promise<void> {
 		env.DB.prepare("DELETE FROM price_history"),
 		env.DB.prepare("DELETE FROM qty_history"),
 		env.DB.prepare("DELETE FROM fx_rates"),
+		env.DB.prepare("DELETE FROM snapshots"),
+		env.DB.prepare("DELETE FROM quote_cache"),
+		env.DB.prepare("DELETE FROM quote_runs"),
 		env.DB.prepare("DELETE FROM settings WHERE key NOT IN ('schema_version')"),
 	]);
 }

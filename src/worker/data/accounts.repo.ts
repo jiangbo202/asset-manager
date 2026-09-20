@@ -122,6 +122,10 @@ export interface HoldingInput {
 	qty: number;
 	price: number;
 	avg_cost?: number | null;
+	/** 行情覆盖：指定数据源（如 coingecko / yahoo） */
+	quote_source?: string | null;
+	/** 行情覆盖：指定查询代码（如 bitcoin、0700.HK） */
+	quote_symbol?: string | null;
 	note?: string | null;
 }
 
@@ -187,8 +191,8 @@ export async function createHolding(db: D1Database, input: HoldingInput): Promis
 	await db
 		.prepare(
 			`INSERT INTO holdings (id, account_id, class, market, symbol, name, currency, qty, price, avg_cost,
-			                       price_updated_at, archived, note, created_at, updated_at)
-			 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?)`,
+			                       price_updated_at, quote_source, quote_symbol, archived, note, created_at, updated_at)
+			 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?)`,
 		)
 		.bind(
 			id,
@@ -202,6 +206,8 @@ export async function createHolding(db: D1Database, input: HoldingInput): Promis
 			input.price,
 			input.avg_cost ?? null,
 			now,
+			input.quote_source ?? null,
+			input.quote_symbol ?? null,
 			input.note ?? null,
 			now,
 			now,
@@ -231,6 +237,8 @@ export async function updateHolding(
 		qty: patch.qty ?? current.qty,
 		price: patch.price ?? current.price,
 		avg_cost: patch.avg_cost === undefined ? current.avg_cost : patch.avg_cost,
+		quote_source: patch.quote_source === undefined ? current.quote_source : patch.quote_source,
+		quote_symbol: patch.quote_symbol === undefined ? current.quote_symbol : patch.quote_symbol,
 		archived: patch.archived === undefined ? current.archived : patch.archived ? 1 : 0,
 		note: patch.note === undefined ? current.note : patch.note,
 	};
@@ -238,7 +246,8 @@ export async function updateHolding(
 	await db
 		.prepare(
 			`UPDATE holdings SET account_id = ?, class = ?, market = ?, symbol = ?, name = ?, currency = ?,
-			        qty = ?, price = ?, avg_cost = ?, price_updated_at = ?, archived = ?, note = ?, updated_at = ?
+			        qty = ?, price = ?, avg_cost = ?, price_updated_at = ?, quote_source = ?, quote_symbol = ?,
+			        archived = ?, note = ?, updated_at = ?
 			 WHERE id = ?`,
 		)
 		.bind(
@@ -252,6 +261,8 @@ export async function updateHolding(
 			next.price,
 			next.avg_cost,
 			priceUpdatedAt === undefined ? current.price_updated_at : priceUpdatedAt,
+			next.quote_source,
+			next.quote_symbol,
 			next.archived,
 			next.note,
 			nowIso(),

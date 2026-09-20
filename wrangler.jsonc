@@ -19,6 +19,10 @@
       "migrations_dir": "migrations"
     }
   ],
+  // 每小时触发一次：只有"配置的快照小时"才会真正干活（见 src/worker/services/scheduler.ts）
+  "triggers": {
+    "crons": ["0 * * * *"]
+  },
   "observability": {
     "enabled": true
   }

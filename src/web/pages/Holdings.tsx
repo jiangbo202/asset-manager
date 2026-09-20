@@ -24,6 +24,8 @@ interface FormState {
 	qty: string;
 	price: string;
 	avgCost: string;
+	quoteSource: string;
+	quoteSymbol: string;
 	note: string;
 }
 
@@ -40,6 +42,8 @@ const emptyForm = (accountId: string, currency: string): FormState => ({
 	qty: "",
 	price: "",
 	avgCost: "",
+	quoteSource: "",
+	quoteSymbol: "",
 	note: "",
 });
 
@@ -158,6 +162,8 @@ export function HoldingsPage() {
 			qty: String(holding.qty),
 			price: String(holding.price),
 			avgCost: holding.avg_cost === null ? "" : String(holding.avg_cost),
+			quoteSource: holding.quote_source ?? "",
+			quoteSymbol: holding.quote_symbol ?? "",
 			note: holding.note ?? "",
 		});
 	};
@@ -201,6 +207,8 @@ export function HoldingsPage() {
 				qty: Number(form.qty),
 				price: isCash ? 1 : Number(form.price),
 				avgCost: isCash || form.avgCost === "" ? null : Number(form.avgCost),
+				quoteSource: isCash ? null : form.quoteSource || null,
+				quoteSymbol: isCash ? null : form.quoteSymbol.trim() || null,
 				note: form.note.trim() || null,
 			};
 			if (editingId) await api.holdings.update(editingId, payload);
@@ -417,6 +425,33 @@ export function HoldingsPage() {
 					{form.class === "cash" && (
 						<div className="small muted" style={{ marginBottom: 12 }}>
 							现金只需填余额，价格恒为 1
+						</div>
+					)}
+
+					{form.class !== "cash" && (
+						<div className="row">
+							<label className="field">
+								<span>行情数据源（可选，留空自动选择）</span>
+								<select
+									value={form.quoteSource}
+									onChange={(e) => setForm({ ...form, quoteSource: e.target.value })}
+								>
+									<option value="">自动（按推荐顺序回退）</option>
+									<option value="coingecko">CoinGecko</option>
+									<option value="binance">Binance</option>
+									<option value="yahoo">Yahoo Finance</option>
+									<option value="tencent">腾讯行情</option>
+									<option value="custom">自定义数据源</option>
+								</select>
+							</label>
+							<label className="field">
+								<span>行情代码覆盖（可选）</span>
+								<input
+									value={form.quoteSymbol}
+									onChange={(e) => setForm({ ...form, quoteSymbol: e.target.value })}
+									placeholder="如 bitcoin / 0700.HK / 600519.SS"
+								/>
+							</label>
 						</div>
 					)}
 

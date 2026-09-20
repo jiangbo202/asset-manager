@@ -529,6 +529,19 @@ th.sortable {
 	opacity: 1;
 }
 
+.chart-tooltip {
+	position: absolute;
+	top: 8px;
+	pointer-events: none;
+	background: color-mix(in srgb, var(--surface) 92%, transparent);
+	border: 1px solid var(--border);
+	border-radius: 8px;
+	box-shadow: var(--shadow);
+	padding: 6px 10px;
+	min-width: 150px;
+	backdrop-filter: blur(6px);
+}
+
 .treemap-legend {
 	display: flex;
 	flex-wrap: wrap;

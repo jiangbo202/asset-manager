@@ -1,7 +1,8 @@
-import { useMemo } from "react";
-import { api, type AccountDto, type Portfolio } from "../lib/api";
+import { useMemo, useState } from "react";
+import { api, type AccountDto, type Portfolio, type TrendSeriesDto } from "../lib/api";
 import { useAsync } from "../lib/useAsync";
-import { Donut, Treemap } from "../lib/charts";
+import { Donut, PALETTE, Treemap } from "../lib/charts";
+import { TrendChart } from "../lib/trend";
 import {
 	money,
 	number,
@@ -61,6 +62,10 @@ export function DashboardPage() {
 	const currencyFilter = query.get("ccy") ?? "";
 	const sortKey = (query.get("sort") as SortKey | null) ?? "value";
 	const zoom = query.get("zoom") ?? "";
+	const range = query.get("range") ?? "3M";
+	const stacked = query.get("stack") === "1";
+	const [refreshing, setRefreshing] = useState(false);
+	const [refreshNote, setRefreshNote] = useState<string | null>(null);
 
 	const accounts = useAsync<{ items: AccountDto[] }>(() => api.accounts.list(), []);
 	const portfolio = useAsync<Portfolio>(
@@ -74,8 +79,39 @@ export function DashboardPage() {
 		[assetClass, markets.join(","), accountId, currencyFilter],
 	);
 
+	const trend = useAsync<TrendSeriesDto>(
+		() =>
+			api.trend({
+				range,
+				class: assetClass || undefined,
+				accountId: accountId || undefined,
+				market: markets.length > 0 ? markets.join(",") : undefined,
+			}),
+		[range, assetClass, accountId, markets.join(",")],
+	);
+
 	const data = portfolio.data;
 	const hasFilter = Boolean(assetClass || markets.length > 0 || accountId || currencyFilter);
+
+	/** 手动刷新行情（走 Worker 的 /api/quotes/refresh，日常由每天的快照任务完成） */
+	const refreshQuotes = async () => {
+		setRefreshing(true);
+		setRefreshNote(null);
+		try {
+			const response = await api.quotes.refresh();
+			const report = response.report;
+			setRefreshNote(
+				`已更新 ${report.updated} 条价格、${report.fxUpdated} 条汇率` +
+					(report.failed.length > 0 ? `；${report.failed.length} 条失败（见设置页详情）` : ""),
+			);
+			portfolio.reload();
+			trend.reload();
+		} catch (error) {
+			setRefreshNote(error instanceof Error ? error.message : "刷新失败");
+		} finally {
+			setRefreshing(false);
+		}
+	};
 
 	const donutItems = useMemo(() => {
 		if (!data) return [];
@@ -227,6 +263,59 @@ export function DashboardPage() {
 						{data.staleDays === null ? "—" : `${data.staleDays} 天`}
 					</div>
 					<div className="hint">最久未更新的价格（v1 手动录入）</div>
+				</div>
+			</div>
+
+			<div className="section">
+				<div className="section-head">
+					<h2>走势</h2>
+					<div className="seg">
+						{["1M", "3M", "6M", "1Y", "ALL"].map((value) => (
+							<button
+								key={value}
+								className={range === value ? "on" : ""}
+								onClick={() => setQuery({ range: value === "3M" ? null : value })}
+							>
+								{value}
+							</button>
+						))}
+					</div>
+					<div className="seg">
+						<button className={!stacked ? "on" : ""} onClick={() => setQuery({ stack: null })}>
+							总额
+						</button>
+						<button className={stacked ? "on" : ""} onClick={() => setQuery({ stack: "1" })}>
+							按类别
+						</button>
+					</div>
+					<div className="spacer" />
+					{refreshNote && <span className="small muted hide-sm">{refreshNote}</span>}
+					<button onClick={refreshQuotes} disabled={refreshing}>
+						{refreshing ? "刷新中…" : "更新行情"}
+					</button>
+				</div>
+				<div className="card panel">
+					{trend.error ? (
+						<div className="alert error">加载走势失败：{trend.error}</div>
+					) : !trend.data ? (
+						<div className="skeleton" style={{ height: 260 }} />
+					) : (
+						<>
+							<TrendChart
+								points={trend.data.points}
+								currency={trend.data.displayCurrency}
+								stacked={stacked}
+								palette={PALETTE}
+							/>
+							<div className="small muted" style={{ marginTop: 4 }}>
+								{trend.data.snapshotCount} 天快照
+								{trend.data.firstDate && ` · ${trend.data.firstDate} ~ ${trend.data.lastDate}`}
+								{trend.data.bucketDays > 1 && ` · 已按${trend.data.bucketDays === 7 ? "周" : "月"}采样`}
+								{trend.data.missingFxCurrencies.length > 0 &&
+									` · 缺汇率未计入：${trend.data.missingFxCurrencies.join("、")}`}
+							</div>
+						</>
+					)}
 				</div>
 			</div>
 

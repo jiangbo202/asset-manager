@@ -16,5 +16,8 @@
       "database_id": "local-dev-db",
       "migrations_dir": "migrations"
     }
-  ]
+  ],
+  "triggers": {
+    "crons": ["0 * * * *"]
+  }
 }

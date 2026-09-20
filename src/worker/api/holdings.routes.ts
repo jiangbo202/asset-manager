@@ -70,6 +70,8 @@ holdings.post("/", async (c) => {
 		qty: requireNumber(payload, "qty", { label: isCash ? "余额" : "数量", min: -1e15, max: 1e15 }),
 		price: isCash ? 1 : requireNumber(payload, "price", { label: "价格", min: 0, max: 1e15 }),
 		avg_cost: isCash ? null : optionalNumber(payload, "avgCost", { label: "平均成本", min: 0, max: 1e15 }) ?? null,
+		quote_source: isCash ? null : optionalString(payload, "quoteSource", { label: "行情数据源", max: 20 }) ?? null,
+		quote_symbol: isCash ? null : optionalString(payload, "quoteSymbol", { label: "行情代码", max: 40 }) ?? null,
 		note: optionalString(payload, "note", { label: "备注", max: 200 }) ?? null,
 	};
 
@@ -105,6 +107,12 @@ holdings.patch("/:id", async (c) => {
 	if (payload.price !== undefined) patch.price = requireNumber(payload, "price", { label: "价格", min: 0, max: 1e15 });
 	if (payload.avgCost !== undefined) {
 		patch.avg_cost = optionalNumber(payload, "avgCost", { label: "平均成本", min: 0, max: 1e15 }) ?? null;
+	}
+	if (payload.quoteSource !== undefined) {
+		patch.quote_source = optionalString(payload, "quoteSource", { label: "行情数据源", max: 20 }) ?? null;
+	}
+	if (payload.quoteSymbol !== undefined) {
+		patch.quote_symbol = optionalString(payload, "quoteSymbol", { label: "行情代码", max: 40 }) ?? null;
 	}
 
 	const nextClass = (patch.class as string | undefined) ?? before.class;

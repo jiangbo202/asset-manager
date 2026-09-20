@@ -1,5 +1,5 @@
 /** 应用与数据结构版本（备份文件里会带上，导入时做兼容性校验） */
-export const APP_VERSION = "0.9.0";
+export const APP_VERSION = "0.10.0";
 
 /** 备份文件格式版本；schema 不兼容变更时 +1 */
 export const BACKUP_SCHEMA_VERSION = 1;

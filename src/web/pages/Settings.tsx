@@ -4,6 +4,7 @@ import { useAsync, useSubmit } from "../lib/useAsync";
 import { dateTime } from "../lib/format";
 import { decryptBackup, deriveCredential, encryptBackup, isEncryptedBackup, ITERATIONS, randomSaltHex } from "../lib/crypto";
 import { downloadText, humanSize } from "../lib/download";
+import { MarketDataSection } from "./MarketDataSection";
 
 const ROW_LABELS: Record<string, string> = {
 	accounts: "账户",
@@ -12,6 +13,8 @@ const ROW_LABELS: Record<string, string> = {
 	priceHistory: "价格历史",
 	qtyHistory: "数量历史",
 	sessions: "会话",
+	snapshots: "每日快照",
+	quoteCache: "行情缓存",
 };
 
 export function SettingsPage({ onChanged }: { onChanged?: () => void }) {
@@ -24,7 +27,6 @@ export function SettingsPage({ onChanged }: { onChanged?: () => void }) {
 	const display = useSubmit();
 	const pwd = useSubmit();
 
-	const [marketDataEnabled, setMarketDataEnabled] = useState(false);
 	const [oldPassword, setOldPassword] = useState("");
 	const [newPassword, setNewPassword] = useState("");
 
@@ -190,23 +192,14 @@ export function SettingsPage({ onChanged }: { onChanged?: () => void }) {
 				</div>
 
 				<div className="card panel">
-					<h3 style={{ marginTop: 0, fontSize: 14 }}>外部行情</h3>
-					<p className="small muted">v1 不接外部行情，价格全部手动录入。开启入口先放在这里，下个版本支持。</p>
-					<label style={{ display: "flex", gap: 8, alignItems: "center" }}>
-						<input
-							type="checkbox"
-							checked={marketDataEnabled}
-							style={{ width: "auto" }}
-							onChange={(e) => {
-								if (e.target.checked) {
-									window.alert("外部行情将在下个版本支持，敬请期待。");
-									return;
-								}
-								setMarketDataEnabled(false);
-							}}
-						/>
-						<span className="small">开启外部行情自动更新（下个版本支持）</span>
-					</label>
+					<h3 style={{ marginTop: 0, fontSize: 14 }}>价格维护方式</h3>
+					<p className="small muted">
+						价格可以自动抓取（默认开启免费数据源），也可以随时手动改：
+						任何一次手动改动都会立刻写入价格历史，自动抓取不会覆盖你改过的值——它只是把最新价写进价格字段。
+					</p>
+					<p className="small muted" style={{ marginBottom: 0 }}>
+						抓取失败不会影响记账：界面会提示"数据陈旧"。详细的开关、Key 与自定义数据源见下方「行情与快照」。
+					</p>
 				</div>
 			</div>
 
@@ -431,6 +424,12 @@ export function SettingsPage({ onChanged }: { onChanged?: () => void }) {
 					</div>
 				</div>
 			</div>
+
+			<MarketDataSection settings={settings.data} onSaved={() => {
+				settings.reload();
+				overview.reload();
+				onChanged?.();
+			}} />
 
 			<div className="section">
 				<div className="section-head">
