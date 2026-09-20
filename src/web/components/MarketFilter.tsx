@@ -8,9 +8,12 @@ import { useT } from "../lib/i18n";
 export function MarketFilter({
 	selected,
 	onChange,
+	showClear = true,
 }: {
 	selected: string[];
 	onChange: (next: string[]) => void;
+	/** 页面自己已经有"清除筛选"时传 false，避免同一行出现两个一样的按钮 */
+	showClear?: boolean;
 }) {
 	const t = useT();
 	return (
@@ -29,7 +32,7 @@ export function MarketFilter({
 					</button>
 				);
 			})}
-			{selected.length > 0 && (
+			{showClear && selected.length > 0 && (
 				<button type="button" className="ghost" onClick={() => onChange([])}>
 					{t("dashboard.clearFilters")}
 				</button>

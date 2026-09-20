@@ -84,7 +84,7 @@ trademark issues. Accounts without an icon get a colour derived from their name.
 - Donut chart (class / account / currency / symbol, click to filter) and a treemap (drill down, optional
   merge-by-symbol)
 - Daily trend: pick a range, show the total or stack by class, hover for that day's breakdown
-- Holdings table sortable by any column, including price staleness
+- Holdings table sortable by any column, including price staleness; markets are multi-select (picking “crypto” also lists tokenised stocks)
 - **Filters live in the URL**, so refreshing, bookmarking or sharing a link restores the same view
 
 **Market data**

@@ -166,7 +166,14 @@ export function holdingsStatement(db: D1Database, filter: HoldingFilter = {}): D
 		params.push(filter.class);
 	}
 	if (filter.markets && filter.markets.length > 0) {
-		where.push(`h.market IN (${filter.markets.map(() => "?").join(", ")})`);
+		const placeholders = filter.markets.map(() => "?").join(", ");
+		// 「加密」同时匹配资产类别为加密货币的持仓（代币化股票的市场字段是 us），
+		// 与前端 shared/labels.ts 的 matchesMarketFilter 保持一致
+		where.push(
+			filter.markets.includes("crypto")
+				? `(h.market IN (${placeholders}) OR h.class = 'crypto')`
+				: `h.market IN (${placeholders})`,
+		);
 		params.push(...filter.markets);
 	}
 	if (filter.currency) {

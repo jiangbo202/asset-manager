@@ -4,7 +4,15 @@ import { useAsync, useSubmit } from "../lib/useAsync";
 import { BrandIcon } from "../lib/icons";
 import { useT } from "../lib/i18n";
 import { money, number, relativeDays, stalenessClass } from "../lib/format";
-import { ASSET_CLASSES, classLabel, marketLabel, MARKETS, type AssetClass, type Market } from "../../shared/labels";
+import {
+	ASSET_CLASSES,
+	classLabel,
+	marketLabel,
+	matchesMarketFilter,
+	MARKETS,
+	type AssetClass,
+	type Market,
+} from "../../shared/labels";
 import { useRouter } from "../lib/router";
 import { MarketFilter, parseMarketParam } from "../components/MarketFilter";
 
@@ -94,7 +102,7 @@ export function HoldingsPage() {
 			(item) =>
 				(!filterAccount || item.account_id === filterAccount) &&
 				(!filterClass || item.class === filterClass) &&
-				(filterMarkets.length === 0 || (item.market !== null && filterMarkets.includes(item.market))) &&
+				matchesMarketFilter(item, filterMarkets) &&
 				(showArchived || item.archived !== 1),
 		);
 

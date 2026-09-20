@@ -376,7 +376,11 @@ export function DashboardPage() {
 				</div>
 				<div className="section-head" style={{ marginTop: -4 }}>
 					<span className="small muted">{t("accounts.market")}:</span>
-					<MarketFilter selected={markets} onChange={(next) => setQuery({ market: next.join(",") || null })} />
+					<MarketFilter
+						selected={markets}
+						onChange={(next) => setQuery({ market: next.join(",") || null })}
+						showClear={false}
+					/>
 					{hasFilter && (
 						<button
 							className="ghost"
@@ -388,7 +392,22 @@ export function DashboardPage() {
 				</div>
 
 				{donutItems.length === 0 ? (
-					<div className="card empty">{t("dashboard.emptyCta")}</div>
+					<div className="card empty">
+						{hasFilter ? (
+							<>
+								<div>{t("dashboard.emptyFiltered")}</div>
+								<button
+									className="ghost"
+									style={{ marginTop: 8 }}
+									onClick={() => setQuery({ class: null, market: null, account: null, ccy: null, zoom: null })}
+								>
+									{t("dashboard.clearFilters")}
+								</button>
+							</>
+						) : (
+							t("dashboard.emptyCta")
+						)}
+					</div>
 				) : (
 					<div className="grid cols-2">
 						<div className="card panel">

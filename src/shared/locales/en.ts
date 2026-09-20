@@ -124,6 +124,7 @@ const en: Dict = {
 	"dashboard.colPriceUpdated": "Price updated",
 	"dashboard.missingFxBadge": "no FX",
 	"dashboard.noData": "Nothing to show yet",
+	"dashboard.emptyFiltered": "No holdings match the current filters. Adjust them, or clear the filters to see everything.",
 	"dashboard.emptyCta": "No data yet. Create an account first, then add holdings.",
 	"dashboard.totalAssets": "Total assets ({{currency}})",
 	"dashboard.costTotal": "Total cost",

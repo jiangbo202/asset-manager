@@ -124,6 +124,7 @@ const zh: Dict = {
 	"dashboard.colPriceUpdated": "价格更新",
 	"dashboard.missingFxBadge": "缺汇率",
 	"dashboard.noData": "暂无可展示的数据",
+	"dashboard.emptyFiltered": "当前筛选条件下没有持仓。换个筛选，或清除筛选看全部。",
 	"dashboard.emptyCta": "还没有数据。先到「账户」创建一个账户，再到「持仓」录入资产。",
 	"dashboard.totalAssets": "总资产（{{currency}}）",
 	"dashboard.costTotal": "持仓成本合计",

@@ -11,6 +11,24 @@ export type AccountKind = (typeof ACCOUNT_KINDS)[number];
 export const MARKETS = ["us", "hk", "cn", "crypto", "other"] as const;
 export type Market = (typeof MARKETS)[number];
 
+/**
+ * 市场筛选是否命中一条持仓。
+ *
+ * 特别处：「加密」这个选项**同时**匹配资产类别为加密货币的持仓。
+ * 因为代币化股票（如 SPCXB-USD）的市场字段是 `us`（它的标的在美股），
+ * 但用户在「市场」行点「加密」时想看的是自己的加密资产——否则会得到"没有数据"。
+ * 服务端在 SQL 里表达了同一条规则（data/accounts.repo.ts 的 holdingsStatement），
+ * 两者的一致性由 tests/api/market-filter.test.ts 盯住。
+ */
+export function matchesMarketFilter(
+	holding: { market: string | null; class: string },
+	markets: readonly string[],
+): boolean {
+	if (markets.length === 0) return true;
+	if (holding.market !== null && markets.includes(holding.market)) return true;
+	return markets.includes("crypto") && holding.class === "crypto";
+}
+
 /** 资产类别标签：class.stock / class.etf … */
 export function classLabel(t: Translator, value: string): string {
 	return t(`class.${value}`);
