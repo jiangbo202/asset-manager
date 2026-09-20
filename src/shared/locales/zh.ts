@@ -338,7 +338,7 @@ const zh: Dict = {
 	"market.switches": "开关与时间",
 	"market.enable": "启用行情自动更新与每日快照",
 	"market.unsaved": "有改动未保存",
-	"market.unsavedHint": "上面的改动还没保存 —— 点下方的「保存设置」才写入。保存后要等下一个整点，定时任务读取设置时才可能生效。",
+	"market.unsavedHint": "改动还没保存：点下面的「保存设置」才写入（就在这个卡片里）。定时任务每小时重新读一次设置，所以保存后要等下一个整点才可能生效。",
 	"market.deferredHint": "分批刷新：这次有 {{count}} 个标的留到下一次定时运行（点「立即刷新行情」可立刻全量刷新）",
 	"market.never": "尚未运行",
 	"market.testTitle": "测试数据源",

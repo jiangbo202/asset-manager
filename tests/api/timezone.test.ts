@@ -82,6 +82,30 @@ describe("时区设置与业务口径", () => {
 			body: JSON.stringify(body),
 		} as RequestInit & { cookie?: string });
 
+	it("快照时间保存后能读回来，并真的按新小时触发", async () => {
+		// 对应真实踩过的坑：设置页改了小时却以为已经生效（其实要先点「保存设置」）
+		await save({ timezone: "Asia/Shanghai", snapshotHourUtc: 5 });
+
+		const stored = await env.DB.prepare(`SELECT value FROM settings WHERE key = 'snapshot_hour_utc'`).first<{
+			value: string;
+		}>();
+		expect(stored?.value).toBe("5");
+
+		// 设置页重新加载时看到的就是新值
+		const loaded = await call<Envelope<{ values: Record<string, string> }>>("/api/settings", { cookie });
+		expect(loaded.body.data.values.snapshot_hour_utc).toBe("5");
+
+		// 上海 5 点（前一天 21:00 UTC）会干活；上海 4 点不会
+		const now = new Date();
+		const utcDate = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 21, 0, 0));
+		expect(hourIn("Asia/Shanghai", utcDate)).toBe(5);
+		expect((await handleCron(env, utcDate)).ran).toBe(true);
+
+		const fourAm = new Date(utcDate.getTime() - 3600_000);
+		expect(hourIn("Asia/Shanghai", fourAm)).toBe(4);
+		expect((await handleCron(env, fourAm)).ran).toBe(false);
+	});
+
 	it("默认时区是 UTC，并由 /api/auth/me 下发给前端", async () => {
 		const me = await call<Envelope<{ timezone: string }>>("/api/auth/me", { cookie });
 		expect(me.body.data.timezone).toBe("UTC");

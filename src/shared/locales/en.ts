@@ -338,7 +338,7 @@ const en: Dict = {
 	"market.switches": "Switches & schedule",
 	"market.enable": "Enable quote updates and daily snapshots",
 	"market.unsaved": "Unsaved changes",
-	"market.unsavedHint": "The changes above are not saved yet — click “Save settings” below to store them. The Cron trigger only reads settings once an hour, so they take effect at the next matching hour.",
+	"market.unsavedHint": "Changes are not saved yet — click “Save settings” below (right in this card). The Cron trigger re-reads settings once an hour, so they take effect at the next matching hour.",
 	"market.deferredHint": "Batched refresh: {{count}} symbol(s) were deferred to the next scheduled run. Use “Refresh now” to fetch everything immediately.",
 	"market.never": "never",
 	"market.testTitle": "Test a provider",

@@ -237,6 +237,18 @@ export function MarketDataSection({ settings, onSaved }: { settings: SettingsDto
 							next: nextRun ? dateTime(nextRun.toISOString(), timeZone) : t("market.never"),
 						})}
 					</p>
+					{/* 保存按钮就放在本卡片里：它原来只在数据源那部分与整节最底部，隔好几屏，
+					    用户改完时间根本找不到 */}
+					<div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 12 }}>
+						<button className="primary" onClick={saveAll} disabled={save.pending}>
+							{save.pending ? t("common.saving") : t("market.saveSettings")}
+						</button>
+						{dirty && (
+							<span className="small" style={{ color: "var(--warn)" }}>
+								{t("market.unsaved")}
+							</span>
+						)}
+					</div>
 				</div>
 
 				<div className="card panel">
