@@ -33,6 +33,22 @@ describe("i18n 基础设施", () => {
 		).toEqual([]);
 	});
 
+	it("同 key 的参数占位符一致（改文案时两边都要动）", () => {
+		// 精简文案时很容易只顾着一侧：例如把“已获取 {{base}} = {{rate}}”改写成
+		// 没带 {{rate}} 的句子，界面就会漏显示值（而且不会报错，只是少了内容）。
+		const params = (text: string) =>
+			[...text.matchAll(/\{\{(\w+)\}\}/g)]
+				.map((match) => match[1])
+				.sort()
+				.join(",");
+
+		const mismatched = (Object.keys(zh) as Array<keyof typeof zh>)
+			.filter((key) => params(zh[key]) !== params(en[key]))
+			.map((key) => `${key}：zh=[${params(zh[key])}] en=[${params(en[key])}]`);
+
+		expect(mismatched, `占位符不一致：\n${mismatched.join("\n")}`).toEqual([]);
+	});
+
 	it("resolveLanguage：显式设置优先，auto 跟随 Accept-Language", () => {
 		expect(resolveLanguage("zh", "en-US")).toBe("zh");
 		expect(resolveLanguage("en", "zh-CN")).toBe("en");
