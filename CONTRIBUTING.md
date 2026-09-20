@@ -21,7 +21,7 @@
 git clone https://github.com/<你的用户名>/asset-manager.git
 cd asset-manager
 npm install
-npm run setup:repo -- <你的GitHub用户名>   # 替换文档里的 USERNAME 占位符
+npm run setup:repo -- <你的GitHub用户名>   # 把文档/徽章里的仓库地址换成你自己的（省略用户名则从 git remote 推断）
 cp .dev.vars.example .dev.vars
 npm run db:migrate:local && npm run db:seed:local
 npm run dev            # http://localhost:5173
@@ -90,6 +90,8 @@ npm run verify        # lint + test + build + 首包体积
 | 文档 | 什么时候需要改 |
 |---|---|
 | `README.md` | 功能、部署步骤、FAQ、路线图有变化 |
+| `README.en.md` | 与 `README.md` 同步；只改中文或只改英文会导致两份不一致 |
+| `docs/pic/*.png` | 界面截图（两版 README 共用）；改名或删图会被 `npm run check:scripts` 拦下 |
 | `docs/PRD.md` | 需求或验收标准变化（新增 FR / 决策） |
 | `docs/ARCHITECTURE.md` | 数据模型、模块划分、关键算法、体积预算变化 |
 | `docs/DEPLOYMENT.md` | 部署脚本或路径变化 |

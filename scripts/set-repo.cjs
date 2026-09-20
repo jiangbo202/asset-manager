@@ -21,6 +21,7 @@ const { execFileSync } = require("node:child_process");
 const ROOT = process.cwd();
 const TARGETS = [
 	"README.md",
+	"README.en.md",
 	"CONTRIBUTING.md",
 	"SECURITY.md",
 	".github/ISSUE_TEMPLATE/bug_report.yml",
@@ -81,7 +82,14 @@ function main() {
 		const after = before.replace(pattern, `github.com/${owner}/${repo}`);
 		if (after !== before) {
 			const count = (before.match(pattern) ?? []).length;
-			fs.writeFileSync(file, after, "utf8");
+			try {
+				fs.writeFileSync(file, after, "utf8");
+			} catch (error) {
+				console.error(`\n无法写入 ${relative}：${error.code ?? error.message}`);
+				console.error("常见原因：这个文件由别的用户（sudo/root）创建，当前用户没有写权限。");
+				console.error(`修法：sudo chown -R $(whoami) .   # 或先跑 npm run check:env 看完整清单`);
+				process.exit(1);
+			}
 			touched += 1;
 			replaced += count;
 			console.log(`  已更新 ${relative}（${count} 处）`);

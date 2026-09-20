@@ -63,6 +63,7 @@ for (const file of scriptFiles) {
 /* 3. 文档里的命令 */
 const docs = [
 	"README.md",
+	"README.en.md",
 	"CONTRIBUTING.md",
 	"SECURITY.md",
 	...fs

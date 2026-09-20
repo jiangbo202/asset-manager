@@ -3,6 +3,8 @@
 把股票、加密货币和现金记在一处，每天自动拍一张净值快照的个人记账工具。
 **整套跑在 Cloudflare 免费额度内**（Workers + D1 + 静态资源），数据只存在你自己的账号里，无遥测、无第三方统计。
 
+**简体中文** | [English](README.en.md)
+
 [![CI](https://github.com/jiangbo202/asset-manager/actions/workflows/ci.yml/badge.svg)](https://github.com/jiangbo202/asset-manager/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Cloudflare Workers](https://img.shields.io/badge/Cloudflare-Workers-f38020?logo=cloudflare&logoColor=white)](https://workers.cloudflare.com/)
@@ -345,6 +347,7 @@ tests/          Vitest（跑在 workerd 运行时，不是 jsdom 模拟）
 
 | 文档 | 内容 |
 |---|---|
+| [README.en.md](README.en.md) | English README（内容与本文对应） |
 | [docs/PRD.md](docs/PRD.md) | 需求与已确认决策、验收标准 |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | 架构、数据模型、免费额度护栏、关键取舍 |
 | [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) | 部署脚本、三条路径、故障排查 |

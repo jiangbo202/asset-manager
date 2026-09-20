@@ -75,6 +75,48 @@ if (process.platform !== "win32" && typeof process.getuid === "function") {
 			/* 忽略 */
 		}
 	}
+	// 仓库自己的文件也查一遍：多次出现"某个文件是用别的用户（sudo/root）写的，
+	// 之后脚本改不动它、报 EACCES"的情况，根目录的 README 就踩过。
+	const SKIP = new Set(["node_modules", ".git", "dist", ".wrangler", ".vite"]);
+	const foreign = [];
+	const walk = (dir, depth) => {
+		if (depth > 4 || foreign.length > 5) return;
+		let entries;
+		try {
+			entries = fs.readdirSync(dir, { withFileTypes: true });
+		} catch {
+			return;
+		}
+		for (const entry of entries) {
+			if (SKIP.has(entry.name)) continue;
+			const target = path.join(dir, entry.name);
+			try {
+				if (fs.statSync(target).uid !== uid) {
+					foreign.push(path.relative(ROOT, target));
+					continue;
+				}
+			} catch {
+				continue;
+			}
+			if (entry.isDirectory()) walk(target, depth + 1);
+		}
+	};
+	try {
+		if (fs.statSync(ROOT).uid === uid) walk(ROOT, 0);
+	} catch {
+		/* 忽略 */
+	}
+
+	if (foreign.length > 0) {
+		errors.push(
+			[
+				`这些文件不属于当前用户（${process.env.USER ?? uid}）：${foreign.slice(0, 5).join("、")}${foreign.length > 5 ? " …" : ""}`,
+				"常见原因：用 sudo 或别的用户跑过命令或写入过文件，之后脚本会报 EACCES。修法：",
+				`  sudo chown -R $(whoami) ${foreign.length > 0 ? "..." : ""}`.replace(" ...", " ."),
+			].join("\n    "),
+		);
+	}
+
 	if (bad.length > 0) {
 		errors.push(
 			[
