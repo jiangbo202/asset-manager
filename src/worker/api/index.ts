@@ -7,6 +7,7 @@ import holdingsRoutes from "./holdings.routes";
 import portfolioRoutes from "./portfolio.routes";
 import settingsRoutes from "./settings.routes";
 import historyRoutes from "./history.routes";
+import backupRoutes from "./backup.routes";
 
 const api = new Hono<AppEnv>();
 
@@ -22,6 +23,7 @@ guarded.route("/holdings", holdingsRoutes);
 guarded.route("/portfolio", portfolioRoutes);
 guarded.route("/settings", settingsRoutes);
 guarded.route("/history", historyRoutes);
+guarded.route("/backup", backupRoutes);
 
 api.route("/", guarded);
 

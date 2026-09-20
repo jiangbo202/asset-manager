@@ -3,9 +3,12 @@ import type {
 	AssetClass,
 	AuditItemDto,
 	AuthMeDto,
+	EntityDiff,
 	FxRateDto,
 	HoldingDto,
 	HoldingListDto,
+	ImportPreview,
+	ImportResult,
 	OverviewDto,
 	Portfolio,
 	SettingsDto,
@@ -128,6 +131,28 @@ export const api = {
 		const suffix = search.toString() ? `?${search}` : "";
 		return request<{ items: AuditItemDto[]; total: number; page: number; pageSize: number }>(`/api/history${suffix}`);
 	},
+
+	backup: {
+		/** 导出返回原始文本，便于在浏览器端选择是否加密（FR-8.3） */
+		exportText: async (includeAudit = true): Promise<string> => {
+			const response = await fetch(`/api/backup/export${includeAudit ? "" : "?includeAudit=false"}`, {
+				credentials: "same-origin",
+			});
+			if (!response.ok) {
+				let message = `导出失败（HTTP ${response.status}）`;
+				try {
+					const payload = (await response.json()) as { error?: { message?: string } };
+					if (payload.error?.message) message = payload.error.message;
+				} catch {
+					/* 忽略 */
+				}
+				throw new ApiError(response.status, "export_failed", message);
+			}
+			return response.text();
+		},
+		import: (payload: unknown, mode: "merge" | "replace", dryRun: boolean) =>
+			request<ImportResult>(`/api/backup/import?mode=${mode}&dryRun=${dryRun ? "true" : "false"}`, json(payload)),
+	},
 };
 
 export type {
@@ -135,9 +160,12 @@ export type {
 	AssetClass,
 	AuditItemDto,
 	AuthMeDto,
+	EntityDiff,
 	FxRateDto,
 	HoldingDto,
 	HoldingListDto,
+	ImportPreview,
+	ImportResult,
 	Portfolio,
 	SettingsDto,
 };

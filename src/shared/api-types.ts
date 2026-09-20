@@ -137,3 +137,23 @@ export interface OverviewDto {
 	settings: Record<string, string>;
 	limits: Record<string, number>;
 }
+
+export interface EntityDiff {
+	create: number;
+	update: number;
+	unchanged: number;
+	remove: number;
+}
+
+export interface ImportPreview {
+	mode: "merge" | "replace";
+	summary: Record<string, EntityDiff>;
+	warnings: string[];
+	statementCount: number;
+	atomic: boolean;
+}
+
+export interface ImportResult {
+	preview: ImportPreview;
+	applied: { statements: number; atomic: boolean } | null;
+}

@@ -76,6 +76,102 @@ export function isDesktop(): boolean {
 	return typeof navigator !== "undefined" && navigator.clipboard !== undefined;
 }
 
+/* ── 备份文件加密（FR-8.3） ─────────────────────────────────
+ * 在浏览器端用口令派生密钥并 AES-GCM 加密，Worker 全程看不到明文口令，
+ * 也不消耗 Worker CPU。
+ */
+
+const ENCRYPTED_FORMAT = "asset-manager-backup";
+
+interface EncryptedEnvelope {
+	format: string;
+	encrypted: true;
+	kdf: { name: string; salt: string; iterations: number };
+	cipher: { name: string; iv: string };
+	ciphertext: string;
+}
+
+function toBase64Url(bytes: Uint8Array): string {
+	return toBase64(bytes).replaceAll("+", "-").replaceAll("/", "_").replaceAll("=", "");
+}
+
+function fromBase64Url(value: string): Uint8Array {
+	const padded = value.replaceAll("-", "+").replaceAll("_", "/");
+	const binary = atob(padded.padEnd(Math.ceil(padded.length / 4) * 4, "="));
+	const bytes = new Uint8Array(binary.length);
+	for (let i = 0; i < binary.length; i += 1) bytes[i] = binary.charCodeAt(i);
+	return bytes;
+}
+
+async function keyFromPassphrase(passphrase: string, salt: Uint8Array, iterations: number): Promise<CryptoKey> {
+	const material = await crypto.subtle.importKey("raw", new TextEncoder().encode(passphrase), "PBKDF2", false, [
+		"deriveKey",
+	]);
+	return crypto.subtle.deriveKey(
+		{ name: "PBKDF2", salt: salt as unknown as BufferSource, iterations, hash: "SHA-256" },
+		material,
+		{ name: "AES-GCM", length: 256 },
+		false,
+		["encrypt", "decrypt"],
+	);
+}
+
+/** 用口令加密整个备份 JSON，返回新的 JSON 文本 */
+export async function encryptBackup(plainJson: string, passphrase: string): Promise<string> {
+	const salt = new Uint8Array(16);
+	const iv = new Uint8Array(12);
+	crypto.getRandomValues(salt);
+	crypto.getRandomValues(iv);
+
+	const iterations = 200_000;
+	const key = await keyFromPassphrase(passphrase, salt, iterations);
+	const ciphertext = await crypto.subtle.encrypt(
+		{ name: "AES-GCM", iv: iv as unknown as BufferSource },
+		key,
+		new TextEncoder().encode(plainJson),
+	);
+
+	const envelope: EncryptedEnvelope = {
+		format: ENCRYPTED_FORMAT,
+		encrypted: true,
+		kdf: { name: "PBKDF2-SHA256", salt: toBase64Url(salt), iterations },
+		cipher: { name: "AES-GCM", iv: toBase64Url(iv) },
+		ciphertext: toBase64Url(new Uint8Array(ciphertext)),
+	};
+	return JSON.stringify(envelope, null, 2);
+}
+
+/** 判断一段文本是否是加密备份 */
+export function isEncryptedBackup(text: string): boolean {
+	try {
+		const parsed = JSON.parse(text) as Record<string, unknown>;
+		return parsed?.encrypted === true && typeof parsed.ciphertext === "string";
+	} catch {
+		return false;
+	}
+}
+
+/** 解密备份；口令错误时 WebCrypto 会抛错 */
+export async function decryptBackup(text: string, passphrase: string): Promise<string> {
+	const envelope = JSON.parse(text) as EncryptedEnvelope;
+	if (envelope.encrypted !== true) throw new Error("不是加密备份文件");
+
+	const salt = fromBase64Url(envelope.kdf.salt);
+	const iv = fromBase64Url(envelope.cipher.iv);
+	const key = await keyFromPassphrase(passphrase, salt, envelope.kdf.iterations);
+
+	try {
+		const plain = await crypto.subtle.decrypt(
+			{ name: "AES-GCM", iv: iv as unknown as BufferSource },
+			key,
+			fromBase64Url(envelope.ciphertext) as unknown as BufferSource,
+		);
+		return new TextDecoder().decode(plain);
+	} catch {
+		throw new Error("口令不正确，或文件已损坏");
+	}
+}
+
 export async function copyText(text: string): Promise<boolean> {
 	try {
 		await navigator.clipboard.writeText(text);
