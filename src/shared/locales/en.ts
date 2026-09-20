@@ -101,7 +101,7 @@ const en: Dict = {
 	"dashboard.clearFilters": "Clear filters",
 	"dashboard.donutHint": "Click a slice or legend entry to filter (dimension: {{dimension}})",
 	"dashboard.treemapHint": "Click a block or legend entry to drill into one account. Labels now carry the account name, so the same symbol in different brokers stays distinguishable.",
-	"dashboard.treemapHintMerged": "Same symbols are merged across accounts (outer blocks are symbols, inner ones the per-account slices). Click a block to drill into that account.",
+	"dashboard.treemapHintMerged": "Same symbols are merged across accounts: each colour is one symbol (totals in the legend below) and the labels inside blocks are accounts. Click a block to drill into that account.",
 	"dashboard.mergeSymbols": "Merge same symbols",
 	"dashboard.backToAllAccounts": "← All accounts",
 	"dashboard.holdingsDetail": "Holdings",

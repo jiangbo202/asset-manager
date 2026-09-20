@@ -117,6 +117,12 @@ export interface TreemapNode {
 		name: string;
 		value: number;
 		/**
+		 * 鼠标悬停时的完整说明。
+		 * 方块上写不下那么多字（小方块只显示 name），所以两者分开：
+		 * name 是"能认出来这是哪一块"，title 是"完整信息"。
+		 */
+		title?: string;
+		/**
 		 * 方块被点击时传给 `onSelectLeaf` 的值。
 		 * 用于"按标的合并"模式：外层是标的、内层是各账户份额，点内层应当下钻到那个账户。
 		 */
@@ -230,6 +236,7 @@ export function Treemap({
 	const leaves: Array<{
 		rect: Rect;
 		name: string;
+		title: string;
 		value: number;
 		color: string;
 		groupKey: string;
@@ -246,6 +253,7 @@ export function Treemap({
 			leaves.push({
 				rect: { x: box.x + innerRect.x, y: box.y + innerRect.y, w: innerRect.w, h: innerRect.h },
 				name: child.name,
+				title: child.title ?? child.name,
 				value: child.value,
 				color: colorByChild ? colorAt(childIndex) : colorAt(groupIndex),
 				groupKey: group.key,
@@ -264,7 +272,7 @@ export function Treemap({
 						<div
 							key={`${leaf.groupKey}-${leaf.name}-${index}`}
 							className="treemap-cell"
-							title={`${leaf.name}：${money(leaf.value, currency)}（${((leaf.value / total) * 100).toFixed(1)}%）`}
+							title={`${leaf.title}：${money(leaf.value, currency)}（${((leaf.value / total) * 100).toFixed(1)}%）`}
 							style={{
 								left: `${leaf.rect.x}%`,
 								top: `${leaf.rect.y}%`,

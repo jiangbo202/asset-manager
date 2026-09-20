@@ -151,13 +151,27 @@ export function DashboardPage() {
 		// 分开模式（默认）：外层是账户，内层是标的，并且标签带上账户名——
 		// 同一个标的在多个券商时，光靠颜色分不清哪一个属于谁。
 		if (mergeSymbols) {
+			// 先数一下每个标的出现在几个账户里：出现多次的才需要在方块上标账户名
+			const accountCount = new Map<string, Set<string>>();
+			for (const holding of data.holdings) {
+				if (holding.marketValueDisplay === null) continue;
+				if (zoom && holding.accountId !== zoom) continue;
+				const label = holding.symbol ?? holding.name;
+				const seen = accountCount.get(label) ?? new Set<string>();
+				seen.add(holding.accountId);
+				accountCount.set(label, seen);
+			}
+			const multiAccount = new Set(
+				[...accountCount.entries()].filter(([, accounts]) => accounts.size > 1).map(([label]) => label),
+			);
+
 			const bySymbol = new Map<
 				string,
 				{
 					key: string;
 					name: string;
 					value: number;
-					children: Array<{ key: string; name: string; value: number; selectKey: string }>;
+					children: Array<{ key: string; name: string; title: string; value: number; selectKey: string }>;
 				}
 			>();
 			for (const holding of data.holdings) {
@@ -167,7 +181,10 @@ export function DashboardPage() {
 				const group = bySymbol.get(label) ?? { key: `symbol:${label}`, name: label, value: 0, children: [] };
 				group.children.push({
 					key: holding.id,
-					name: holding.accountName,
+					// 同一标的分散在多个账户时，方块上要写清楚是哪一家（否则看到一排"嘉信"）
+					// 单账户的标的就不加前缀，避免"嘉信现金 · 嘉信"这种冗余
+					name: multiAccount.has(label) ? `${label} · ${holding.accountName}` : label,
+					title: `${label} · ${holding.accountName}`,
 					value: Number(holding.marketValueDisplay.toFixed(2)),
 					selectKey: holding.accountId,
 				});
@@ -185,7 +202,12 @@ export function DashboardPage() {
 
 		const groups = new Map<
 			string,
-			{ key: string; name: string; value: number; children: Array<{ key: string; name: string; value: number }> }
+			{
+				key: string;
+				name: string;
+				value: number;
+				children: Array<{ key: string; name: string; title: string; value: number }>;
+			}
 		>();
 		for (const holding of data.holdings) {
 			if (holding.marketValueDisplay === null) continue;
@@ -193,9 +215,14 @@ export function DashboardPage() {
 			const group =
 				groups.get(holding.accountId) ??
 				{ key: holding.accountId, name: holding.accountName, value: 0, children: [] };
+			// 标签带上账户名，区分不同券商的同一标的；
+			// 但现金这类本身就是"账户名+现金"的持仓（如"嘉信现金"）不再叠一次前缀
+			const label = holding.symbol ?? holding.name;
+			const needsPrefix = Boolean(holding.symbol) && !label.startsWith(holding.accountName);
 			group.children.push({
 				key: holding.id,
-				name: `${holding.accountName} ${holding.symbol ?? holding.name}`,
+				name: needsPrefix ? `${holding.accountName} ${label}` : label,
+				title: `${holding.accountName} · ${label}`,
 				value: Number(holding.marketValueDisplay.toFixed(2)),
 			});
 			group.value += holding.marketValueDisplay;

@@ -101,7 +101,7 @@ const zh: Dict = {
 	"dashboard.clearFilters": "清除筛选",
 	"dashboard.donutHint": "点击扇区或图例可下钻筛选（维度：{{dimension}}）",
 	"dashboard.treemapHint": "点击方块或图例可下钻到单个账户；标签已带上账户名，区分不同券商的同一标的",
-	"dashboard.treemapHintMerged": "同一标的已跨账户合并（外层是标的，内层是各账户份额）；点方块可下钻到那个账户",
+	"dashboard.treemapHintMerged": "同一标的已跨账户合并：每种颜色是一支标的（合计见下方图例），方块里写的是账户；点方块可下钻到那个账户",
 	"dashboard.mergeSymbols": "同一标的合并",
 	"dashboard.backToAllAccounts": "← 全部账户",
 	"dashboard.holdingsDetail": "持仓明细",
