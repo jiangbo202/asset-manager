@@ -22,9 +22,21 @@ export function colorAt(index: number): string {
 
 /**
  * 环形图：手写 SVG（stroke-dasharray 画弧），不引图表库
- * 体积代价 ≈ 0，且天然跟随 CSS 变量与深浅色
+ * 点击扇区可下钻筛选（FR-6.1 联动）
  */
-export function Donut({ items, currency, size = 260 }: { items: BreakdownItem[]; currency: string; size?: number }) {
+export function Donut({
+	items,
+	currency,
+	size = 240,
+	activeKey,
+	onSelect,
+}: {
+	items: BreakdownItem[];
+	currency: string;
+	size?: number;
+	activeKey?: string | null;
+	onSelect?: (key: string) => void;
+}) {
 	const data = items.filter((item) => item.value > 0);
 	const total = data.reduce((sum, item) => sum + item.value, 0);
 
@@ -36,11 +48,13 @@ export function Donut({ items, currency, size = 260 }: { items: BreakdownItem[];
 	let offset = 0;
 
 	return (
-		<div style={{ display: "flex", gap: 20, alignItems: "center", flexWrap: "wrap" }}>
+		<div className="donut-layout">
 			<svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} role="img" aria-label="资产分布环形图">
 				<g transform={`rotate(-90 ${size / 2} ${size / 2})`}>
 					{data.map((item, index) => {
 						const length = (item.value / total) * circumference;
+						const dash = Math.max(length - 1.5, 0.5);
+						const dimmed = activeKey != null && activeKey !== item.key;
 						const element = (
 							<circle
 								key={item.key}
@@ -49,9 +63,12 @@ export function Donut({ items, currency, size = 260 }: { items: BreakdownItem[];
 								r={radius}
 								fill="none"
 								stroke={colorAt(index)}
-								strokeWidth={thickness}
-								strokeDasharray={`${Math.max(length - 1.5, 0.5)} ${circumference - Math.max(length - 1.5, 0.5)}`}
+								strokeWidth={activeKey === item.key ? thickness + 6 : thickness}
+								opacity={dimmed ? 0.35 : 1}
+								strokeDasharray={`${dash} ${circumference - dash}`}
 								strokeDashoffset={-offset}
+								style={onSelect ? { cursor: "pointer" } : undefined}
+								onClick={onSelect ? () => onSelect(item.key) : undefined}
 							>
 								<title>{`${item.label}：${money(item.value, currency)}（${item.share.toFixed(1)}%）`}</title>
 							</circle>
@@ -60,41 +77,28 @@ export function Donut({ items, currency, size = 260 }: { items: BreakdownItem[];
 						return element;
 					})}
 				</g>
-				<text
-					x="50%"
-					y="47%"
-					textAnchor="middle"
-					fontSize="12"
-					fill="currentColor"
-					opacity="0.6"
-				>
+				<text x="50%" y="46%" textAnchor="middle" fontSize="12" fill="currentColor" opacity="0.6">
 					总额
 				</text>
-				<text x="50%" y="58%" textAnchor="middle" fontSize="16" fontWeight="600" fill="currentColor">
+				<text x="50%" y="57%" textAnchor="middle" fontSize="16" fontWeight="600" fill="currentColor">
 					{money(total, currency, 0)}
 				</text>
 			</svg>
 
-			<ul style={{ listStyle: "none", margin: 0, padding: 0, flex: 1, minWidth: 180 }}>
+			<ul className="legend">
 				{data.map((item, index) => (
-					<li
-						key={item.key}
-						style={{ display: "flex", alignItems: "center", gap: 8, padding: "4px 0", fontSize: 13 }}
-					>
-						<span
-							style={{
-								width: 10,
-								height: 10,
-								borderRadius: 3,
-								background: colorAt(index),
-								flex: "none",
-							}}
-						/>
-						<span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-							{item.label}
-						</span>
-						<span className="muted small">{item.share.toFixed(1)}%</span>
-						<span style={{ fontVariantNumeric: "tabular-nums" }}>{money(item.value, currency, 0)}</span>
+					<li key={item.key}>
+						<button
+							type="button"
+							className={`legend-row ${activeKey === item.key ? "on" : ""}`}
+							onClick={onSelect ? () => onSelect(item.key) : undefined}
+							disabled={!onSelect}
+						>
+							<span className="swatch" style={{ background: colorAt(index) }} />
+							<span className="legend-name">{item.label}</span>
+							<span className="muted small">{item.share.toFixed(1)}%</span>
+							<span className="legend-value">{money(item.value, currency, 0)}</span>
+						</button>
 					</li>
 				))}
 			</ul>
@@ -102,10 +106,11 @@ export function Donut({ items, currency, size = 260 }: { items: BreakdownItem[];
 	);
 }
 
-interface TreemapNode {
+export interface TreemapNode {
+	key: string;
 	name: string;
 	value: number;
-	children?: Array<{ name: string; value: number }>;
+	children?: Array<{ key: string; name: string; value: number }>;
 }
 
 interface Rect {
@@ -180,8 +185,23 @@ function squarify(values: number[], width = 100, height = 100): Rect[] {
 	return rects;
 }
 
-/** Treemap：账户 → 标的 的层级占比，手写 div 布局（无图表库） */
-export function Treemap({ items, currency }: { items: TreemapNode[]; currency: string }) {
+/**
+ * Treemap：账户 → 标的 的层级占比，手写 div 布局（无图表库）
+ * 点击方块可下钻到该账户（colorByChild 时按标的着色）
+ */
+export function Treemap({
+	items,
+	currency,
+	height = 320,
+	colorByChild = false,
+	onSelect,
+}: {
+	items: TreemapNode[];
+	currency: string;
+	height?: number;
+	colorByChild?: boolean;
+	onSelect?: (groupKey: string) => void;
+}) {
 	const groups = items
 		.filter((item) => item.value > 0)
 		.map((item) => ({ ...item, children: (item.children ?? []).filter((child) => child.value > 0) }))
@@ -192,7 +212,7 @@ export function Treemap({ items, currency }: { items: TreemapNode[]; currency: s
 	const total = groups.reduce((sum, item) => sum + item.value, 0);
 	const groupRects = squarify(groups.map((item) => item.value));
 
-	const leaves: Array<{ rect: Rect; name: string; value: number; color: string }> = [];
+	const leaves: Array<{ rect: Rect; name: string; value: number; color: string; groupKey: string }> = [];
 	groups.forEach((group, groupIndex) => {
 		const box = groupRects[groupIndex];
 		if (!box) return;
@@ -202,67 +222,53 @@ export function Treemap({ items, currency }: { items: TreemapNode[]; currency: s
 			const innerRect = inner[childIndex];
 			if (!innerRect) return;
 			leaves.push({
-				rect: {
-					x: box.x + innerRect.x,
-					y: box.y + innerRect.y,
-					w: innerRect.w,
-					h: innerRect.h,
-				},
+				rect: { x: box.x + innerRect.x, y: box.y + innerRect.y, w: innerRect.w, h: innerRect.h },
 				name: child.name,
 				value: child.value,
-				color: colorAt(groupIndex),
+				color: colorByChild ? colorAt(childIndex) : colorAt(groupIndex),
+				groupKey: group.key,
 			});
 		});
 	});
 
 	return (
 		<div>
-			<div
-				style={{
-					position: "relative",
-					width: "100%",
-					height: 340,
-					borderRadius: 8,
-					overflow: "hidden",
-					background: "var(--surface-2)",
-				}}
-			>
+			<div className="treemap" style={{ height }}>
 				{leaves.map((leaf, index) => {
 					const wide = leaf.rect.w > 9 && leaf.rect.h > 9;
 					return (
 						<div
-							key={`${leaf.name}-${index}`}
+							key={`${leaf.groupKey}-${leaf.name}-${index}`}
+							className="treemap-cell"
 							title={`${leaf.name}：${money(leaf.value, currency)}（${((leaf.value / total) * 100).toFixed(1)}%）`}
 							style={{
-								position: "absolute",
 								left: `${leaf.rect.x}%`,
 								top: `${leaf.rect.y}%`,
 								width: `${leaf.rect.w}%`,
 								height: `${leaf.rect.h}%`,
 								background: leaf.color,
-								opacity: 0.86,
-								border: "1px solid var(--surface)",
-								display: "flex",
-								alignItems: "center",
-								justifyContent: "center",
-								overflow: "hidden",
-								color: "#fff",
-								fontSize: 11,
-								padding: 2,
-								textAlign: "center",
+								cursor: onSelect ? "pointer" : undefined,
 							}}
+							onClick={onSelect ? () => onSelect(leaf.groupKey) : undefined}
 						>
 							{wide ? leaf.name : ""}
 						</div>
 					);
 				})}
 			</div>
-			<div className="row small muted" style={{ marginTop: 10 }}>
+			<div className="treemap-legend">
 				{groups.map((group, index) => (
-					<span key={group.name} style={{ display: "inline-flex", alignItems: "center", gap: 6, flex: "none" }}>
-						<span style={{ width: 10, height: 10, borderRadius: 3, background: colorAt(index) }} />
-						{group.name} · {money(group.value, currency, 0)}
-					</span>
+					<button
+						key={group.key}
+						type="button"
+						className="legend-row"
+						onClick={onSelect ? () => onSelect(group.key) : undefined}
+						disabled={!onSelect}
+					>
+						<span className="swatch" style={{ background: colorByChild ? "var(--muted)" : colorAt(index) }} />
+						<span className="legend-name">{group.name}</span>
+						<span className="legend-value">{money(group.value, currency, 0)}</span>
+					</button>
 				))}
 			</div>
 		</div>

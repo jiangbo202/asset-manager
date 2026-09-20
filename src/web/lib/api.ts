@@ -99,9 +99,14 @@ export const api = {
 			request<{ updated: number }>("/api/holdings/bulk-price", json({ items })),
 	},
 
-	portfolio: (filter: { currency?: string; class?: string; market?: string; accountId?: string } = {}) => {
+	portfolio: (
+		filter: { currency?: string; class?: string; market?: string; accountId?: string; currencyFilter?: string } = {},
+	) => {
 		const query = new URLSearchParams();
-		for (const [key, value] of Object.entries(filter)) if (value) query.set(key, value);
+		for (const [key, value] of Object.entries(filter)) {
+			if (value === undefined || value === "") continue;
+			query.set(key, String(value));
+		}
 		const suffix = query.toString() ? `?${query}` : "";
 		return request<Portfolio>(`/api/portfolio${suffix}`);
 	},

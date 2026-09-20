@@ -3,6 +3,7 @@ import { api, type AccountDto, type HoldingListDto } from "../lib/api";
 import { useAsync, useSubmit } from "../lib/useAsync";
 import { BrandIcon } from "../lib/icons";
 import { money, number, relativeDays, stalenessClass } from "../lib/format";
+import { useRouter } from "../lib/router";
 import {
 	ASSET_CLASSES,
 	CLASS_LABELS,
@@ -25,6 +26,9 @@ interface FormState {
 	note: string;
 }
 
+type SortKey = "name" | "account" | "class" | "qty" | "price" | "value" | "stale";
+type SortDir = "asc" | "desc";
+
 const emptyForm = (accountId: string, currency: string): FormState => ({
 	accountId,
 	class: "stock",
@@ -45,14 +49,30 @@ function daysSince(iso: string | null): number | null {
 	return Math.floor((Date.now() - parsed) / 86_400_000);
 }
 
+const SORT_COLUMNS: Array<{ key: SortKey; label: string; className?: string }> = [
+	{ key: "name", label: "名称", className: "left" },
+	{ key: "account", label: "账户", className: "left hide-sm" },
+	{ key: "class", label: "类别", className: "left hide-sm" },
+	{ key: "qty", label: "数量", className: "hide-sm" },
+	{ key: "price", label: "价格" },
+	{ key: "value", label: "市值（原币）" },
+	{ key: "stale", label: "价格更新" },
+];
+
 export function HoldingsPage() {
-	const [showArchived, setShowArchived] = useState(false);
+	const { query, setQuery } = useRouter();
+	const showArchived = query.get("archived") === "1";
+	const filterAccount = query.get("account") ?? "";
+	const filterClass = query.get("class") ?? "";
+	const filterMarket = query.get("market") ?? "";
+	const sortKey = (query.get("sort") as SortKey | null) ?? "value";
+	const sortDir = (query.get("dir") as SortDir | null) ?? "desc";
+
 	const accounts = useAsync<{ items: AccountDto[] }>(() => api.accounts.list(), []);
 	const holdings = useAsync<{ items: HoldingListDto[] }>(
 		() => api.holdings.list({ includeArchived: showArchived }),
 		[showArchived],
 	);
-	const [filterAccount, setFilterAccount] = useState("");
 	const [form, setForm] = useState<FormState | null>(null);
 	const [editingId, setEditingId] = useState<string | null>(null);
 	const [prices, setPrices] = useState<Record<string, string>>({});
@@ -61,11 +81,51 @@ export function HoldingsPage() {
 
 	const accountList = accounts.data?.items ?? [];
 	const allItems = holdings.data?.items ?? [];
-	const items = allItems.filter(
-		(item) => (!filterAccount || item.account_id === filterAccount) && (showArchived || item.archived !== 1),
-	);
+	const hasFilter = Boolean(filterAccount || filterClass || filterMarket);
 
-	const cashRuleHint = form?.class === "cash" ? "现金只需填余额，价格恒为 1" : null;
+	const items = useMemo(() => {
+		const filtered = allItems.filter(
+			(item) =>
+				(!filterAccount || item.account_id === filterAccount) &&
+				(!filterClass || item.class === filterClass) &&
+				(!filterMarket || item.market === filterMarket) &&
+				(showArchived || item.archived !== 1),
+		);
+
+		const direction = sortDir === "asc" ? 1 : -1;
+		const valueOf = (item: HoldingListDto): number | string => {
+			switch (sortKey) {
+				case "name":
+					return item.symbol ?? item.name;
+				case "account":
+					return item.account_name;
+				case "class":
+					return item.class;
+				case "qty":
+					return item.qty;
+				case "price":
+					return item.price;
+				case "stale":
+					return daysSince(item.price_updated_at) ?? -1;
+				default:
+					return item.qty * item.price;
+			}
+		};
+
+		return [...filtered].sort((a, b) => {
+			const left = valueOf(a);
+			const right = valueOf(b);
+			if (typeof left === "string" || typeof right === "string") {
+				return String(left).localeCompare(String(right), "zh-CN") * direction;
+			}
+			return (left - right) * direction;
+		});
+	}, [allItems, filterAccount, filterClass, filterMarket, showArchived, sortKey, sortDir]);
+
+	const toggleSort = (key: SortKey) => {
+		if (key === sortKey) setQuery({ dir: sortDir === "asc" ? "desc" : "asc" });
+		else setQuery({ sort: key, dir: key === "name" || key === "account" || key === "class" ? "asc" : "desc" });
+	};
 
 	const changedCount = useMemo(() => {
 		return Object.entries(prices).filter(([id, value]) => {
@@ -192,11 +252,15 @@ export function HoldingsPage() {
 						type="checkbox"
 						checked={showArchived}
 						style={{ width: "auto" }}
-						onChange={(e) => setShowArchived(e.target.checked)}
+						onChange={(e) => setQuery({ archived: e.target.checked ? "1" : null })}
 					/>
 					显示已归档
 				</label>
-				<select value={filterAccount} onChange={(e) => setFilterAccount(e.target.value)} style={{ width: 170 }}>
+				<select
+					value={filterAccount}
+					onChange={(e) => setQuery({ account: e.target.value || null })}
+					style={{ width: 170 }}
+				>
 					<option value="">全部账户</option>
 					{accountList.map((account) => (
 						<option key={account.id} value={account.id}>
@@ -204,6 +268,35 @@ export function HoldingsPage() {
 						</option>
 					))}
 				</select>
+				<select
+					value={filterClass}
+					onChange={(e) => setQuery({ class: e.target.value || null })}
+					style={{ width: 120 }}
+				>
+					<option value="">全部类别</option>
+					{ASSET_CLASSES.map((value) => (
+						<option key={value} value={value}>
+							{CLASS_LABELS[value]}
+						</option>
+					))}
+				</select>
+				<select
+					value={filterMarket}
+					onChange={(e) => setQuery({ market: e.target.value || null })}
+					style={{ width: 110 }}
+				>
+					<option value="">全部市场</option>
+					{MARKETS.map((value) => (
+						<option key={value} value={value}>
+							{MARKET_LABELS[value]}
+						</option>
+					))}
+				</select>
+				{hasFilter && (
+					<button className="ghost" onClick={() => setQuery({ account: null, class: null, market: null })}>
+						清除筛选
+					</button>
+				)}
 				<button className="primary" onClick={startCreate}>
 					新建持仓
 				</button>
@@ -249,7 +342,10 @@ export function HoldingsPage() {
 						{form.class !== "cash" && (
 							<label className="field">
 								<span>市场</span>
-								<select value={form.market} onChange={(e) => setForm({ ...form, market: e.target.value as Market | "" })}>
+								<select
+									value={form.market}
+									onChange={(e) => setForm({ ...form, market: e.target.value as Market | "" })}
+								>
 									<option value="">未指定</option>
 									{MARKETS.map((market) => (
 										<option key={market} value={market}>
@@ -325,7 +421,11 @@ export function HoldingsPage() {
 						)}
 					</div>
 
-					{cashRuleHint && <div className="small muted" style={{ marginBottom: 12 }}>{cashRuleHint}</div>}
+					{form.class === "cash" && (
+						<div className="small muted" style={{ marginBottom: 12 }}>
+							现金只需填余额，价格恒为 1
+						</div>
+					)}
 
 					<label className="field">
 						<span>备注（可选）</span>
@@ -350,24 +450,32 @@ export function HoldingsPage() {
 			)}
 
 			{!holdings.data ? (
-				<div className="empty">加载中…</div>
+				<div className="card panel">
+					<div className="skeleton" style={{ height: 120 }} />
+				</div>
 			) : items.length === 0 ? (
 				<div className="card empty">
-					{allItems.length === 0 ? "还没有持仓。点击右上角「新建持仓」。" : "当前筛选条件下没有持仓。"}
+					{allItems.length === 0
+						? "还没有持仓。点击右上角「新建持仓」。"
+						: "当前筛选条件下没有持仓，试试右上角「清除筛选」。"}
 				</div>
 			) : (
 				<div className="card table-wrap">
 					<table>
 						<thead>
 							<tr>
-								<th className="left">名称</th>
-								<th className="left">账户</th>
-								<th className="left">类别</th>
-								<th>数量</th>
-								<th>价格</th>
+								{SORT_COLUMNS.map((column) => (
+									<th
+										key={column.key}
+										className={`sortable ${column.className ?? ""}`}
+										onClick={() => toggleSort(column.key)}
+										title="点击切换排序"
+									>
+										{column.label}
+										{sortKey === column.key && <span className="muted"> {sortDir === "asc" ? "▲" : "▼"}</span>}
+									</th>
+								))}
 								<th>平均成本</th>
-								<th>市值（原币）</th>
-								<th>价格更新</th>
 								<th>操作</th>
 							</tr>
 						</thead>
@@ -381,25 +489,28 @@ export function HoldingsPage() {
 											{holding.symbol && <span className="muted small"> {holding.name}</span>}
 											{holding.archived === 1 && <span className="badge"> 已归档</span>}
 										</td>
-										<td className="left">
+										<td className="left hide-sm">
 											<div className="cell-account">
 												<BrandIcon iconKey={holding.account_icon_key} name={holding.account_name} size="sm" />
 												{holding.account_name}
 											</div>
 										</td>
-										<td className="left">
+										<td className="left hide-sm">
 											{CLASS_LABELS[holding.class]}
 											{holding.market && (
-												<span className="muted small"> · {MARKET_LABELS[holding.market as Market] ?? holding.market}</span>
+												<span className="muted small">
+													{" "}
+													· {MARKET_LABELS[holding.market as Market] ?? holding.market}
+												</span>
 											)}
 										</td>
-										<td>{number(holding.qty)}</td>
+										<td className="hide-sm">{number(holding.qty)}</td>
 										<td>{holding.class === "cash" ? "1" : number(holding.price)}</td>
-										<td>{holding.avg_cost === null ? "—" : number(holding.avg_cost)}</td>
 										<td>{money(holding.qty * holding.price, holding.currency)}</td>
 										<td className={holding.class === "cash" ? "" : stalenessClass(days)}>
 											{holding.class === "cash" ? "—" : relativeDays(days)}
 										</td>
+										<td>{holding.avg_cost === null ? "—" : number(holding.avg_cost)}</td>
 										<td>
 											<button className="ghost" onClick={() => startEdit(holding)}>
 												编辑
@@ -422,7 +533,9 @@ export function HoldingsPage() {
 			<div className="section">
 				<div className="section-head">
 					<h2>批量更新价格</h2>
-					<span className="small muted">v1 不接行情，价格需要手动维护；这里可以一屏改完一次提交</span>
+					<span className="small muted hide-sm">
+						v1 不接行情，价格需要手动维护；这里可以一屏改完一次提交
+					</span>
 					<div className="spacer" />
 					<button className="primary" onClick={submitBulk} disabled={bulk.pending || changedCount === 0}>
 						{bulk.pending ? "提交中…" : changedCount > 0 ? `提交 ${changedCount} 条` : "提交价格"}
@@ -436,10 +549,10 @@ export function HoldingsPage() {
 							<thead>
 								<tr>
 									<th className="left">名称</th>
-									<th className="left">账户</th>
+									<th className="left hide-sm">账户</th>
 									<th>当前价格</th>
 									<th className="left">新价格</th>
-									<th className="left">变化</th>
+									<th className="left hide-sm">变化</th>
 								</tr>
 							</thead>
 							<tbody>
@@ -452,7 +565,7 @@ export function HoldingsPage() {
 									return (
 										<tr key={holding.id}>
 											<td className="left">{holding.symbol ?? holding.name}</td>
-											<td className="left muted">{holding.account_name}</td>
+											<td className="left muted hide-sm">{holding.account_name}</td>
 											<td>{number(holding.price)}</td>
 											<td className="left">
 												<input
@@ -461,13 +574,19 @@ export function HoldingsPage() {
 													placeholder="留空表示不修改"
 													value={raw}
 													onChange={(e) => setPrices({ ...prices, [holding.id]: e.target.value })}
-													style={{ maxWidth: 200 }}
+													style={{ maxWidth: 180 }}
 												/>
 											</td>
-											<td className={`left ${delta === null || delta === 0 ? "muted" : delta > 0 ? "positive" : "negative"}`}>
+											<td
+												className={`left hide-sm ${
+													delta === null || delta === 0 ? "muted" : delta > 0 ? "positive" : "negative"
+												}`}
+											>
 												{delta === null || delta === 0
 													? "—"
-													: `${delta > 0 ? "+" : ""}${number(delta)} (${pct === null ? "—" : `${pct > 0 ? "+" : ""}${pct.toFixed(1)}%`})`}
+													: `${delta > 0 ? "+" : ""}${number(delta)} (${
+															pct === null ? "—" : `${pct > 0 ? "+" : ""}${pct.toFixed(1)}%`
+														})`}
 											</td>
 										</tr>
 									);

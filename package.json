@@ -1,6 +1,6 @@
 {
   "name": "asset-manager",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "private": true,
   "type": "module",
   "description": "个人资产管理 — 部署在自己的 Cloudflare 上（Workers + D1）",
