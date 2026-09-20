@@ -24,6 +24,7 @@ import {
 } from "../core/session";
 import { asString, isRecord, timingSafeEqual } from "../core/utils";
 import { tOf } from "../core/i18n";
+import { checkDeploymentSecrets } from "../core/secrets";
 
 const ALGO = "pbkdf2-sha256+sha256/v1";
 const MAX_FAILS = 5;
@@ -118,10 +119,12 @@ auth.post("/setup", async (c) => {
 	if (await isInitialized(c.env.DB)) {
 		throw conflict(t("error.already_initialized"), "already_initialized");
 	}
-	const secret = c.env.SETUP_TOKEN;
-	if (!secret || secret.length < 8) {
-		throw new ApiError(500, "setup_token_missing", t("error.setup_token_missing"));
+	// 缺密钥 / 还是示例占位值 / 太短 → 直接拒绝，避免部署出一个"用公开默认口令就能初始化"的实例
+	const secretCheck = checkDeploymentSecrets(c.env);
+	if (!secretCheck.ok) {
+		throw new ApiError(500, secretCheck.code, t(`error.${secretCheck.code}`, { key: secretCheck.key }));
 	}
+	const secret = c.env.SETUP_TOKEN as string;
 
 	const payload = await body(c, t);
 	const setupToken = asString(payload.setupToken);

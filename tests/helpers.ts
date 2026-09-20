@@ -64,7 +64,10 @@ export async function call<T = unknown>(
 export const TEST_ITERATIONS = 100_000;
 
 /** 完成初始化并返回登录 cookie */
-export async function bootstrap(password = "test-password-123", setupToken = "test-setup-token") {
+export const TEST_SETUP_TOKEN =
+	"b7f1c0d9e4a25f38c6710b4e8d92a35c7f0e1b6d4a98c2e5f3107d6b8a4c9e2f";
+
+export async function bootstrap(password = "test-password-123", setupToken = TEST_SETUP_TOKEN) {
 	const kdfSalt = randomSaltHex();
 	const credential = await deriveCredential(password, kdfSalt, TEST_ITERATIONS);
 	const response = await call<{ ok: boolean }>("/api/auth/setup", {

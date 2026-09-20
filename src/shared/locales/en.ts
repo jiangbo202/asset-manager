@@ -431,6 +431,8 @@ const en: Dict = {
 	"error.invalid_id": "Invalid id",
 	"error.invalid_backup": "Invalid backup file",
 	"error.invalid_field": "Field validation failed",
+	"error.setup_token_placeholder": "SETUP_TOKEN is still the example placeholder. Generate a real random value (openssl rand -hex 32) and redeploy — otherwise anyone can initialize your instance.",
+	"error.session_secret_weak": "SESSION_SECRET is too short or still the example placeholder. Generate one with openssl rand -hex 32 and redeploy.",
 	"error.setup_token_missing": "SETUP_TOKEN is not configured — redeploy and set that secret",
 	"error.password_incorrect": "Incorrect password",
 	"error.setup_token_invalid": "Incorrect setup token",

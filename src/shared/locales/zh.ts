@@ -431,6 +431,8 @@ const zh: Dict = {
 	"error.invalid_id": "id 不合法",
 	"error.invalid_backup": "备份文件不合法",
 	"error.invalid_field": "字段校验失败",
+	"error.setup_token_placeholder": "SETUP_TOKEN 还是示例里的占位值。请生成一个真随机值（openssl rand -hex 32）后重新部署，否则任何人都能初始化你的实例。",
+	"error.session_secret_weak": "SESSION_SECRET 太短或是示例占位值。请用 openssl rand -hex 32 生成后重新部署。",
 	"error.setup_token_missing": "服务端未配置 SETUP_TOKEN，请重新部署并写入该 Secret",
 	"error.password_incorrect": "密码不正确",
 	"error.setup_token_invalid": "setup token 不正确",

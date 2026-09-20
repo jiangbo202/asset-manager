@@ -41,6 +41,10 @@ Cloudflare 会：
 
 > 这条路径下 token 是你自己填的，所以**不会出现在任何日志里**。
 
+⚠️ **向导里预填的值是仓库公开的示例占位值，必须替换掉。** 如果你直接提交，别人就能用这个已知口令
+抢先初始化你的实例。服务端会拒绝用占位值完成初始化（报 `setup_token_placeholder` 并提示
+`openssl rand -hex 32`），所以不会出现"悄悄部署出一个不安全实例"的情况——但请一开始就填真随机值。
+
 ### 路径 B：命令行
 
 ```bash
@@ -150,6 +154,7 @@ Zero Trust（免费版 ≤50 用户）→ Access → Applications → 添加自�
 | 页面提示「数据库需要升级」 | 数据库结构落后于代码。重跑 `npm run deploy:safe`，或单独 `npm run db:migrate:remote` |
 | `no such table: xxx` | 同上一行；若迁移记录已存在但表确实丢了（例如手工删过表），需要手工重建或从备份恢复 |
 | 初始化时 `setup token 不正确` | 用的是终端最后一次打印的 token；丢失则重新 `npm run setup:secrets` 并删掉 `auth` 行 |
+| 提示 `SETUP_TOKEN 还是示例里的占位值` | 你在一键部署向导里沿用了默认值。用 `openssl rand -hex 32` 生成新值更新 Secret 后重试（无需改代码） |
 | 部署成功但页面 404 | 确认 `wrangler deploy` 读到的是构建产物配置（输出里会写 `Using redirected Wrangler configuration`） |
 | 行情一直失败 | 看设置页「最近运行」的失败原因；免费接口偶发限流属正常，系统会自动换源并冷却 |
 | 首包体积 CI 失败 | `npm run check:bundle` 会列出各 chunk；大依赖请改成动态 `import()` |

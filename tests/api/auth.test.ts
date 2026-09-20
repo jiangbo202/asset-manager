@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { bootstrap, call, clearAll, deriveCredential, randomSaltHex, TEST_ITERATIONS } from "../helpers";
+import { bootstrap, call, clearAll, deriveCredential, randomSaltHex, TEST_ITERATIONS, TEST_SETUP_TOKEN } from "../helpers";
 
 describe("认证流程（setup / login / 限流 / 改密码）", () => {
 	beforeEach(async () => {
@@ -38,7 +38,7 @@ describe("认证流程（setup / login / 限流 / 改密码）", () => {
 		const again = await call("/api/auth/setup", {
 			method: "POST",
 			body: JSON.stringify({
-				setupToken: "test-setup-token",
+				setupToken: TEST_SETUP_TOKEN,
 				credential: "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
 				kdfSalt: randomSaltHex(),
 				iterations: TEST_ITERATIONS,

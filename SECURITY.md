@@ -69,6 +69,19 @@ Worker 只做一次 SHA-256。
 
 轮换 `SESSION_SECRET` 的后果：所有会话失效，**已加密的 API Key 需要重新填写**。
 
+### 拒绝已公开的占位密钥
+
+`.dev.vars.example` 是公开文件，一键部署向导会让人直接编辑它。如果沿用了里面的示例值，
+任何知道这个仓库的人都能用已知口令初始化你的部署。因此服务端在初始化时会检查：
+
+| 情况 | 结果 |
+|---|---|
+| `SETUP_TOKEN` 缺失或短于 8 位 | 500 `setup_token_missing` |
+| `SETUP_TOKEN` 是仓库里的示例占位值 | 500 `setup_token_placeholder`（提示 `openssl rand -hex 32`） |
+| `SESSION_SECRET` 短于 16 位或是占位值 | 500 `session_secret_weak` |
+
+意义是**让问题在第一次初始化时就暴露**，而不是悄悄留一个后门。
+
 ## 4. 部署建议
 
 1. **不要用可猜测的 `workers.dev` 子域**；绑自有域名（或至少改成一个随机子域）。
