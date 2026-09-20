@@ -73,6 +73,9 @@ export interface PortfolioHolding {
 	cost: number | null;
 	pnl: number | null;
 	pnlPct: number | null;
+	/** 折算成显示币种后的成本 / 盈亏（多币种汇总必须用这两个，否则会加错单位） */
+	costDisplay: number | null;
+	pnlDisplay: number | null;
 	priceUpdatedAt: string | null;
 	daysSincePriceUpdate: number | null;
 	fxMissing: boolean;

@@ -4,6 +4,7 @@ import { useAsync } from "../lib/useAsync";
 import { Donut, Treemap } from "../lib/charts";
 import { money, number, percent, relativeDays, signedMoney, signedPercent, stalenessClass, trendClass } from "../lib/format";
 import { ASSET_CLASSES, CLASS_LABELS, MARKET_LABELS, MARKETS, type AssetClass, type Market } from "../../shared/labels";
+import { BrandIcon } from "../lib/icons";
 
 type Dimension = "class" | "account" | "currency" | "instrument";
 
@@ -77,23 +78,43 @@ export function DashboardPage() {
 		if (!data) return [];
 		const sorted = [...data.holdings];
 		if (sortKey === "value") sorted.sort((a, b) => (b.marketValueDisplay ?? -1) - (a.marketValueDisplay ?? -1));
-		if (sortKey === "pnl") sorted.sort((a, b) => (b.pnl ?? Number.NEGATIVE_INFINITY) - (a.pnl ?? Number.NEGATIVE_INFINITY));
+		if (sortKey === "pnl") sorted.sort((a, b) => (b.pnlDisplay ?? Number.NEGATIVE_INFINITY) - (a.pnlDisplay ?? Number.NEGATIVE_INFINITY));
 		if (sortKey === "share") sorted.sort((a, b) => b.share - a.share);
 		if (sortKey === "name") sorted.sort((a, b) => a.name.localeCompare(b.name, "zh-CN"));
 		return sorted;
 	}, [data, sortKey]);
+
+	/** 价格陈旧超过 7 天的持仓（v1 价格靠手动维护，必须提醒） */
+	const staleHoldings = useMemo(() => {
+		if (!data) return [];
+		return data.holdings
+			.filter((item) => !item.isCash && item.daysSincePriceUpdate !== null && item.daysSincePriceUpdate > 7)
+			.sort((a, b) => (b.daysSincePriceUpdate ?? 0) - (a.daysSincePriceUpdate ?? 0));
+	}, [data]);
 
 	if (portfolio.error) return <div className="alert error">{portfolio.error}</div>;
 	if (!data) return <div className="empty">加载中…</div>;
 
 	const currency = data.displayCurrency;
 	const accountOptions = accounts.data?.items ?? [];
+	// 多币种汇总必须用折算后的值（costDisplay / pnlDisplay），否则会把不同币种的数字相加
+	const costTotal = data.holdings.reduce((sum, item) => sum + (item.costDisplay ?? 0), 0);
+	const pnlTotal = data.holdings.reduce((sum, item) => sum + (item.pnlDisplay ?? 0), 0);
+	const pnlMissingCount = data.holdings.filter((item) => item.avgCost === null).length;
 
 	return (
 		<>
 			{data.missingFxCurrencies.length > 0 && (
 				<div className="alert">
 					以下币种缺少汇率，相关持仓未计入总额：{data.missingFxCurrencies.join("、")}。请到「设置 → 汇率」添加。
+				</div>
+			)}
+
+			{staleHoldings.length > 0 && (
+				<div className="alert">
+					有 {staleHoldings.length} 条持仓价格已超过 7 天未更新：
+					{staleHoldings.slice(0, 5).map((item) => `${item.symbol ?? item.name}（${relativeDays(item.daysSincePriceUpdate)}）`).join("、")}
+					{staleHoldings.length > 5 && " 等"}——到「持仓 → 批量更新价格」可以一次改完。
 				</div>
 			)}
 
@@ -107,29 +128,16 @@ export function DashboardPage() {
 				</div>
 				<div className="card stat">
 					<div className="label">持仓成本合计</div>
-					<div className="value">
-						{money(
-							data.holdings.reduce((sum, item) => sum + (item.cost ?? 0), 0),
-							currency,
-						)}
-					</div>
-					<div className="hint">按平均成本法</div>
+					<div className="value">{money(costTotal, currency)}</div>
+					<div className="hint">按平均成本法，已折算到 {currency}</div>
 				</div>
 				<div className="card stat">
 					<div className="label">浮动盈亏</div>
-					<div
-						className={`value ${
-							trendClass(
-								data.holdings.reduce((sum, item) => sum + (item.pnl ?? 0), 0),
-							)
-						}`}
-					>
-						{signedMoney(
-							data.holdings.reduce((sum, item) => sum + (item.pnl ?? 0), 0),
-							currency,
-						)}
+					<div className={`value ${trendClass(pnlTotal)}`}>{signedMoney(pnlTotal, currency)}</div>
+					<div className="hint">
+						{costTotal > 0 ? signedPercent((pnlTotal / costTotal) * 100) : "—"}
+						{pnlMissingCount > 0 && ` · ${pnlMissingCount} 条未填成本`}
 					</div>
-					<div className="hint">仅统计已填平均成本的持仓</div>
 				</div>
 				<div className="card stat">
 					<div className="label">价格新鲜度</div>
@@ -230,7 +238,12 @@ export function DashboardPage() {
 											{item.symbol ? <strong>{item.symbol}</strong> : item.name}
 											{item.symbol && <span className="muted small"> {item.name}</span>}
 										</td>
-										<td className="left">{item.accountName}</td>
+										<td className="left">
+									<div className="cell-account">
+										<BrandIcon iconKey={item.accountIconKey} name={item.accountName} size="sm" />
+										{item.accountName}
+									</div>
+								</td>
 										<td className="left">
 											{CLASS_LABELS[item.class]}
 											{item.market && <span className="muted small"> · {MARKET_LABELS[item.market as Market] ?? item.market}</span>}

@@ -177,4 +177,86 @@ describe("账户 / 持仓 / 组合视图", () => {
 		});
 		expect(badAccount.status).toBe(400);
 	});
+
+	it("归档账户后其持仓不再计入总额，恢复后重新计入", async () => {
+		const account = await createAccount();
+		await createHolding(account.id);
+
+		const before = await call<Envelope<Portfolio>>("/api/portfolio", { cookie });
+		expect(before.body.data.total).toBeCloseTo(2000, 2);
+
+		await call(`/api/accounts/${account.id}`, {
+			method: "PATCH",
+			cookie,
+			body: JSON.stringify({ archived: true }),
+		});
+		const archived = await call<Envelope<Portfolio>>("/api/portfolio", { cookie });
+		expect(archived.body.data.total).toBe(0);
+		expect(archived.body.data.counts.holdings).toBe(0);
+
+		// 归档数据仍在库里，可在「显示已归档」里找回
+		const listed = await call<Envelope<{ items: unknown[] }>>("/api/holdings?includeArchived=true", { cookie });
+		expect(listed.body.data.items.length).toBe(1);
+
+		await call(`/api/accounts/${account.id}`, {
+			method: "PATCH",
+			cookie,
+			body: JSON.stringify({ archived: false }),
+		});
+		const restored = await call<Envelope<Portfolio>>("/api/portfolio", { cookie });
+		expect(restored.body.data.total).toBeCloseTo(2000, 2);
+	});
+
+	it("多币种的成本与盈亏按汇率折算后再汇总（不能直接相加）", async () => {
+		await call("/api/settings/fx", {
+			method: "PUT",
+			cookie,
+			body: JSON.stringify({ base: "USD", quote: "HKD", rate: 7.8 }),
+		});
+
+		const usdAccount = await createAccount();
+		await createHolding(usdAccount.id, { qty: 10, price: 200, avgCost: 150 });
+
+		const hkdAccount = await createAccount({ name: "港股券商", currency: "HKD" });
+		await createHolding(hkdAccount.id, {
+			symbol: "0700.HK",
+			name: "腾讯控股",
+			currency: "HKD",
+			qty: 100,
+			price: 600,
+			avgCost: 500,
+		});
+
+		const portfolio = await call<Envelope<Portfolio>>("/api/portfolio", { cookie });
+		const data = portfolio.body.data;
+
+		const costTotal = data.holdings.reduce((sum, item) => sum + (item.costDisplay ?? 0), 0);
+		const pnlTotal = data.holdings.reduce((sum, item) => sum + (item.pnlDisplay ?? 0), 0);
+
+		expect(data.total).toBeCloseTo(2000 + 60000 / 7.8, 2);
+		expect(costTotal).toBeCloseTo(1500 + 50000 / 7.8, 2);
+		expect(pnlTotal).toBeCloseTo(500 + 10000 / 7.8, 2);
+	});
+
+	it("操作历史支持按日期区间筛选", async () => {
+		await createAccount();
+
+		const all = await call<Envelope<{ total: number }>>("/api/history", { cookie });
+		expect(all.body.data.total).toBeGreaterThan(0);
+
+		const future = await call<Envelope<{ total: number }>>(
+			"/api/history?from=2099-01-01T00:00:00.000Z",
+			{ cookie },
+		);
+		expect(future.body.data.total).toBe(0);
+
+		const past = await call<Envelope<{ total: number }>>("/api/history?to=2000-01-01T00:00:00.000Z", { cookie });
+		expect(past.body.data.total).toBe(0);
+
+		const today = await call<Envelope<{ total: number }>>(
+			`/api/history?from=${new Date(Date.now() - 86_400_000).toISOString()}`,
+			{ cookie },
+		);
+		expect(today.body.data.total).toBeGreaterThan(0);
+	});
 });

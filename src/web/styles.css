@@ -355,6 +355,45 @@ th.sortable {
 	border-radius: 10px;
 }
 
+.avatar.sm {
+	width: 22px;
+	height: 22px;
+	font-size: 10px;
+	border-radius: 6px;
+}
+
+.icon-picker {
+	border: 1px solid var(--border);
+	border-radius: 8px;
+	padding: 8px 10px 10px;
+	max-height: 260px;
+	overflow-y: auto;
+	background: var(--surface-2);
+}
+
+.icon-grid {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 4px;
+}
+
+.icon-option {
+	padding: 3px;
+	border: 1px solid transparent;
+	background: transparent;
+	border-radius: 8px;
+	line-height: 0;
+}
+
+.icon-option:hover {
+	background: var(--surface);
+}
+
+.icon-option.on {
+	border-color: var(--accent);
+	background: var(--accent-weak);
+}
+
 .cell-account {
 	display: flex;
 	align-items: center;

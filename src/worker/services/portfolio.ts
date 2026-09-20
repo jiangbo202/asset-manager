@@ -103,6 +103,8 @@ export function buildPortfolio(
 			cost,
 			pnl,
 			pnlPct,
+			costDisplay: cost === null || rate === null ? null : cost * rate,
+			pnlDisplay: pnl === null || rate === null ? null : pnl * rate,
 			priceUpdatedAt: row.price_updated_at,
 			daysSincePriceUpdate: dayDiff(row.price_updated_at),
 			fxMissing: rate === null,

@@ -83,9 +83,12 @@ export const api = {
 	},
 
 	holdings: {
-		list: (filter: { accountId?: string; class?: string; market?: string } = {}) => {
+		list: (filter: { accountId?: string; class?: string; market?: string; includeArchived?: boolean } = {}) => {
 			const query = new URLSearchParams();
-			for (const [key, value] of Object.entries(filter)) if (value) query.set(key, value);
+			for (const [key, value] of Object.entries(filter)) {
+				if (value === undefined || value === "" || value === false) continue;
+				query.set(key, String(value));
+			}
 			const suffix = query.toString() ? `?${query}` : "";
 			return request<{ items: HoldingListDto[] }>(`/api/holdings${suffix}`);
 		},
@@ -114,7 +117,7 @@ export const api = {
 		overview: () => request<OverviewDto>("/api/settings/overview"),
 	},
 
-	history: (query: { entity?: string; action?: string; page?: number; pageSize?: number } = {}) => {
+	history: (query: { entity?: string; action?: string; from?: string; to?: string; page?: number; pageSize?: number } = {}) => {
 		const search = new URLSearchParams();
 		for (const [key, value] of Object.entries(query)) if (value !== undefined && value !== "") search.set(key, String(value));
 		const suffix = search.toString() ? `?${search}` : "";

@@ -62,11 +62,23 @@ function AuditRow({ item }: { item: AuditItemDto }) {
 
 export function HistoryPage() {
 	const [entity, setEntity] = useState("");
+	const [action, setAction] = useState("");
+	const [from, setFrom] = useState("");
+	const [to, setTo] = useState("");
 	const [page, setPage] = useState(1);
-	const history = useAsync(() => api.history({ entity: entity || undefined, page, pageSize: 50 }), [entity, page]);
+
+	// 日期选择器给的是本地日期，这里换算成 UTC 边界（审计时间戳存 UTC）
+	const fromIso = from ? new Date(`${from}T00:00:00`).toISOString() : undefined;
+	const toIso = to ? new Date(`${to}T23:59:59.999`).toISOString() : undefined;
+
+	const history = useAsync(
+		() => api.history({ entity: entity || undefined, action: action || undefined, from: fromIso, to: toIso, page, pageSize: 50 }),
+		[entity, action, fromIso, toIso, page],
+	);
 
 	const data = history.data;
 	const totalPages = data ? Math.max(1, Math.ceil(data.total / data.pageSize)) : 1;
+	const resetPage = () => setPage(1);
 
 	return (
 		<>
@@ -77,9 +89,9 @@ export function HistoryPage() {
 					value={entity}
 					onChange={(e) => {
 						setEntity(e.target.value);
-						setPage(1);
+						resetPage();
 					}}
-					style={{ width: 150 }}
+					style={{ width: 130 }}
 				>
 					<option value="">全部类型</option>
 					{Object.entries(ENTITY_LABELS).map(([key, label]) => (
@@ -88,6 +100,55 @@ export function HistoryPage() {
 						</option>
 					))}
 				</select>
+				<select
+					value={action}
+					onChange={(e) => {
+						setAction(e.target.value);
+						resetPage();
+					}}
+					style={{ width: 120 }}
+				>
+					<option value="">全部操作</option>
+					{Object.entries(ACTION_LABELS).map(([key, label]) => (
+						<option key={key} value={key}>
+							{label}
+						</option>
+					))}
+				</select>
+				<input
+					type="date"
+					value={from}
+					onChange={(e) => {
+						setFrom(e.target.value);
+						resetPage();
+					}}
+					style={{ width: 150 }}
+					title="开始日期"
+				/>
+				<input
+					type="date"
+					value={to}
+					onChange={(e) => {
+						setTo(e.target.value);
+						resetPage();
+					}}
+					style={{ width: 150 }}
+					title="结束日期"
+				/>
+				{(entity || action || from || to) && (
+					<button
+						className="ghost"
+						onClick={() => {
+							setEntity("");
+							setAction("");
+							setFrom("");
+							setTo("");
+							resetPage();
+						}}
+					>
+						清除筛选
+					</button>
+				)}
 			</div>
 
 			{!data ? (
