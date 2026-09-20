@@ -3,7 +3,7 @@
 把股票、加密货币和现金放在一处记录和查看的个人记账工具。**纯 Cloudflare 部署**（Workers + D1 + 静态资源），
 数据只存在你自己的 Cloudflare 账号里，不含任何遥测与第三方统计。
 
-[![CI](https://github.com/USERNAME/asset-manager/actions/workflows/ci.yml/badge.svg)](https://github.com/USERNAME/asset-manager/actions/workflows/ci.yml)
+[![CI](https://github.com/jiangbo202/asset-manager/actions/workflows/ci.yml/badge.svg)](https://github.com/jiangbo202/asset-manager/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
 > **Fork 之后先跑一次**：`npm run setup:repo -- 你的GitHub用户名` —— 它会把本文与 issue 模板里的
@@ -33,7 +33,7 @@
 ## 🚀 5 分钟上手
 
 ```bash
-git clone https://github.com/USERNAME/asset-manager.git
+git clone https://github.com/jiangbo202/asset-manager.git
 cd asset-manager && npm install
 
 export CLOUDFLARE_API_TOKEN=你的token      # Windows: $env:CLOUDFLARE_API_TOKEN="你的token"
@@ -54,7 +54,7 @@ npm run deploy:safe
 
 ### 方式一：一键部署（推荐）
 
-[![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/USERNAME/asset-manager)
+[![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/jiangbo202/asset-manager)
 
 Cloudflare 会：把仓库复制到你自己的账号 → 自动创建 D1 并绑定 → 在向导里让你填两个 Secret →
 用 Workers Builds 构建并部署。向导里要填的：

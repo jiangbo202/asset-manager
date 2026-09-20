@@ -5,8 +5,8 @@ body:
   - type: markdown
     attributes:
       value: |
-        感谢反馈。**请先确认不是已知问题**：README 的 FAQ、[docs/OPERATIONS.md §6](https://github.com/USERNAME/asset-manager/blob/main/docs/OPERATIONS.md) 里列了常见故障。
-        涉及安全问题的请按 [SECURITY.md](https://github.com/USERNAME/asset-manager/blob/main/SECURITY.md) 私下上报，不要开公开 issue。
+        感谢反馈。**请先确认不是已知问题**：README 的 FAQ、[docs/OPERATIONS.md §6](https://github.com/jiangbo202/asset-manager/blob/main/docs/OPERATIONS.md) 里列了常见故障。
+        涉及安全问题的请按 [SECURITY.md](https://github.com/jiangbo202/asset-manager/blob/main/SECURITY.md) 私下上报，不要开公开 issue。
 
   - type: textarea
     id: what-happened

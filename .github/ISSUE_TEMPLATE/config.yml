@@ -1,11 +1,11 @@
 blank_issues_enabled: false
 contact_links:
   - name: 部署 / 使用问题
-    url: https://github.com/USERNAME/asset-manager/blob/main/docs/OPERATIONS.md
+    url: https://github.com/jiangbo202/asset-manager/blob/main/docs/OPERATIONS.md
     about: 迁移、备份恢复、升级、常见故障的处理方式
   - name: 本地开发问题
-    url: https://github.com/USERNAME/asset-manager/blob/main/docs/LOCAL_DEV.md
+    url: https://github.com/jiangbo202/asset-manager/blob/main/docs/LOCAL_DEV.md
     about: 环境准备、调试、D1 操作、常见问题
   - name: 安全漏洞
-    url: https://github.com/USERNAME/asset-manager/blob/main/SECURITY.md
+    url: https://github.com/jiangbo202/asset-manager/blob/main/SECURITY.md
     about: 请勿开公开 issue，按这里的说明私下上报
