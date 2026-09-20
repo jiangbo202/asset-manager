@@ -253,6 +253,18 @@ export interface SnapshotItemDto {
 	snapshots?: number;
 }
 
+/** 「获取最新汇率」的返回（不写库，只把值回填到输入框） */
+export interface FxLookupDto {
+	ok: boolean;
+	base: string;
+	quote: string;
+	rate: number | null;
+	source: string | null;
+	/** 依次尝试过的数据源 */
+	tried: string[];
+	errors: string[];
+}
+
 export interface AuditItemDto {
 	id: string;
 	ts: string;

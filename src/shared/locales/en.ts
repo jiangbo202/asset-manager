@@ -292,10 +292,16 @@ const en: Dict = {
 
 	// ── Settings: FX ────────────────────────────────────────
 	"settings.fx": "Exchange rates (manual)",
-	"settings.fxHint": "Manual rates take precedence over fetched ones; history uses the rate frozen on each snapshot day",
+	"settings.fxHint": "Manual rates win and are never overwritten by fetches. Fetching only happens in two cases: the daily Cron run (the hour configured under Quotes & snapshots) and when you press “Refresh quotes” — and only for currencies your portfolio actually uses. History uses the rate frozen on each snapshot day.",
 	"settings.fxBase": "Base",
 	"settings.fxQuote": "Quote",
 	"settings.fxPair": "1 {{base}} = ? {{quote}}",
+	"settings.fxFetch": "Fetch latest rate",
+	"settings.fxFetching": "Fetching…",
+	"settings.fxFetchHint": "Fetch the current mid-market rate from the free FX APIs. It only fills the field — click “Save rate” to store it.",
+	"settings.fxFetched": "Fetched: 1 {{base}} = {{rate}} {{quote}} (source: {{source}}). Click “Save rate” to store it.",
+	"settings.fxFetchFailed": "Could not fetch a rate: {{list}}",
+	"settings.fxFetchNeedPair": "Fill in two different currencies first",
 	"settings.fxSave": "Save rate",
 	"settings.fxRate": "Rate",
 	"settings.fxUpdatedAt": "Updated",

@@ -292,10 +292,16 @@ const zh: Dict = {
 
 	// ── 设置：汇率 ──────────────────────────────────────────
 	"settings.fx": "汇率（手动维护）",
-	"settings.fxHint": "手工维护的汇率优先于自动抓取；历史曲线使用快照日冻结的汇率",
+	"settings.fxHint": "手工汇率优先，且不会被自动抓取覆盖；自动抓取只在两种时候发生 —— 每日定时任务（「行情与快照」里配置的那个小时）与点「更新行情」时，且只抓组合里出现过的币种。历史曲线用快照日冻结的汇率。",
 	"settings.fxBase": "基准币种",
 	"settings.fxQuote": "目标币种",
 	"settings.fxPair": "1 {{base}} = ? {{quote}}",
+	"settings.fxFetch": "获取最新汇率",
+	"settings.fxFetching": "获取中…",
+	"settings.fxFetchHint": "从免费汇率接口取当前中间价，只填进输入框，确认后再点「保存汇率」",
+	"settings.fxFetched": "已获取：1 {{base}} = {{rate}} {{quote}}（来源 {{source}}）。点「保存汇率」才会写入。",
+	"settings.fxFetchFailed": "没取到汇率：{{list}}",
+	"settings.fxFetchNeedPair": "请先填写两个不同的币种",
 	"settings.fxSave": "保存汇率",
 	"settings.fxRate": "汇率",
 	"settings.fxUpdatedAt": "更新时间",

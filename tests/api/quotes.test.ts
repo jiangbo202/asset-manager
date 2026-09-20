@@ -371,4 +371,50 @@ describe("v0.10 行情刷新 / 快照 / 走势", () => {
 		const after = await call<Envelope<{ providerKeysSet: string[] }>>("/api/settings", { cookie });
 		expect(after.body.data.providerKeysSet).not.toContain("finnhub");
 	});
+	it("获取最新汇率：只返回结果、绝不写库；取不到时说清试过谁", async () => {
+		await seed();
+		const count = async () =>
+			(await env.DB.prepare(`SELECT COUNT(*) AS total FROM fx_rates`).first<{ total: number }>())?.total ?? 0;
+		const before = await count();
+
+		const response = await call<
+			Envelope<{
+				ok: boolean;
+				base: string;
+				quote: string;
+				rate: number | null;
+				source: string | null;
+				tried: string[];
+				errors: string[];
+			}>
+		>("/api/settings/fx/lookup", {
+			method: "POST",
+			cookie,
+			body: JSON.stringify({ base: "USD", quote: "CNY" }),
+		});
+
+		expect(response.status).toBe(200);
+		const data = response.body.data;
+		if (data.ok) {
+			// 测试环境能连外网时（CI 上就是如此）应当给出正数汇率与来源
+			expect(data.rate).toBeGreaterThan(0);
+			expect(data.source).not.toBeNull();
+		} else {
+			// 取不到时要告诉用户"试过哪些源、为什么没成"
+			expect(data.rate).toBeNull();
+			expect(data.tried.length).toBeGreaterThan(0);
+			expect(data.errors.length).toBeGreaterThan(0);
+		}
+		// 关键不变量：这个接口只"查一下看看"，无论如何都不能写入手工汇率
+		// （手工汇率会阻止之后的自动抓取，写进去就成了一个不易察觉的坑）
+		expect(await count()).toBe(before);
+
+		const same = await call("/api/settings/fx/lookup", {
+			method: "POST",
+			cookie,
+			body: JSON.stringify({ base: "USD", quote: "USD" }),
+		});
+		expect(same.status).toBe(400);
+	});
 });
+

@@ -15,6 +15,7 @@ import {
 import { deleteFxRate, listFxHistory, listFxRates, upsertFxRate } from "../data/fx.repo";
 import { encryptSecret, decryptSecret } from "../core/secrets";
 import { isValidTimeZone } from "../../shared/time";
+import { lookupFxRate } from "../services/quotes";
 import { parseProviderSettings, PROVIDERS, PROVIDER_MAP, type ProviderId } from "../services/quotes/providers";
 import { isRecord } from "../core/utils";
 import { asRecord, requireCurrency, requireNumber, requireString } from "./validate";
@@ -182,6 +183,20 @@ settings.put("/", async (c) => {
 /** 汇率：v1 手动维护（PRD FR-7.2） */
 settings.get("/fx", async (c) => {
 	return ok(c, { items: await listFxRates(c.env.DB), history: await listFxHistory(c.env.DB, 50) });
+});
+
+/**
+ * 查当前汇率（**不写库**）：设置页的「获取最新汇率」。
+ * 结果只填进输入框，由用户确认后再走 PUT /fx —— 因为手工汇率会阻止之后的自动抓取。
+ */
+settings.post("/fx/lookup", async (c) => {
+	const t = tOf(c);
+	const payload = asRecord(await c.req.json(), t);
+	const base = requireCurrency(payload, "base", t, "field.fxBase");
+	const quote = requireCurrency(payload, "quote", t, "field.fxQuote");
+	if (base === quote) throw badRequest(t("error.invalid_field"));
+
+	return ok(c, await lookupFxRate(c.env, { base, quote }, { t }));
 });
 
 settings.put("/fx", async (c) => {

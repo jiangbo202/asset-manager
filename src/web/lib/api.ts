@@ -2,6 +2,7 @@ import type {
 	AccountDto,
 	AuditItemDto,
 	AuthMeDto,
+	FxLookupDto,
 	FxRateDto,
 	HoldingDto,
 	HoldingListDto,
@@ -152,6 +153,9 @@ export const api = {
 		get: () => request<SettingsDto>("/api/settings"),
 		update: (body: Record<string, unknown>) => request<{ values: Record<string, string> }>("/api/settings", put(body)),
 		fx: () => request<{ items: FxRateDto[]; history: Array<Record<string, unknown>> }>("/api/settings/fx"),
+		/** 查当前汇率（不写库），结果回填到输入框由用户确认 */
+		lookupFx: (body: { base: string; quote: string }) =>
+			request<FxLookupDto>("/api/settings/fx/lookup", json(body)),
 		putFx: (body: { base: string; quote: string; rate: number }) =>
 			request<{ items: FxRateDto[] }>("/api/settings/fx", put(body)),
 		deleteFx: (base: string, quote: string) =>

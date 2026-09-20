@@ -34,6 +34,8 @@ import { bootstrap, call, clearAll } from "../helpers";
 const BUDGET: Record<string, { statements: number; roundTrips: number; method?: string }> = {
 	// 拍快照（Cron 的第二阶段就是这个）：认证上下文 + 读设置/持仓/汇率 + 写快照与每日汇率 + 审计
 	"/api/portfolio/snapshots": { statements: 7, roundTrips: 4, method: "POST" },
+	// 获取最新汇率：认证上下文 + 读设置（外网请求不计入 CPU）
+	"/api/settings/fx/lookup": { statements: 3, roundTrips: 2, method: "POST" },
 	"/api/auth/me": { statements: 3, roundTrips: 2 },
 	"/api/accounts": { statements: 3, roundTrips: 2 },
 	"/api/holdings": { statements: 3, roundTrips: 2 },

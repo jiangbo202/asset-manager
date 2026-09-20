@@ -391,6 +391,68 @@ export async function refreshQuotes(
 	return report;
 }
 
+export interface FxLookupResult {
+	ok: boolean;
+	base: string;
+	quote: string;
+	rate: number | null;
+	source: string | null;
+	/** 本次依次尝试过的数据源（失败时告诉用户“都试过谁”） */
+	tried: string[];
+	errors: string[];
+}
+
+/**
+ * 查一个货币对的“当前汇率”，**不写库**。
+ *
+ * 给设置页的「获取最新汇率」用：先把值填进输入框，由用户确认后再保存。
+ * 不直接存的原因：手工汇率会阻止后续自动抓取（source='auto' 才允许被覆盖），
+ * 一点按钮就写入手工汇率，会变成一个很难发现的坑。
+ */
+export async function lookupFxRate(
+	env: { DB: D1Database; SESSION_SECRET: string },
+	pair: { base: string; quote: string },
+	options: { fetcher?: typeof fetch; t?: Translator } = {},
+): Promise<FxLookupResult> {
+	const db = env.DB;
+	const settingsMap = await getSettings(db);
+	const settings = await providerSettingsFrom(
+		settingsMap.provider_config ?? null,
+		settingsMap.provider_keys ?? null,
+		env.SESSION_SECRET,
+	);
+	const t = options.t ?? sharedTranslator("zh");
+	const ctx: FetchContext = {
+		fetcher: options.fetcher ?? ((input, init) => fetch(input, init)),
+		apiKeys: apiKeysOf(settings),
+		t,
+	};
+
+	const target: QuoteTarget = {
+		key: `fx:${pair.base}:${pair.quote}`,
+		kind: "fx",
+		symbol: `${pair.base}:${pair.quote}`,
+		currency: pair.quote,
+	};
+
+	const tried: string[] = [];
+	const errors: string[] = [];
+	// 手动查询不看“限流冷却”：用户此刻就是要这个值，失败也要他把原因看到
+	for (const provider of planProviders("fx", settings)) {
+		const meta = PROVIDER_MAP.get(provider);
+		if (!meta) continue;
+		tried.push(meta.label);
+		const result = await runAdapter(provider, [target], ctx, settings);
+		errors.push(...result.errors);
+		const hit = result.quotes[0];
+		if (hit) {
+			return { ok: true, base: pair.base, quote: pair.quote, rate: hit.price, source: hit.source, tried, errors: [] };
+		}
+	}
+
+	return { ok: false, base: pair.base, quote: pair.quote, rate: null, source: null, tried, errors };
+}
+
 export interface QuoteStatus {
 	enabled: boolean;
 	lastRunAt: string | null;

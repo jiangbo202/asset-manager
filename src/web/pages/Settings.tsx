@@ -18,7 +18,9 @@ export function SettingsPage({ onChanged }: { onChanged?: () => void }) {
 	const [base, setBase] = useState("USD");
 	const [quote, setQuote] = useState("HKD");
 	const [rate, setRate] = useState("");
+	const [fxNotice, setFxNotice] = useState<string | null>(null);
 	const fx = useSubmit();
+	const fxFetch = useSubmit();
 	const display = useSubmit();
 	const pwd = useSubmit();
 	const language = useSubmit();
@@ -78,6 +80,37 @@ export function SettingsPage({ onChanged }: { onChanged?: () => void }) {
 		await language.run(async () => {
 			await api.settings.update({ language: value });
 			settings.reload();
+		});
+	};
+
+	/** 取最新汇率：只回填到输入框，由用户确认后再保存（手工汇率会阻止后续自动抓取） */
+	const fetchFxRate = async () => {
+		const from = base.trim().toUpperCase();
+		const to = quote.trim().toUpperCase();
+		if (from === "" || to === "" || from === to) {
+			setFxNotice(t("settings.fxFetchNeedPair"));
+			return;
+		}
+		setFxNotice(null);
+		await fxFetch.run(async () => {
+			const result = await api.settings.lookupFx({ base: from, quote: to });
+			if (result.ok && result.rate !== null) {
+				setRate(String(result.rate));
+				setFxNotice(
+					t("settings.fxFetched", {
+						base: result.base,
+						quote: result.quote,
+						rate: result.rate,
+						source: result.source ?? "",
+					}),
+				);
+				return;
+			}
+			setFxNotice(
+				t("settings.fxFetchFailed", {
+					list: result.errors.length > 0 ? result.errors.join("；") : result.tried.join("、"),
+				}),
+			);
 		});
 	};
 
@@ -300,12 +333,23 @@ export function SettingsPage({ onChanged }: { onChanged?: () => void }) {
 							<span>{t("settings.fxPair", { base: base.toUpperCase(), quote: quote.toUpperCase() })}</span>
 							<input type="number" step="any" value={rate} onChange={(e) => setRate(e.target.value)} />
 						</label>
-						<div className="field" style={{ display: "grid", alignContent: "end" }}>
+						<div className="field" style={{ display: "grid", alignContent: "end", gap: 8 }}>
+							<button
+								type="button"
+								onClick={fetchFxRate}
+								disabled={fxFetch.pending}
+								title={t("settings.fxFetchHint")}
+							>
+								{fxFetch.pending ? t("settings.fxFetching") : t("settings.fxFetch")}
+							</button>
 							<button className="primary" type="submit" disabled={fx.pending}>
 								{t("settings.fxSave")}
 							</button>
 						</div>
 					</form>
+					{fx.error && <div className="alert error">{fx.error}</div>}
+					{fxFetch.error && <div className="alert error">{fxFetch.error}</div>}
+					{fxNotice && <div className="alert">{fxNotice}</div>}
 
 					{settings.data && settings.data.fx.length > 0 && (
 						<div className="table-wrap">
