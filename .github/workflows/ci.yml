@@ -1,0 +1,37 @@
+name: CI
+
+# 只做质量检查（lint / test / build）。
+# 部署不走 GitHub Actions：一键部署用 Cloudflare 的 Workers Builds，
+# 命令行部署用 `npm run deploy:safe`（见 docs/DEPLOYMENT.md）。
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  check:
+    name: Lint · Test · Build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Type check
+        run: npm run lint
+
+      - name: Test
+        run: npm test
+
+      - name: Build
+        run: npm run build
+
+      - name: Check bundle budget
+        run: node scripts/check-bundle.cjs

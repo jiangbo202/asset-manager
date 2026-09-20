@@ -1,0 +1,72 @@
+name: Bug 报告
+description: 有东西不工作了（部署失败、数据不对、界面异常）
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        感谢反馈。**请先确认不是已知问题**：README 的 FAQ、[docs/OPERATIONS.md §6](https://github.com/USERNAME/asset-manager/blob/main/docs/OPERATIONS.md) 里列了常见故障。
+        涉及安全问题的请按 [SECURITY.md](https://github.com/USERNAME/asset-manager/blob/main/SECURITY.md) 私下上报，不要开公开 issue。
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: 发生了什么
+      description: 期望的行为 vs 实际的行为
+      placeholder: |
+        期望：点「更新行情」后价格更新
+        实际：提示失败，设置页显示「CoinGecko 限流冷却 10 分钟」
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: 复现步骤
+      placeholder: |
+        1. 打开 设置 → 行情与快照
+        2. 点「立即刷新行情」
+        3. 看到 ...
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: 版本
+      description: 仓库根目录 package.json 里的 version，或页面上的版本信息
+      placeholder: "0.13.0"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: environment
+    attributes:
+      label: 运行环境
+      options:
+        - 已部署到 Cloudflare（线上）
+        - 本地 npm run dev
+        - 本地 npm run preview
+        - 其它（请在下方说明）
+    validations:
+      required: true
+
+  - type: input
+    id: node
+    attributes:
+      label: Node 版本
+      description: 本地问题时填写（node -v）
+      placeholder: v24.4.0
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: 日志
+      description: 本地终端输出，或线上 `npx wrangler tail` 的相关片段（请删掉个人数据）
+      render: shell
+
+  - type: textarea
+    id: extra
+    attributes:
+      label: 补充信息
+      description: 截图、是否改过代码、数据量级（多少账户/持仓）等

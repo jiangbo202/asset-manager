@@ -1,23 +1,43 @@
-# Cloudflare / Wrangler
-.wrangler/
-.dev.vars*
-!.dev.vars.example
-
-# 构建产物
-dist/
+# 依赖与构建产物
 node_modules/
+dist/
 *.tsbuildinfo
+.vite/
 
-# 本地备份导出（含个人资产数据，绝不入库）
+# Cloudflare / Wrangler 本地状态
+.wrangler/
+
+# 密钥：本地开发变量（示例文件要提交）
+.dev.vars
+.dev.vars.*
+!.dev.vars.example
+.env
+.env.*
+!.env.example
+
+# 本地备份 / 导出（含个人资产数据，绝不入库）
 backup*.json
 backup*.sql
+asset-manager-backup*.json
+*.sqlite
+*.sqlite3
+
+# 测试与覆盖率
+coverage/
+.nyc_output/
 
 # 编辑器 / 系统
 .DS_Store
+Thumbs.db
+.idea/
 .vscode/*
 !.vscode/extensions.json
-.idea/
+!.vscode/settings.json
 
-# 日志
+# 日志与临时文件
 *.log
 npm-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+*.tmp
+*.swp

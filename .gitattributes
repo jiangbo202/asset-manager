@@ -1,0 +1,30 @@
+# 统一换行符，避免 Windows 贡献者提交 CRLF
+* text=auto eol=lf
+
+# 明确文本类型
+*.ts   text
+*.tsx  text
+*.js   text
+*.cjs  text
+*.json text
+*.jsonc text
+*.md   text
+*.css  text
+*.html text
+*.sql  text
+*.yml  text
+*.yaml text
+
+# 二进制
+*.png  binary
+*.jpg  binary
+*.jpeg binary
+*.gif  binary
+*.webp binary
+*.ico  binary
+*.woff binary
+*.woff2 binary
+
+# 生成产物：不要让 GitHub 统计为语言占比
+package-lock.json linguist-generated=true
+dist/**           linguist-generated=true

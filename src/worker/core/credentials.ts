@@ -2,7 +2,7 @@ import { ApiError } from "./errors";
 import { fromBase64, sha256Hex, timingSafeEqual } from "./utils";
 
 /**
- * 认证凭据的验证方式（见 docs/PRD.md §9.1）
+ * 认证凭据的验证方式（完整说明见 SECURITY.md §2）
  *
  *  浏览器：credential = PBKDF2-SHA256(密码, kdfSalt, 300_000)  —— 重活全在浏览器
  *  Worker：verifier   = SHA-256(credential || verifierSalt)      —— 单次哈希，≈0.1ms CPU
