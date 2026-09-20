@@ -15,35 +15,39 @@ import { bootstrap, call, clearAll } from "../helpers";
  * 这里把当前值固化成上限：不小心加回去一次串行查询，CI 会拦住并告出是哪条 SQL。
  */
 
-/** 语句数上限（当前实际值，加一条就失败） */
-const STATEMENT_BUDGET: Record<string, number> = {
-	"/api/auth/me": 4,
-	"/api/accounts": 4,
-	"/api/holdings": 4,
-	"/api/portfolio": 7,
-	"/api/portfolio/history?range=3M": 8,
-	"/api/settings": 5,
-	"/api/settings/overview": 6,
-	"/api/quotes/status": 7,
-	"/api/history": 5,
-};
-
-/** 往返次数上限：认证上下文 1 次 batch + 路由自己 1 次（个别路由多一次依赖查询） */
-const ROUND_TRIP_BUDGET: Record<string, number> = {
-	"/api/auth/me": 2,
-	"/api/accounts": 2,
-	"/api/holdings": 2,
-	"/api/portfolio": 2,
-	"/api/portfolio/history?range=3M": 3,
-	"/api/settings": 3,
-	"/api/settings/overview": 3,
-	"/api/quotes/status": 3,
-	"/api/history": 3,
+/**
+ * 预算表：上限就是"改造后的实测值"，所以只要有人加回一条查询就会失败。
+ *
+ *   路由                              语句  往返   改造前往返
+ *   /api/auth/me                       3     2       6
+ *   /api/accounts                      3     2       4
+ *   /api/holdings                      3     2       4
+ *   /api/portfolio                     5     2       6
+ *   /api/portfolio/history             6     3       8
+ *   /api/settings                      4     3       5
+ *   /api/settings/overview             4     2      12
+ *   /api/quotes/status                 5     2       8
+ *   /api/history                       4     3       5
+ *
+ * 改造前的"往返"= 认证 3 次 + 路由自己每次一条语句一次往返。
+ */
+const BUDGET: Record<string, { statements: number; roundTrips: number }> = {
+	"/api/auth/me": { statements: 3, roundTrips: 2 },
+	"/api/accounts": { statements: 3, roundTrips: 2 },
+	"/api/holdings": { statements: 3, roundTrips: 2 },
+	"/api/portfolio": { statements: 5, roundTrips: 2 },
+	"/api/portfolio/history?range=3M": { statements: 6, roundTrips: 3 },
+	"/api/settings": { statements: 4, roundTrips: 3 },
+	"/api/settings/overview": { statements: 4, roundTrips: 2 },
+	"/api/quotes/status": { statements: 5, roundTrips: 2 },
+	"/api/history": { statements: 4, roundTrips: 3 },
 };
 
 interface Counted {
 	statements: string[];
 	batches: number;
+	/** batch 内的语句数（也要算进语句总数） */
+	batchedStatements: number;
 }
 
 /**
@@ -76,6 +80,7 @@ function countingDb(db: D1Database, log: Counted): D1Database {
 			if (prop === "batch") {
 				return (statements: D1PreparedStatement[]) => {
 					log.batches += 1;
+					log.batchedStatements += statements.length;
 					for (let index = 0; index < statements.length; index += 1) {
 						log.statements.push(`batch[${index}]`);
 					}
@@ -89,7 +94,7 @@ function countingDb(db: D1Database, log: Counted): D1Database {
 }
 
 async function countRequest(path: string, cookie: string): Promise<Counted> {
-	const log: Counted = { statements: [], batches: 0 };
+	const log: Counted = { statements: [], batches: 0, batchedStatements: 0 };
 	const instrumented = { ...env, DB: countingDb(env.DB, log) } as Env;
 	await app.fetch(
 		new Request(`https://example.com${path}`, { headers: { Cookie: cookie } }),
@@ -122,32 +127,22 @@ describe("D1 语句预算", () => {
 				symbol: "AAPL",
 				name: "苹果",
 				currency: "USD",
-				qty: 10,
-				price: 100,
+				qty: 0,
+				price: 0,
 			}),
 		});
 		await call("/api/portfolio/snapshots", { method: "POST", cookie });
 	});
 
-	for (const [path, budget] of Object.entries(STATEMENT_BUDGET)) {
-		it(`${path} ≤ ${budget} 条语句`, async () => {
-			const { statements } = await countRequest(path, cookie);
-			expect(
-				statements.length,
-				`${path} 用了 ${statements.length} 条语句（预算 ${budget}）：\n- ${statements.join("\n- ")}`,
-			).toBeLessThanOrEqual(budget);
-		});
-	}
-
-	for (const [path, budget] of Object.entries(ROUND_TRIP_BUDGET)) {
-		it(`${path} ≤ ${budget} 次数据库往返`, async () => {
-			const { batches, statements } = await countRequest(path, cookie);
-			// 往返 = batch 次数 + 单独执行的语句数
+	for (const [path, budget] of Object.entries(BUDGET)) {
+		it(`${path}`, async () => {
+			const { statements, batches, batchedStatements } = await countRequest(path, cookie);
+			const total = statements.length + batchedStatements;
 			const roundTrips = batches + statements.length;
-			expect(
-				roundTrips,
-				`${path} 跑了 ${roundTrips} 次往返（预算 ${budget}）：batch ${batches} 次 + 单条语句 ${statements.length} 条`,
-			).toBeLessThanOrEqual(budget);
+			const detail = `${path}：语句 ${total} 条（预算 ${budget.statements}）/ 往返 ${roundTrips} 次（预算 ${budget.roundTrips}）\n  ${statements.join("\n  ")}`;
+
+			expect(total, detail).toBeLessThanOrEqual(budget.statements);
+			expect(roundTrips, detail).toBeLessThanOrEqual(budget.roundTrips);
 		});
 	}
 });
