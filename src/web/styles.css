@@ -634,6 +634,26 @@ th.sortable {
 	color: #fff;
 }
 
+.chips {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 4px;
+	align-items: center;
+}
+
+.chips button {
+	padding: 4px 10px;
+	border-radius: 999px;
+	font-size: 12px;
+}
+
+.chips button.on {
+	background: var(--accent-weak);
+	border-color: color-mix(in srgb, var(--accent) 45%, transparent);
+	color: var(--accent);
+	font-weight: 600;
+}
+
 .token-box {
 	display: flex;
 	gap: 8px;

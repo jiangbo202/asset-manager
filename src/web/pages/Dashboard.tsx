@@ -13,8 +13,9 @@ import {
 	trendClass,
 } from "../lib/format";
 import { BrandIcon } from "../lib/icons";
+import { MarketFilter, parseMarketParam } from "../components/MarketFilter";
 import { useRouter } from "../lib/router";
-import { ASSET_CLASSES, CLASS_LABELS, MARKET_LABELS, MARKETS, type Market } from "../../shared/labels";
+import { ASSET_CLASSES, CLASS_LABELS, MARKET_LABELS, type Market } from "../../shared/labels";
 
 type Dimension = "class" | "account" | "currency" | "instrument";
 type SortKey = "value" | "share" | "pnl" | "name" | "stale";
@@ -55,7 +56,7 @@ export function DashboardPage() {
 
 	const dimension = (query.get("dim") as Dimension | null) ?? "class";
 	const assetClass = query.get("class") ?? "";
-	const market = query.get("market") ?? "";
+	const markets = parseMarketParam(query.get("market"));
 	const accountId = query.get("account") ?? "";
 	const currencyFilter = query.get("ccy") ?? "";
 	const sortKey = (query.get("sort") as SortKey | null) ?? "value";
@@ -66,15 +67,15 @@ export function DashboardPage() {
 		() =>
 			api.portfolio({
 				class: assetClass || undefined,
-				market: market || undefined,
+				market: markets.length > 0 ? markets.join(",") : undefined,
 				accountId: accountId || undefined,
 				currencyFilter: currencyFilter || undefined,
 			}),
-		[assetClass, market, accountId, currencyFilter],
+		[assetClass, markets.join(","), accountId, currencyFilter],
 	);
 
 	const data = portfolio.data;
-	const hasFilter = Boolean(assetClass || market || accountId || currencyFilter);
+	const hasFilter = Boolean(assetClass || markets.length > 0 || accountId || currencyFilter);
 
 	const donutItems = useMemo(() => {
 		if (!data) return [];
@@ -256,14 +257,6 @@ export function DashboardPage() {
 							</option>
 						))}
 					</select>
-					<select value={market} onChange={(e) => setQuery({ market: e.target.value || null })} style={{ width: 120 }}>
-						<option value="">全部市场</option>
-						{MARKETS.map((value) => (
-							<option key={value} value={value}>
-								{MARKET_LABELS[value]}
-							</option>
-						))}
-					</select>
 					<select value={accountId} onChange={(e) => setQuery({ account: e.target.value || null })} style={{ width: 160 }}>
 						<option value="">全部账户</option>
 						{accountOptions.map((account) => (
@@ -272,6 +265,10 @@ export function DashboardPage() {
 							</option>
 						))}
 					</select>
+				</div>
+				<div className="section-head" style={{ marginTop: -4 }}>
+					<span className="small muted">市场：</span>
+					<MarketFilter selected={markets} onChange={(next) => setQuery({ market: next.join(",") || null })} />
 					{hasFilter && (
 						<button
 							className="ghost"

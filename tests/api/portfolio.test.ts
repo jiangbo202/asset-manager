@@ -238,6 +238,31 @@ describe("账户 / 持仓 / 组合视图", () => {
 		expect(pnlTotal).toBeCloseTo(500 + 10000 / 7.8, 2);
 	});
 
+	it("市场筛选支持多选（FR-6.3）", async () => {
+		const usAccount = await createAccount();
+		await createHolding(usAccount.id, { symbol: "AAPL", market: "us" });
+
+		const hkAccount = await createAccount({ name: "港股券商", currency: "HKD", market: "hk" });
+		await createHolding(hkAccount.id, { symbol: "0700.HK", name: "腾讯", currency: "HKD", market: "hk" });
+
+		const both = await call<Envelope<{ items: unknown[] }>>("/api/holdings?market=us,hk", { cookie });
+		expect(both.body.data.items.length).toBe(2);
+
+		const onlyUs = await call<Envelope<{ items: unknown[] }>>("/api/holdings?market=us", { cookie });
+		expect(onlyUs.body.data.items.length).toBe(1);
+
+		const onlyCn = await call<Envelope<{ items: unknown[] }>>("/api/holdings?market=cn", { cookie });
+		expect(onlyCn.body.data.items.length).toBe(0);
+
+		// 非法值被忽略（等同于不筛选）
+		const invalid = await call<Envelope<{ items: unknown[] }>>("/api/holdings?market=nope", { cookie });
+		expect(invalid.body.data.items.length).toBe(2);
+
+		// 组合视图同样支持
+		const portfolio = await call<Envelope<Portfolio>>("/api/portfolio?market=us", { cookie });
+		expect(portfolio.body.data.counts.holdings).toBe(1);
+	});
+
 	it("操作历史支持按日期区间筛选", async () => {
 		await createAccount();
 

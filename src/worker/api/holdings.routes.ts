@@ -26,11 +26,21 @@ import {
 
 const holdings = new Hono<AppEnv>();
 
+/** 支持 ?market=us,hk 的多选形式（FR-6.3） */
+function parseMarkets(value: string | undefined): string[] | undefined {
+	if (!value) return undefined;
+	const markets = value
+		.split(",")
+		.map((item) => item.trim())
+		.filter((item) => MARKETS.includes(item as (typeof MARKETS)[number]));
+	return markets.length > 0 ? markets : undefined;
+}
+
 holdings.get("/", async (c) => {
 	const items = await listHoldings(c.env.DB, {
 		accountId: c.req.query("accountId"),
 		class: c.req.query("class"),
-		market: c.req.query("market"),
+		markets: parseMarkets(c.req.query("market")),
 		currency: c.req.query("currency"),
 		includeArchived: c.req.query("includeArchived") === "true",
 	});

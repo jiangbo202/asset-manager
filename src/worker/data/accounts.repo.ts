@@ -135,7 +135,8 @@ export interface HoldingWithAccount extends HoldingRow {
 export interface HoldingFilter {
 	accountId?: string;
 	class?: string;
-	market?: string;
+	/** 市场筛选支持多选（FR-6.3），空数组等于不筛选 */
+	markets?: string[];
 	currency?: string;
 	includeArchived?: boolean;
 }
@@ -154,9 +155,9 @@ export async function listHoldings(db: D1Database, filter: HoldingFilter = {}): 
 		where.push("h.class = ?");
 		params.push(filter.class);
 	}
-	if (filter.market) {
-		where.push("h.market = ?");
-		params.push(filter.market);
+	if (filter.markets && filter.markets.length > 0) {
+		where.push(`h.market IN (${filter.markets.map(() => "?").join(", ")})`);
+		params.push(...filter.markets);
 	}
 	if (filter.currency) {
 		where.push("h.currency = ?");

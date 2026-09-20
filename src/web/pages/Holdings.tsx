@@ -3,6 +3,7 @@ import { api, type AccountDto, type HoldingListDto } from "../lib/api";
 import { useAsync, useSubmit } from "../lib/useAsync";
 import { BrandIcon } from "../lib/icons";
 import { money, number, relativeDays, stalenessClass } from "../lib/format";
+import { MarketFilter, parseMarketParam } from "../components/MarketFilter";
 import { useRouter } from "../lib/router";
 import {
 	ASSET_CLASSES,
@@ -64,7 +65,7 @@ export function HoldingsPage() {
 	const showArchived = query.get("archived") === "1";
 	const filterAccount = query.get("account") ?? "";
 	const filterClass = query.get("class") ?? "";
-	const filterMarket = query.get("market") ?? "";
+	const filterMarkets = parseMarketParam(query.get("market"));
 	const sortKey = (query.get("sort") as SortKey | null) ?? "value";
 	const sortDir = (query.get("dir") as SortDir | null) ?? "desc";
 
@@ -81,14 +82,14 @@ export function HoldingsPage() {
 
 	const accountList = accounts.data?.items ?? [];
 	const allItems = holdings.data?.items ?? [];
-	const hasFilter = Boolean(filterAccount || filterClass || filterMarket);
+	const hasFilter = Boolean(filterAccount || filterClass || filterMarkets.length > 0);
 
 	const items = useMemo(() => {
 		const filtered = allItems.filter(
 			(item) =>
 				(!filterAccount || item.account_id === filterAccount) &&
 				(!filterClass || item.class === filterClass) &&
-				(!filterMarket || item.market === filterMarket) &&
+				(filterMarkets.length === 0 || (item.market !== null && filterMarkets.includes(item.market))) &&
 				(showArchived || item.archived !== 1),
 		);
 
@@ -120,7 +121,7 @@ export function HoldingsPage() {
 			}
 			return (left - right) * direction;
 		});
-	}, [allItems, filterAccount, filterClass, filterMarket, showArchived, sortKey, sortDir]);
+	}, [allItems, filterAccount, filterClass, filterMarkets.join(","), showArchived, sortKey, sortDir]);
 
 	const toggleSort = (key: SortKey) => {
 		if (key === sortKey) setQuery({ dir: sortDir === "asc" ? "desc" : "asc" });
@@ -280,18 +281,10 @@ export function HoldingsPage() {
 						</option>
 					))}
 				</select>
-				<select
-					value={filterMarket}
-					onChange={(e) => setQuery({ market: e.target.value || null })}
-					style={{ width: 110 }}
-				>
-					<option value="">全部市场</option>
-					{MARKETS.map((value) => (
-						<option key={value} value={value}>
-							{MARKET_LABELS[value]}
-						</option>
-					))}
-				</select>
+				<div className="chips" style={{ marginLeft: 4 }}>
+					<span className="small muted">市场：</span>
+					<MarketFilter selected={filterMarkets} onChange={(next) => setQuery({ market: next.join(",") || null })} />
+				</div>
 				{hasFilter && (
 					<button className="ghost" onClick={() => setQuery({ account: null, class: null, market: null })}>
 						清除筛选
