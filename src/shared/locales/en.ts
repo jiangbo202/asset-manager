@@ -545,6 +545,7 @@ const en: Dict = {
 	"backup.warnOrphanHistory": "{{count}} price/quantity history rows point to missing holdings and will be skipped",
 	"backup.warnOlderSchema": "Backup was exported by an older version (schemaVersion={{version}}); read using the current format",
 	"backup.warnMissingFx": "Missing FX rates: {{currencies}} (those holdings will show as “not converted”; add the rate to fix)",
+	"backup.warnNoCredentials": "The backup contains no quote-source configuration or API keys (re-enter them on a new environment); a replace import leaves the current ones untouched.",
 	"backup.warnReplace": "Replace mode clears existing accounts / holdings / FX rates / settings before writing the backup; the activity log is kept and appended to.",
 	"backup.warnLarge": "Large dataset ({{count}} statements) — writing in batches; a failure midway could leave it partially applied, so export a copy first.",
 

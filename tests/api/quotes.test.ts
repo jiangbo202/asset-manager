@@ -276,6 +276,19 @@ describe("v0.10 行情刷新 / 快照 / 走势", () => {
 		expect(settings.body.data.providerConfig.custom?.urlTemplate).toBe("https://my-api.test/{symbol}");
 		expect(JSON.stringify(settings.body.data)).not.toContain("super-secret-key");
 
+		// 行情状态接口同样不能泄露 Key
+		const status = await call<{ ok: boolean; data: unknown }>("/api/quotes/status", { cookie });
+		expect(JSON.stringify(status.body.data)).not.toContain("super-secret-key");
+		expect(JSON.stringify(status.body.data)).not.toContain("custom-secret");
+
+		// 审计日志里也只有标记，不是明文
+		const audit = await call<{ ok: boolean; data: { items: Array<Record<string, unknown>> } }>("/api/history", {
+			cookie,
+		});
+		const auditText = JSON.stringify(audit.body.data.items);
+		expect(auditText).not.toContain("super-secret-key");
+		expect(auditText).not.toContain("custom-secret");
+
 		// 传空字符串可以删除 Key
 		await call("/api/settings", { method: "PUT", cookie, body: JSON.stringify({ providerKeys: { finnhub: "" } }) });
 		const after = await call<Envelope<{ providerKeysSet: string[] }>>("/api/settings", { cookie });

@@ -545,6 +545,7 @@ const zh: Dict = {
 	"backup.warnOrphanHistory": "有 {{count}} 条价格/数量历史引用不到持仓，导入时会被忽略",
 	"backup.warnOlderSchema": "备份由较旧版本（schemaVersion={{version}}）导出，已按当前格式读取",
 	"backup.warnMissingFx": "缺少汇率：{{currencies}}（导入后这些持仓会显示为“未折算”，补上汇率即可）",
+	"backup.warnNoCredentials": "备份不含行情数据源配置与 API Key（换环境后重新填一次即可）；覆盖导入也不会动当前的这些配置。",
 	"backup.warnReplace": "replace 模式会先清空现有账户/持仓/汇率/设置，再写入备份内容；操作历史会保留并追加。",
 	"backup.warnLarge": "数据量较大（{{count}} 条语句），将分批写入；如中途失败可能只写入了一部分，建议先导出当前数据。",
 

@@ -130,6 +130,96 @@ describe("备份导出 / 导入", () => {
 		return response.body;
 	};
 
+	it("导出不含 API Key / 自定义数据源配置", async () => {
+		// 先写入一份"凭据类配置"
+		await call("/api/settings", {
+			method: "PUT",
+			cookie,
+			body: JSON.stringify({
+				providerKeys: { coingecko: "cg-secret-token" },
+				providerConfig: {
+					enabled: { yahoo: false },
+					custom: {
+						urlTemplate: "https://my-api.test/q?symbol={symbol}",
+						pricePath: "data.price",
+						headers: '{"Authorization":"Bearer super-secret"}',
+						key: "custom-secret",
+					},
+				},
+			}),
+		});
+
+		const file = await exportBackup();
+		expect(file.data.settings).not.toHaveProperty("provider_keys");
+		expect(file.data.settings).not.toHaveProperty("provider_config");
+
+		const serialized = JSON.stringify(file);
+		expect(serialized).not.toContain("cg-secret-token");
+		expect(serialized).not.toContain("super-secret");
+		expect(serialized).not.toContain("custom-secret");
+		// 非凭据类设置仍然会被备份（换环境后行为一致）
+		expect(file.data.settings).toHaveProperty("display_currency");
+
+		// 审计日志也不能出现这些明文（审计会被导出、也会在界面展示）
+		const audit = await env.DB.prepare(`SELECT before_json, after_json FROM audit_log`).all<{
+			before_json: string | null;
+			after_json: string | null;
+		}>();
+		const auditText = JSON.stringify(audit.results ?? []);
+		expect(auditText).not.toContain("cg-secret-token");
+		expect(auditText).not.toContain("super-secret");
+		expect(auditText).not.toContain("custom-secret");
+
+		// 但"哪些源被启用"这类无害信息要保留，便于排查
+		const entry = (audit.results ?? []).find((row) => row.after_json?.includes("provider_config"));
+		expect(entry).toBeTruthy();
+		const after = JSON.parse(entry?.after_json ?? "{}") as { provider_config?: string };
+		const config = JSON.parse(after.provider_config ?? "{}") as {
+			enabled?: Record<string, boolean>;
+			custom?: { headers?: string | null; key?: string | null };
+		};
+		expect(config.enabled?.yahoo).toBe(false);
+		expect(config.custom?.headers).toBe("(set)");
+		expect(config.custom?.key).toBeNull();
+	});
+
+	it("导入不会覆盖数据源配置与 API Key（即使备份文件里被手工塞了）", async () => {
+		await call("/api/settings", {
+			method: "PUT",
+			cookie,
+			body: JSON.stringify({ providerKeys: { coingecko: "keep-me" } }),
+		});
+
+		const backup = makeBackup() as { data: Record<string, unknown> };
+		(backup.data as { settings: Record<string, string> }).settings = {
+			provider_keys: "injected-by-someone",
+			provider_config: '{"enabled":{"yahoo":false}}',
+			display_currency: "HKD",
+		};
+
+		const applied = await call("/api/backup/import?mode=replace", {
+			method: "POST",
+			cookie,
+			body: JSON.stringify(backup),
+		});
+		expect(applied.status).toBe(200);
+
+		const stored = await env.DB.prepare(`SELECT value FROM settings WHERE key = 'provider_keys'`).first<{
+			value: string;
+		}>();
+		// 原来的 Key 还在（没有被替换成 injected-by-someone）
+		expect(stored?.value).not.toBe("injected-by-someone");
+		const config = await env.DB.prepare(`SELECT value FROM settings WHERE key = 'provider_config'`).first<{
+			value: string;
+		}>();
+		expect(config?.value ?? "").not.toContain('"yahoo":false');
+		// 普通设置照常导入
+		const display = await env.DB.prepare(`SELECT value FROM settings WHERE key = 'display_currency'`).first<{
+			value: string;
+		}>();
+		expect(display?.value).toBe("HKD");
+	});
+
 	it("导出包含业务数据，且绝不含凭据与会话", async () => {
 		await call("/api/accounts", {
 			method: "POST",

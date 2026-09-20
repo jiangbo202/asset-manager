@@ -189,6 +189,9 @@ BTC   + 加密  → CoinGecko bitcoin / Binance BTCUSDT / Yahoo BTC-USD
 3. **Cloudflare Time Travel**（免费 7 天）：Dashboard → D1 → Time Travel 可回滚到任意时间点。
 
 > 备份文件里是你的全部资产数据，请当密码一样保管。
+>
+> 备份**不含任何凭据**：没有登录密码、没有会话、也没有第三方 API Key 与自定义数据源的请求头。
+> 换环境后重新初始化并填一次 Key 即可。
 
 ## 🔐 数据与隐私
 

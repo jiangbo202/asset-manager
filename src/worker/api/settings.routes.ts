@@ -19,6 +19,42 @@ import { asRecord, requireCurrency, requireNumber, requireString } from "./valid
 
 const settings = new Hono<AppEnv>();
 
+/**
+ * 写审计前对设置做脱敏。
+ *
+ * 审计日志会被导出、也会在界面上展示，所以不能把凭据写进去：
+ *  - provider_keys：加密后的第三方 API Key，整块换成标记
+ *  - provider_config：保留"哪些源启用"这类无害信息，但自定义源的请求头与 Key 换成标记
+ *    （请求头里常见 `Authorization: Bearer ...`）
+ */
+function sanitizeSettingsForAudit(values: Record<string, string>): Record<string, string> {
+	const out: Record<string, string> = { ...values };
+	if (out.provider_keys) out.provider_keys = "(set)";
+
+	if (out.provider_config) {
+		try {
+			const parsed = JSON.parse(out.provider_config) as {
+				enabled?: Record<string, boolean>;
+				custom?: Record<string, unknown> | null;
+			};
+			const custom = parsed.custom
+				? {
+						urlTemplate: parsed.custom.urlTemplate ?? null,
+						pricePath: parsed.custom.pricePath ?? null,
+						currencyPath: parsed.custom.currencyPath ?? null,
+						headers: parsed.custom.headers ? "(set)" : null,
+						key: parsed.custom.key ? "(set)" : null,
+					}
+				: null;
+			out.provider_config = JSON.stringify({ enabled: parsed.enabled ?? {}, custom });
+		} catch {
+			out.provider_config = "(unparseable)";
+		}
+	}
+
+	return out;
+}
+
 settings.get("/", async (c) => {
 	const values = await getSettings(c.env.DB);
 	const fx = await listFxRates(c.env.DB);
@@ -135,8 +171,8 @@ settings.put("/", async (c) => {
 		entity: "settings",
 		entityId: null,
 		action: "update",
-		before: { ...before, provider_keys: before.provider_keys ? "(已设置)" : undefined },
-		after: { ...after, provider_keys: after.provider_keys ? "(已设置)" : undefined },
+		before: sanitizeSettingsForAudit(before),
+		after: sanitizeSettingsForAudit(after),
 	});
 	return ok(c, { values: { ...after, provider_keys: undefined } });
 });

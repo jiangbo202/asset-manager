@@ -63,7 +63,8 @@ Worker 只做一次 SHA-256。
 | 登录密码 | 不存 | 只存不可逆 verifier |
 | `SETUP_TOKEN` | Worker Secret | 跳过初始化后即失效（`/api/auth/setup` 返回 409） |
 | `SESSION_SECRET` | Worker Secret | 用于派生加密密钥；泄露需轮换 |
-| 第三方行情 API Key | `settings.provider_keys` | AES-GCM 加密（密钥由 `SESSION_SECRET` 派生）；接口从不回传明文 |
+| 第三方行情 API Key | `settings.provider_keys` | AES-GCM 加密（密钥由 `SESSION_SECRET` 派生）；接口从不回传明文；**不进备份**；审计里只写标记 |
+| 自定义数据源请求头（可能含 Bearer Token） | `settings.provider_config` | 同样加密与审计脱敏，且**不进备份** |
 | 资产数据 | D1 | 依赖 Cloudflare 账号安全 + 你自行导出的备份 |
 
 轮换 `SESSION_SECRET` 的后果：所有会话失效，**已加密的 API Key 需要重新填写**。

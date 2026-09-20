@@ -127,6 +127,9 @@ const CHUNK_SIZE = 500;
 
 export type ImportMode = "replace" | "merge";
 
+/** 备份不导出、导入也不覆盖的设置项（含凭据或与凭据相关的配置） */
+const BACKUP_EXCLUDED_SETTINGS = new Set(["provider_keys", "provider_config"]);
+
 export interface EntityDiff {
 	create: number;
 	update: number;
@@ -222,8 +225,15 @@ export async function exportBackup(db: D1Database, options: { includeAudit: bool
 			: Promise.resolve({ results: [] as AuditRecord[] }),
 	]);
 
+	// 备份是"数据"，不含"凭据与凭据相关的配置"：
+	//   provider_keys   —— 加密后的第三方 API Key
+	//   provider_config —— 数据源开关 + 自定义源的 URL/请求头（请求头里可能有 Bearer Token）
+	// 换环境后重新配一次即可；同一环境恢复数据也不会被备份里的旧配置覆盖。
 	const settingsMap: Record<string, string> = {};
-	for (const row of settings.results ?? []) settingsMap[row.key] = row.value;
+	for (const row of settings.results ?? []) {
+		if (BACKUP_EXCLUDED_SETTINGS.has(row.key)) continue;
+		settingsMap[row.key] = row.value;
+	}
 
 	return {
 		format: BACKUP_FORMAT,
@@ -508,6 +518,7 @@ export async function previewBackup(
 	if (mode === "replace") {
 		warnings.push(tr("backup.warnReplace"));
 	}
+	warnings.push(tr("backup.warnNoCredentials"));
 	if (statementCount > SINGLE_BATCH_MAX) {
 		warnings.push(tr("backup.warnLarge", { count: statementCount }));
 	}
@@ -661,8 +672,9 @@ export async function applyBackup(
 		);
 	}
 	for (const [key, value] of Object.entries(data.settings)) {
-		// schema_version 属于"这个库自己"的结构标记，不能被备份内容覆盖
-		if (key === "schema_version") continue;
+		// schema_version 属于"这个库自己"的结构标记，不能被备份内容覆盖；
+		// 数据源配置与 API Key 属于凭据，也不接受备份写入。
+		if (key === "schema_version" || BACKUP_EXCLUDED_SETTINGS.has(key)) continue;
 		statements.push(
 			db
 				.prepare(`INSERT INTO settings (key, value) VALUES (?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value`)
