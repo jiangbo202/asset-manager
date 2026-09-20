@@ -59,17 +59,15 @@ export async function deriveCredential(
 	return toBase64(new Uint8Array(bits));
 }
 
-/** 密码强度提示（不阻塞提交，只做提醒） */
-export function passwordStrength(password: string): { score: number; hint: string } {
+/** 密码强度（0–5）；文案由界面按 pwd.strengthN 取，便于多语言 */
+export function passwordStrength(password: string): number {
 	let score = 0;
 	if (password.length >= 12) score += 1;
 	if (password.length >= 16) score += 1;
 	if (/[a-z]/.test(password) && /[A-Z]/.test(password)) score += 1;
 	if (/\d/.test(password)) score += 1;
 	if (/[^a-zA-Z0-9]/.test(password)) score += 1;
-
-	const hints = ["太弱，建议至少 12 位", "偏弱，建议加长或混合大小写", "一般，建议 16 位以上", "不错", "很好", "很强"];
-	return { score: Math.min(score, 5), hint: hints[Math.min(score, 5)] };
+	return Math.min(score, 5);
 }
 
 export function isDesktop(): boolean {

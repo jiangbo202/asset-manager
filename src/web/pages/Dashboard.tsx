@@ -14,19 +14,13 @@ import {
 	trendClass,
 } from "../lib/format";
 import { BrandIcon } from "../lib/icons";
+import { useT } from "../lib/i18n";
 import { MarketFilter, parseMarketParam } from "../components/MarketFilter";
 import { useRouter } from "../lib/router";
-import { ASSET_CLASSES, CLASS_LABELS, MARKET_LABELS, type Market } from "../../shared/labels";
+import { ASSET_CLASSES, classLabel, marketLabel, type Market } from "../../shared/labels";
 
 type Dimension = "class" | "account" | "currency" | "instrument";
 type SortKey = "value" | "share" | "pnl" | "name" | "stale";
-
-const DIMENSIONS: Array<{ key: Dimension; label: string }> = [
-	{ key: "class", label: "资产类别" },
-	{ key: "account", label: "账户" },
-	{ key: "currency", label: "币种" },
-	{ key: "instrument", label: "标的" },
-];
 
 function Skeleton() {
 	return (
@@ -53,6 +47,7 @@ function Skeleton() {
 }
 
 export function DashboardPage() {
+	const t = useT();
 	const { query, setQuery, navigate } = useRouter();
 
 	const dimension = (query.get("dim") as Dimension | null) ?? "class";
@@ -101,21 +96,33 @@ export function DashboardPage() {
 			const response = await api.quotes.refresh();
 			const report = response.report;
 			setRefreshNote(
-				`已更新 ${report.updated} 条价格、${report.fxUpdated} 条汇率` +
-					(report.failed.length > 0 ? `；${report.failed.length} 条失败（见设置页详情）` : ""),
+				t("market.refreshDone", {
+					updated: report.updated,
+					fxUpdated: report.fxUpdated,
+					failed: report.failed.length,
+				}),
 			);
 			portfolio.reload();
 			trend.reload();
 		} catch (error) {
-			setRefreshNote(error instanceof Error ? error.message : "刷新失败");
+			setRefreshNote(error instanceof Error ? error.message : t("error.requestFailed"));
 		} finally {
 			setRefreshing(false);
 		}
 	};
 
+	const dimensionLabel = (key: Dimension): string =>
+		key === "class"
+			? t("dashboard.dimClass")
+			: key === "account"
+				? t("dashboard.dimAccount")
+				: key === "currency"
+					? t("dashboard.dimCurrency")
+					: t("dashboard.dimInstrument");
+
 	const donutItems = useMemo(() => {
 		if (!data) return [];
-		if (dimension === "class") return data.byClass;
+		if (dimension === "class") return data.byClass.map((item) => ({ ...item, label: classLabel(t, item.key) }));
 		if (dimension === "account") return data.byAccount;
 		if (dimension === "currency") return data.byCurrency;
 		const buckets = new Map<string, number>();
@@ -132,7 +139,8 @@ export function DashboardPage() {
 				share: data.total > 0 ? (value / data.total) * 100 : 0,
 			}))
 			.sort((a, b) => b.value - a.value);
-	}, [data, dimension]);
+		// t 变化时需要重算标签
+	}, [data, dimension, t]);
 
 	const treemapItems = useMemo(() => {
 		if (!data) return [];
@@ -167,11 +175,11 @@ export function DashboardPage() {
 		if (!data) return [];
 		const sorted = [...data.holdings];
 		if (sortKey === "value") sorted.sort((a, b) => (b.marketValueDisplay ?? -1) - (a.marketValueDisplay ?? -1));
-		if (sortKey === "pnl") sorted.sort((a, b) => (b.pnlDisplay ?? Number.NEGATIVE_INFINITY) - (a.pnlDisplay ?? Number.NEGATIVE_INFINITY));
+		if (sortKey === "pnl")
+			sorted.sort((a, b) => (b.pnlDisplay ?? Number.NEGATIVE_INFINITY) - (a.pnlDisplay ?? Number.NEGATIVE_INFINITY));
 		if (sortKey === "share") sorted.sort((a, b) => b.share - a.share);
-		if (sortKey === "name") sorted.sort((a, b) => a.name.localeCompare(b.name, "zh-CN"));
-		if (sortKey === "stale")
-			sorted.sort((a, b) => (b.daysSincePriceUpdate ?? -1) - (a.daysSincePriceUpdate ?? -1));
+		if (sortKey === "name") sorted.sort((a, b) => a.name.localeCompare(b.name));
+		if (sortKey === "stale") sorted.sort((a, b) => (b.daysSincePriceUpdate ?? -1) - (a.daysSincePriceUpdate ?? -1));
 		return sorted;
 	}, [data, sortKey]);
 
@@ -194,8 +202,8 @@ export function DashboardPage() {
 	if (portfolio.error) {
 		return (
 			<div className="card panel">
-				<div className="alert error">加载组合数据失败：{portfolio.error}</div>
-				<button onClick={() => portfolio.reload()}>重试</button>
+				<div className="alert error">{t("dashboard.loadFailed", { message: portfolio.error })}</div>
+				<button onClick={() => portfolio.reload()}>{t("common.retry")}</button>
 			</div>
 		);
 	}
@@ -214,61 +222,63 @@ export function DashboardPage() {
 		<>
 			{data.missingFxCurrencies.length > 0 && (
 				<div className="alert">
-					以下币种缺少汇率，相关持仓未计入总额：{data.missingFxCurrencies.join("、")}。
+					{t("dashboard.missingFxAlert", { currencies: data.missingFxCurrencies.join(", ") })}
 					<button className="ghost" onClick={() => navigate("/settings")}>
-						去设置汇率
+						{t("dashboard.goSettings")}
 					</button>
 				</div>
 			)}
 
 			{staleHoldings.length > 0 && (
 				<div className="alert">
-					有 {staleHoldings.length} 条持仓价格已超过 7 天未更新：
-					{staleHoldings
-						.slice(0, 5)
-						.map((item) => `${item.symbol ?? item.name}（${relativeDays(item.daysSincePriceUpdate)}）`)
-						.join("、")}
-					{staleHoldings.length > 5 && " 等"}
+					{t("dashboard.staleAlert", {
+						count: staleHoldings.length,
+						list: staleHoldings
+							.slice(0, 5)
+							.map((item) => `${item.symbol ?? item.name} (${relativeDays(t, item.daysSincePriceUpdate)})`)
+							.join(", "),
+						more: staleHoldings.length > 5 ? t("dashboard.staleMore") : "",
+					})}
 					<button className="ghost" onClick={() => navigate("/holdings")}>
-						去批量更新
+						{t("dashboard.goBulkUpdate")}
 					</button>
 				</div>
 			)}
 
 			<div className="grid cols-4">
 				<div className="card stat">
-					<div className="label">总资产（{currency}）</div>
+					<div className="label">{t("dashboard.totalAssets", { currency })}</div>
 					<div className="value">{money(data.total, currency)}</div>
 					<div className="hint">
-						{data.counts.accounts} 个账户 · {data.counts.holdings} 条持仓
-						{hasFilter && " · 已筛选"}
+						{t("dashboard.counts", { accounts: data.counts.accounts, holdings: data.counts.holdings })}
+						{hasFilter && t("dashboard.filtered")}
 					</div>
 				</div>
 				<div className="card stat">
-					<div className="label">持仓成本合计</div>
+					<div className="label">{t("dashboard.costTotal")}</div>
 					<div className="value">{money(costTotal, currency)}</div>
-					<div className="hint">按平均成本法，已折算到 {currency}</div>
+					<div className="hint">{t("dashboard.avgCostHint", { currency })}</div>
 				</div>
 				<div className="card stat">
-					<div className="label">浮动盈亏</div>
+					<div className="label">{t("dashboard.pnlTotal")}</div>
 					<div className={`value ${trendClass(pnlTotal)}`}>{signedMoney(pnlTotal, currency)}</div>
 					<div className="hint">
 						{costTotal > 0 ? signedPercent((pnlTotal / costTotal) * 100) : "—"}
-						{pnlMissingCount > 0 && ` · ${pnlMissingCount} 条未填成本`}
+						{pnlMissingCount > 0 && t("dashboard.pnlMissing", { count: pnlMissingCount })}
 					</div>
 				</div>
 				<div className="card stat">
-					<div className="label">价格新鲜度</div>
+					<div className="label">{t("dashboard.priceFreshness")}</div>
 					<div className={`value ${data.staleDays !== null && data.staleDays > 7 ? "negative" : ""}`}>
-						{data.staleDays === null ? "—" : `${data.staleDays} 天`}
+						{data.staleDays === null ? "—" : t("dashboard.freshnessDays", { days: data.staleDays })}
 					</div>
-					<div className="hint">最久未更新的价格（v1 手动录入）</div>
+					<div className="hint">{t("dashboard.staleHint")}</div>
 				</div>
 			</div>
 
 			<div className="section">
 				<div className="section-head">
-					<h2>走势</h2>
+					<h2>{t("dashboard.trend")}</h2>
 					<div className="seg">
 						{["1M", "3M", "6M", "1Y", "ALL"].map((value) => (
 							<button
@@ -282,21 +292,21 @@ export function DashboardPage() {
 					</div>
 					<div className="seg">
 						<button className={!stacked ? "on" : ""} onClick={() => setQuery({ stack: null })}>
-							总额
+							{t("dashboard.trendTotal")}
 						</button>
 						<button className={stacked ? "on" : ""} onClick={() => setQuery({ stack: "1" })}>
-							按类别
+							{t("dashboard.trendByClass")}
 						</button>
 					</div>
 					<div className="spacer" />
 					{refreshNote && <span className="small muted hide-sm">{refreshNote}</span>}
 					<button onClick={refreshQuotes} disabled={refreshing}>
-						{refreshing ? "刷新中…" : "更新行情"}
+						{refreshing ? t("dashboard.refreshing") : t("dashboard.refreshQuotes")}
 					</button>
 				</div>
 				<div className="card panel">
 					{trend.error ? (
-						<div className="alert error">加载走势失败：{trend.error}</div>
+						<div className="alert error">{t("dashboard.trendLoadFailed", { message: trend.error })}</div>
 					) : !trend.data ? (
 						<div className="skeleton" style={{ height: 260 }} />
 					) : (
@@ -308,16 +318,23 @@ export function DashboardPage() {
 								palette={PALETTE}
 							/>
 							<div className="small muted" style={{ marginTop: 4 }}>
-								{trend.data.snapshotCount} 天快照
-								{trend.data.firstDate && ` · ${trend.data.firstDate} ~ ${trend.data.lastDate}`}
-								{trend.data.bucketDays > 1 && ` · 已按${trend.data.bucketDays === 7 ? "周" : "月"}采样`}
-								{trend.data.rateMode === "frozen"
-									? " · 使用当日冻结汇率"
-									: trend.data.rateMode === "mixed"
-										? " · 部分日期使用当日冻结汇率"
-										: " · 使用当前汇率"}
+								{t("dashboard.trendSummary", { count: trend.data.snapshotCount })}
+								{trend.data.firstDate &&
+									` · ${t("dashboard.trendRange", { from: trend.data.firstDate, to: trend.data.lastDate ?? "" })}`}
+								{trend.data.bucketDays > 1 &&
+									` · ${t("dashboard.trendBucketed", {
+										unit:
+											trend.data.bucketDays === 7 ? t("dashboard.bucketWeek") : t("dashboard.bucketMonth"),
+									})}`}
+								{` · ${
+									trend.data.rateMode === "frozen"
+										? t("dashboard.rateFrozen")
+										: trend.data.rateMode === "mixed"
+											? t("dashboard.rateMixed")
+											: t("dashboard.rateCurrent")
+								}`}
 								{trend.data.missingFxCurrencies.length > 0 &&
-									` · 缺汇率未计入：${trend.data.missingFxCurrencies.join("、")}`}
+									` · ${t("dashboard.trendMissingFx", { currencies: trend.data.missingFxCurrencies.join(", ") })}`}
 							</div>
 						</>
 					)}
@@ -326,15 +343,15 @@ export function DashboardPage() {
 
 			<div className="section">
 				<div className="section-head">
-					<h2>分布</h2>
+					<h2>{t("dashboard.distribution")}</h2>
 					<div className="seg">
-						{DIMENSIONS.map((item) => (
+						{(["class", "account", "currency", "instrument"] as Dimension[]).map((item) => (
 							<button
-								key={item.key}
-								className={dimension === item.key ? "on" : ""}
-								onClick={() => setQuery({ dim: item.key === "class" ? null : item.key })}
+								key={item}
+								className={dimension === item ? "on" : ""}
+								onClick={() => setQuery({ dim: item === "class" ? null : item })}
 							>
-								{item.label}
+								{dimensionLabel(item)}
 							</button>
 						))}
 					</div>
@@ -342,17 +359,17 @@ export function DashboardPage() {
 					<select
 						value={assetClass}
 						onChange={(e) => setQuery({ class: e.target.value || null })}
-						style={{ width: 130 }}
+						style={{ width: 140 }}
 					>
-						<option value="">全部类别</option>
+						<option value="">{t("dashboard.allClasses")}</option>
 						{ASSET_CLASSES.map((value) => (
 							<option key={value} value={value}>
-								{CLASS_LABELS[value]}
+								{classLabel(t, value)}
 							</option>
 						))}
 					</select>
 					<select value={accountId} onChange={(e) => setQuery({ account: e.target.value || null })} style={{ width: 160 }}>
-						<option value="">全部账户</option>
+						<option value="">{t("dashboard.allAccounts")}</option>
 						{accountOptions.map((account) => (
 							<option key={account.id} value={account.id}>
 								{account.name}
@@ -361,27 +378,25 @@ export function DashboardPage() {
 					</select>
 				</div>
 				<div className="section-head" style={{ marginTop: -4 }}>
-					<span className="small muted">市场：</span>
+					<span className="small muted">{t("accounts.market")}:</span>
 					<MarketFilter selected={markets} onChange={(next) => setQuery({ market: next.join(",") || null })} />
 					{hasFilter && (
 						<button
 							className="ghost"
 							onClick={() => setQuery({ class: null, market: null, account: null, ccy: null, zoom: null })}
 						>
-							清除筛选
+							{t("dashboard.clearFilters")}
 						</button>
 					)}
 				</div>
 
 				{donutItems.length === 0 ? (
-					<div className="card empty">
-						还没有数据。先到「账户」创建一个账户，再到「持仓」录入资产。
-					</div>
+					<div className="card empty">{t("dashboard.emptyCta")}</div>
 				) : (
 					<div className="grid cols-2">
 						<div className="card panel">
 							<div className="small muted" style={{ marginBottom: 6 }}>
-								点击扇区或图例可下钻筛选（dimension：{DIMENSIONS.find((d) => d.key === dimension)?.label}）
+								{t("dashboard.donutHint", { dimension: dimensionLabel(dimension) })}
 							</div>
 							<Donut
 								items={donutItems}
@@ -396,12 +411,12 @@ export function DashboardPage() {
 									{zoom ? (
 										<>
 											<button className="ghost" onClick={() => setQuery({ zoom: null })}>
-												← 全部账户
+												{t("dashboard.backToAllAccounts")}
 											</button>
 											/ {zoomName}
 										</>
 									) : (
-										"点击方块或图例可下钻到单个账户"
+										t("dashboard.treemapHint")
 									)}
 								</span>
 							</div>
@@ -419,30 +434,34 @@ export function DashboardPage() {
 			{rows.length > 0 && (
 				<div className="section">
 					<div className="section-head">
-						<h2>持仓明细</h2>
+						<h2>{t("dashboard.holdingsDetail")}</h2>
 						<div className="spacer" />
-						<select value={sortKey} onChange={(e) => setQuery({ sort: e.target.value === "value" ? null : e.target.value })} style={{ width: 160 }}>
-							<option value="value">按市值排序</option>
-							<option value="share">按占比排序</option>
-							<option value="pnl">按盈亏排序</option>
-							<option value="stale">按价格陈旧排序</option>
-							<option value="name">按名称排序</option>
+						<select
+							value={sortKey}
+							onChange={(e) => setQuery({ sort: e.target.value === "value" ? null : e.target.value })}
+							style={{ width: 170 }}
+						>
+							<option value="value">{t("dashboard.sortValue")}</option>
+							<option value="share">{t("dashboard.sortShare")}</option>
+							<option value="pnl">{t("dashboard.sortPnl")}</option>
+							<option value="stale">{t("dashboard.sortStale")}</option>
+							<option value="name">{t("dashboard.sortName")}</option>
 						</select>
 					</div>
 					<div className="card table-wrap">
 						<table>
 							<thead>
 								<tr>
-									<th className="left">名称</th>
-									<th className="left hide-sm">账户</th>
-									<th className="left hide-sm">类别</th>
-									<th className="hide-sm">数量</th>
-									<th>价格</th>
-									<th>市值（{currency}）</th>
-									<th className="hide-sm">占比</th>
-									<th className="hide-sm">成本</th>
-									<th>盈亏</th>
-									<th className="hide-sm">价格更新</th>
+									<th className="left">{t("dashboard.colName")}</th>
+									<th className="left hide-sm">{t("dashboard.colAccount")}</th>
+									<th className="left hide-sm">{t("dashboard.colClass")}</th>
+									<th className="hide-sm">{t("dashboard.colQty")}</th>
+									<th>{t("dashboard.colPrice")}</th>
+									<th>{t("dashboard.colValue", { currency })}</th>
+									<th className="hide-sm">{t("dashboard.colShare")}</th>
+									<th className="hide-sm">{t("dashboard.colCost")}</th>
+									<th>{t("dashboard.colPnl")}</th>
+									<th className="hide-sm">{t("dashboard.colPriceUpdated")}</th>
 								</tr>
 							</thead>
 							<tbody>
@@ -459,25 +478,24 @@ export function DashboardPage() {
 											</div>
 										</td>
 										<td className="left hide-sm">
-											{CLASS_LABELS[item.class]}
+											{classLabel(t, item.class)}
 											{item.market && (
-												<span className="muted small">
-													{" "}
-													· {MARKET_LABELS[item.market as Market] ?? item.market}
-												</span>
+												<span className="muted small"> · {marketLabel(t, item.market as Market)}</span>
 											)}
 										</td>
 										<td className="hide-sm">{number(item.qty)}</td>
 										<td>{number(item.price)}</td>
 										<td>
 											{item.marketValueDisplay === null ? (
-												<span className="badge warn">缺汇率</span>
+												<span className="badge warn">{t("dashboard.missingFxBadge")}</span>
 											) : (
 												money(item.marketValueDisplay, currency)
 											)}
 										</td>
 										<td className="hide-sm">{percent(item.share)}</td>
-										<td className="hide-sm">{item.avgCost === null ? "—" : money(item.avgCost, item.currency)}</td>
+										<td className="hide-sm">
+											{item.avgCost === null ? "—" : money(item.avgCost, item.currency)}
+										</td>
 										<td className={trendClass(item.pnl)}>
 											{item.pnl === null ? (
 												"—"
@@ -489,7 +507,7 @@ export function DashboardPage() {
 											)}
 										</td>
 										<td className={`hide-sm ${stalenessClass(item.daysSincePriceUpdate)}`}>
-											{relativeDays(item.daysSincePriceUpdate)}
+											{relativeDays(t, item.daysSincePriceUpdate)}
 										</td>
 									</tr>
 								))}

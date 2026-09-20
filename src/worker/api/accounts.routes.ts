@@ -1,4 +1,5 @@
 import { Hono } from "hono";
+import { tOf } from "../core/i18n";
 import type { AppEnv } from "../types";
 import { ACCOUNT_KINDS, MARKETS } from "../../shared/labels";
 import { badRequest, conflict, notFound, ok } from "../core/errors";
@@ -21,18 +22,19 @@ accounts.get("/", async (c) => {
 });
 
 accounts.post("/", async (c) => {
-	const payload = asRecord(await c.req.json());
+		const t = tOf(c);
+	const payload = asRecord(await c.req.json(), t);
 	const input = {
-		name: requireString(payload, "name", { label: "账户名称", max: 60 }),
-		kind: requireOneOf(payload, "kind", ACCOUNT_KINDS, "账户类型"),
-		market: optionalString(payload, "market", { label: "市场", max: 16 }) ?? null,
-		currency: requireCurrency(payload),
-		icon_key: optionalString(payload, "iconKey", { label: "图标", max: 40 }) ?? null,
-		sort: optionalNumber(payload, "sort", { label: "排序" }) ?? 0,
-		note: optionalString(payload, "note", { label: "备注", max: 200 }) ?? null,
+		name: requireString(payload, "name", { labelKey: "field.accountName", max: 60 }, t),
+		kind: requireOneOf(payload, "kind", ACCOUNT_KINDS, "field.kind", t),
+		market: optionalString(payload, "market", { labelKey: "field.market", max: 16 }, t) ?? null,
+		currency: requireCurrency(payload, "currency", t),
+		icon_key: optionalString(payload, "iconKey", { labelKey: "field.icon", max: 40 }, t) ?? null,
+		sort: optionalNumber(payload, "sort", { labelKey: "field.sort" }, t) ?? 0,
+		note: optionalString(payload, "note", { labelKey: "field.note", max: 200 }, t) ?? null,
 	};
 	if (input.market && !MARKETS.includes(input.market as (typeof MARKETS)[number])) {
-		throw badRequest(`市场必须是以下之一：${MARKETS.join(" / ")}`);
+		throw badRequest(t("error.field_enum", { label: t("field.market"), allowed: MARKETS.join(" / ") }));
 	}
 	if (input.kind === "cash") input.market = null;
 
@@ -42,19 +44,20 @@ accounts.post("/", async (c) => {
 });
 
 accounts.patch("/:id", async (c) => {
-	const id = requireId(c.req.param("id"), "账户 id");
+		const t = tOf(c);
+	const id = requireId(c.req.param("id"), t,  "账户 id");
 	const before = await getAccount(c.env.DB, id);
-	if (!before) throw notFound("账户不存在");
+	if (!before) throw notFound(t("error.not_found"));
 
-	const payload = asRecord(await c.req.json());
+	const payload = asRecord(await c.req.json(), t);
 	const patch: Record<string, unknown> = {};
-	if (payload.name !== undefined) patch.name = requireString(payload, "name", { label: "账户名称", max: 60 });
-	if (payload.kind !== undefined) patch.kind = requireOneOf(payload, "kind", ACCOUNT_KINDS, "账户类型");
-	if (payload.currency !== undefined) patch.currency = requireCurrency(payload);
-	if (payload.market !== undefined) patch.market = optionalString(payload, "market", { label: "市场", max: 16 }) ?? null;
-	if (payload.iconKey !== undefined) patch.icon_key = optionalString(payload, "iconKey", { label: "图标", max: 40 }) ?? null;
-	if (payload.sort !== undefined) patch.sort = optionalNumber(payload, "sort", { label: "排序" }) ?? 0;
-	if (payload.note !== undefined) patch.note = optionalString(payload, "note", { label: "备注", max: 200 }) ?? null;
+	if (payload.name !== undefined) patch.name = requireString(payload, "name", { labelKey: "field.accountName", max: 60 }, t);
+	if (payload.kind !== undefined) patch.kind = requireOneOf(payload, "kind", ACCOUNT_KINDS, "field.kind", t);
+	if (payload.currency !== undefined) patch.currency = requireCurrency(payload, "currency", t);
+	if (payload.market !== undefined) patch.market = optionalString(payload, "market", { labelKey: "field.market", max: 16 }, t) ?? null;
+	if (payload.iconKey !== undefined) patch.icon_key = optionalString(payload, "iconKey", { labelKey: "field.icon", max: 40 }, t) ?? null;
+	if (payload.sort !== undefined) patch.sort = optionalNumber(payload, "sort", { labelKey: "field.sort" }, t) ?? 0;
+	if (payload.note !== undefined) patch.note = optionalString(payload, "note", { labelKey: "field.note", max: 200 }, t) ?? null;
 	if (payload.archived !== undefined) patch.archived = Boolean(payload.archived);
 
 	const after = await updateAccount(c.env.DB, id, patch);
@@ -63,14 +66,15 @@ accounts.patch("/:id", async (c) => {
 });
 
 accounts.delete("/:id", async (c) => {
-	const id = requireId(c.req.param("id"), "账户 id");
+		const t = tOf(c);
+	const id = requireId(c.req.param("id"), t,  "账户 id");
 	const before = await getAccount(c.env.DB, id);
-	if (!before) throw notFound("账户不存在");
+	if (!before) throw notFound(t("error.not_found"));
 
 	const holdingCount = await countAccountHoldings(c.env.DB, id);
 	const cascade = c.req.query("cascadeHoldings") === "true";
 	if (holdingCount > 0 && !cascade) {
-		throw conflict(`该账户下还有 ${holdingCount} 条持仓，请先清空或选择一并删除`, "has_holdings");
+		throw conflict(t("error.hasHoldings"), "has_holdings");
 	}
 
 	await deleteAccount(c.env.DB, id);

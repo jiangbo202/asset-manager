@@ -1,5 +1,6 @@
 import type { BreakdownItem } from "../../shared/api-types";
 import { money } from "../lib/format";
+import { useT } from "./i18n";
 
 export const PALETTE = [
 	"#2f6feb",
@@ -37,10 +38,11 @@ export function Donut({
 	activeKey?: string | null;
 	onSelect?: (key: string) => void;
 }) {
+	const t = useT();
 	const data = items.filter((item) => item.value > 0);
 	const total = data.reduce((sum, item) => sum + item.value, 0);
 
-	if (total <= 0) return <div className="empty">暂无可展示的数据</div>;
+	if (total <= 0) return <div className="empty">{t("dashboard.noData")}</div>;
 
 	const radius = size / 2 - 14;
 	const thickness = 26;
@@ -78,7 +80,7 @@ export function Donut({
 					})}
 				</g>
 				<text x="50%" y="46%" textAnchor="middle" fontSize="12" fill="currentColor" opacity="0.6">
-					总额
+					{t("common.total")}
 				</text>
 				<text x="50%" y="57%" textAnchor="middle" fontSize="16" fontWeight="600" fill="currentColor">
 					{money(total, currency, 0)}
@@ -202,12 +204,13 @@ export function Treemap({
 	colorByChild?: boolean;
 	onSelect?: (groupKey: string) => void;
 }) {
+	const t = useT();
 	const groups = items
 		.filter((item) => item.value > 0)
 		.map((item) => ({ ...item, children: (item.children ?? []).filter((child) => child.value > 0) }))
 		.sort((a, b) => b.value - a.value);
 
-	if (groups.length === 0) return <div className="empty">暂无数据</div>;
+	if (groups.length === 0) return <div className="empty">{t("dashboard.noData")}</div>;
 
 	const total = groups.reduce((sum, item) => sum + item.value, 0);
 	const groupRects = squarify(groups.map((item) => item.value));

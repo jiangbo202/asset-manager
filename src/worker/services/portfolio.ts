@@ -1,6 +1,6 @@
 import type { HoldingWithAccount } from "../data/accounts.repo";
 import { buildFxLookup, type FxRate } from "../data/fx.repo";
-import { CLASS_LABELS, type AssetClass } from "../../shared/labels";
+import type { AssetClass } from "../../shared/labels";
 
 /**
  * 组合视图聚合（当前时点，无时间序列 —— v1 不做走势图，见 PRD D3）
@@ -146,9 +146,10 @@ export function buildPortfolio(
 			accounts: new Set(items.map((item) => item.accountId)).size,
 			holdings: items.length,
 		},
+		// label 直接给原始 key（class.stock → "stock"），由前端按语言翻译
 		byClass: group(
 			(item) => item.class,
-			(key) => CLASS_LABELS[key as AssetClass] ?? key,
+			(key) => key,
 		),
 		byAccount: group(
 			(item) => item.accountId,

@@ -2,10 +2,12 @@ import { useState } from "react";
 import { api } from "../lib/api";
 import { copyText, deriveCredential, ITERATIONS, passwordStrength, randomPassword, randomSaltHex } from "../lib/crypto";
 import { useSubmit } from "../lib/useAsync";
+import { useT } from "../lib/i18n";
 
 const CURRENCIES = ["USD", "HKD", "CNY"];
 
 export function SetupPage({ onDone }: { onDone: () => void }) {
+	const t = useT();
 	const [setupToken, setSetupToken] = useState("");
 	const [password, setPassword] = useState("");
 	const [confirm, setConfirm] = useState("");
@@ -27,11 +29,11 @@ export function SetupPage({ onDone }: { onDone: () => void }) {
 	const submit = async (event: React.FormEvent) => {
 		event.preventDefault();
 		if (password.length < 12) {
-			setError("密码至少 12 位");
+			setError(t("setup.errorTooShort"));
 			return;
 		}
 		if (password !== confirm) {
-			setError("两次输入的密码不一致");
+			setError(t("setup.errorMismatch"));
 			return;
 		}
 		await run(async () => {
@@ -45,29 +47,29 @@ export function SetupPage({ onDone }: { onDone: () => void }) {
 	return (
 		<div className="center-screen">
 			<form className="card auth-card" onSubmit={submit}>
-				<h1>初始化资产管理</h1>
+				<h1>{t("setup.title")}</h1>
 				<p className="sub">
-					首次使用需要两步：填入部署时生成的 setup token，然后设置你自己的密码。
+					{t("setup.intro")}
 					<br />
-					数据只保存在你自己的 Cloudflare D1 里。
+					{t("setup.privacy")}
 				</p>
 
 				{error && <div className="alert error">{error}</div>}
 
 				<label className="field">
-					<span>Setup Token（部署终端打印的那个值）</span>
+					<span>{t("setup.tokenLabel")}</span>
 					<input
 						type="password"
 						value={setupToken}
 						onChange={(e) => setSetupToken(e.target.value)}
-						placeholder="openssl rand -hex 32 生成的值"
+						placeholder={t("setup.tokenPlaceholder")}
 						autoComplete="off"
 						required
 					/>
 				</label>
 
 				<label className="field">
-					<span>显示币种（之后可在设置里修改）</span>
+					<span>{t("setup.currencyLabel")}</span>
 					<select value={displayCurrency} onChange={(e) => setDisplayCurrency(e.target.value)}>
 						{CURRENCIES.map((currency) => (
 							<option key={currency} value={currency}>
@@ -78,7 +80,7 @@ export function SetupPage({ onDone }: { onDone: () => void }) {
 				</label>
 
 				<label className="field">
-					<span>登录密码（至少 12 位）</span>
+					<span>{t("setup.passwordLabel")}</span>
 					<input
 						type="text"
 						value={password}
@@ -89,7 +91,7 @@ export function SetupPage({ onDone }: { onDone: () => void }) {
 				</label>
 
 				<label className="field">
-					<span>再输一次</span>
+					<span>{t("setup.confirmLabel")}</span>
 					<input
 						type="text"
 						value={confirm}
@@ -101,10 +103,11 @@ export function SetupPage({ onDone }: { onDone: () => void }) {
 
 				<div className="row" style={{ marginBottom: 12 }}>
 					<button type="button" onClick={generate}>
-						生成随机密码
+						{t("setup.generate")}
 					</button>
 					<div className="small muted" style={{ display: "grid", alignContent: "center" }}>
-						强度：{strength.hint}
+						{t("setup.strength")}
+						{t(`pwd.strength${strength}`)}
 					</div>
 				</div>
 
@@ -114,19 +117,19 @@ export function SetupPage({ onDone }: { onDone: () => void }) {
 						<button
 							type="button"
 							onClick={async () => setCopied(await copyText(suggestion))}
-							title="复制"
+							title={t("common.copy")}
 						>
-							{copied ? "已复制" : "复制"}
+							{copied ? t("common.copied") : t("common.copy")}
 						</button>
 					</div>
 				)}
 
 				<button className="primary" type="submit" disabled={pending} style={{ width: "100%" }}>
-					{pending ? "初始化中…" : "完成初始化"}
+					{pending ? t("setup.submitting") : t("setup.submit")}
 				</button>
 
 				<p className="small muted" style={{ marginTop: 14, marginBottom: 0 }}>
-					密码用 PBKDF2（{ITERATIONS.toLocaleString()} 次迭代）在浏览器里派生，服务器只保存不可逆的校验值。
+					{t("setup.pbkdf2Note", { iterations: ITERATIONS.toLocaleString() })}
 				</p>
 			</form>
 		</div>

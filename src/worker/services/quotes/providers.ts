@@ -1,4 +1,5 @@
 import { isRecord } from "../../core/utils";
+import { makeTranslator, type Translator } from "../../../shared/i18n";
 
 /**
  * 行情数据源适配器（v0.10）
@@ -154,7 +155,12 @@ export interface FetchContext {
 	fetcher: typeof fetch;
 	apiKeys: Partial<Record<ProviderId, string>>;
 	timeoutMs?: number;
+	/** 提示文案的语言（缺省中文），让"限流/代码错误"等诊断信息也跟随界面语言 */
+	t?: Translator;
 }
+
+/** 取当前上下文的翻译函数（测试里可以不传） */
+export const tr = (ctx: FetchContext): Translator => ctx.t ?? makeTranslator("zh");
 
 export interface AdapterResult {
 	quotes: Quote[];
@@ -192,10 +198,10 @@ export async function mapLimit<T, R>(items: T[], limit: number, fn: (item: T) =>
 	return results;
 }
 
-const describeStatus = (status: number): string => {
-	if (status === 429) return "HTTP 429（被限流，稍后会自动重试其它数据源）";
-	if (status === 403) return "HTTP 403（对方拒绝了这次请求，可能是限流或需要 Key）";
-	if (status === 404) return "HTTP 404（对方没有这个代码）";
+const describeStatus = (status: number, t: Translator): string => {
+	if (status === 429) return t("quote.rateLimited");
+	if (status === 403) return t("quote.forbidden");
+	if (status === 404) return t("quote.notFound");
 	return `HTTP ${status}`;
 };
 
@@ -204,7 +210,7 @@ async function requestJson(url: string, ctx: FetchContext, headers?: Record<stri
 		headers,
 		signal: AbortSignal.timeout(ctx.timeoutMs ?? 8_000),
 	});
-	if (!response.ok) throw new UpstreamError(response.status, describeStatus(response.status));
+	if (!response.ok) throw new UpstreamError(response.status, describeStatus(response.status, tr(ctx)));
 	return response.json();
 }
 
@@ -213,7 +219,7 @@ async function requestText(url: string, ctx: FetchContext, headers?: Record<stri
 		headers,
 		signal: AbortSignal.timeout(ctx.timeoutMs ?? 8_000),
 	});
-	if (!response.ok) throw new UpstreamError(response.status, describeStatus(response.status));
+	if (!response.ok) throw new UpstreamError(response.status, describeStatus(response.status, tr(ctx)));
 	return response.text();
 }
 
@@ -346,7 +352,7 @@ async function coingeckoQuotes(targets: QuoteTarget[], ctx: FetchContext): Promi
 	for (const target of targets) {
 		const id = coingeckoId(target);
 		if (id) pairs.push({ target, id });
-		else errors.push(`${target.symbol}：未内置 CoinGecko id，请在该持仓的"代码覆盖"里填写（如 bitcoin）`);
+		else errors.push(tr(ctx)("quote.noCoingeckoId", { symbol: target.symbol }));
 	}
 	if (pairs.length === 0) return { quotes: [], errors };
 
@@ -362,12 +368,17 @@ async function coingeckoQuotes(targets: QuoteTarget[], ctx: FetchContext): Promi
 	for (const pair of pairs) {
 		const entry = data[pair.id];
 		if (!isRecord(entry)) {
-			errors.push(`${pair.target.symbol}：CoinGecko 未返回该币种`);
+			errors.push(tr(ctx)("quote.coingeckoNoPrice", { symbol: pair.target.symbol }));
 			continue;
 		}
 		const price = num(entry[pair.target.currency.toLowerCase()]) ?? num(entry.usd);
 		if (price === null) {
-			errors.push(`${pair.target.symbol}：CoinGecko 未返回 ${pair.target.currency} 价格`);
+			errors.push(
+				tr(ctx)("quote.coingeckoNoQuoteCurrency", {
+					symbol: pair.target.symbol,
+					currency: pair.target.currency,
+				}),
+			);
 			continue;
 		}
 		quotes.push({
@@ -387,7 +398,7 @@ async function binanceQuotes(targets: QuoteTarget[], ctx: FetchContext): Promise
 	for (const target of targets) {
 		const symbol = binanceSymbol(target);
 		if (symbol) pairs.push({ target, symbol });
-		else errors.push(`${target.symbol}：Binance 只支持 USD/USDT 计价`);
+		else errors.push(tr(ctx)("quote.binanceUsdOnly", { symbol: target.symbol }));
 	}
 	if (pairs.length === 0) return { quotes: [], errors };
 
@@ -409,7 +420,7 @@ async function binanceQuotes(targets: QuoteTarget[], ctx: FetchContext): Promise
 	for (const pair of pairs) {
 		const price = bySymbol.get(pair.symbol);
 		if (price === undefined) {
-			errors.push(`${pair.target.symbol}：Binance 无此交易对（${pair.symbol}）`);
+			errors.push(tr(ctx)("quote.binanceNoPair", { symbol: pair.target.symbol, pair: pair.symbol }));
 			continue;
 		}
 		quotes.push({
@@ -433,7 +444,7 @@ async function yahooQuotes(targets: QuoteTarget[], ctx: FetchContext): Promise<A
 	const statuses: Array<{ status?: number }> = [];
 	const results = await mapLimit(targets, CONCURRENCY, async (target) => {
 		const symbol = yahooSymbol(target);
-		if (!symbol) return { target, error: "无法推导 Yahoo 代码" };
+		if (!symbol) return { target, error: tr(ctx)("quote.noYahooSymbol") };
 		try {
 			const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(
 				symbol,
@@ -444,7 +455,7 @@ async function yahooQuotes(targets: QuoteTarget[], ctx: FetchContext): Promise<A
 				: undefined;
 			const info = meta && isRecord(meta.meta) ? meta.meta : undefined;
 			const price = info ? (num(info.regularMarketPrice) ?? num(info.previousClose)) : null;
-			if (price === null) return { target, error: "Yahoo 未返回价格" };
+			if (price === null) return { target, error: tr(ctx)("quote.yahooNoPrice") };
 			return {
 				quote: {
 					key: target.key,
@@ -477,7 +488,7 @@ async function tencentQuotes(targets: QuoteTarget[], ctx: FetchContext): Promise
 	for (const target of targets) {
 		const symbol = tencentSymbol(target);
 		if (symbol) pairs.push({ target, symbol });
-		else errors.push(`${target.symbol}：腾讯行情只支持港股 / A 股代码`);
+		else errors.push(tr(ctx)("quote.tencentOnlyCn", { symbol: target.symbol }));
 	}
 	if (pairs.length === 0) return { quotes: [], errors };
 
@@ -489,13 +500,13 @@ async function tencentQuotes(targets: QuoteTarget[], ctx: FetchContext): Promise
 	for (const pair of pairs) {
 		const match = text.match(new RegExp(`v_${pair.symbol}="([^"]*)"`, "i"));
 		if (!match) {
-			errors.push(`${pair.target.symbol}：腾讯行情未返回 ${pair.symbol}`);
+			errors.push(tr(ctx)("quote.tencentNoSymbol", { symbol: pair.target.symbol, ticker: pair.symbol }));
 			continue;
 		}
 		const fields = match[1].split("~");
 		const price = num(fields[3]);
 		if (price === null) {
-			errors.push(`${pair.target.symbol}：腾讯行情价格字段异常`);
+			errors.push(tr(ctx)("quote.tencentBadField", { symbol: pair.target.symbol }));
 			continue;
 		}
 		quotes.push({
@@ -515,7 +526,7 @@ async function frankfurterQuotes(targets: QuoteTarget[], ctx: FetchContext): Pro
 	for (const target of targets) {
 		const pair = frankfurterPair(target);
 		if (!pair) {
-			errors.push(`${target.symbol}：汇率代码格式应为 BASE:QUOTE`);
+			errors.push(tr(ctx)("quote.fxFormat", { symbol: target.symbol }));
 			continue;
 		}
 		byBase.set(pair.base, [...(byBase.get(pair.base) ?? []), { target, quote: pair.quote }]);
@@ -532,7 +543,7 @@ async function frankfurterQuotes(targets: QuoteTarget[], ctx: FetchContext): Pro
 			for (const entry of entries) {
 				const price = num(rates[entry.quote]);
 				if (price === null) {
-					errors.push(`${entry.target.symbol}：Frankfurter 不支持该币种`);
+					errors.push(tr(ctx)("quote.fxUnsupported", { symbol: entry.target.symbol, provider: "Frankfurter" }));
 					continue;
 				}
 				quotes.push({
@@ -556,7 +567,7 @@ async function erapiQuotes(targets: QuoteTarget[], ctx: FetchContext): Promise<A
 	for (const target of targets) {
 		const pair = frankfurterPair(target);
 		if (!pair) {
-			errors.push(`${target.symbol}：汇率代码格式应为 BASE:QUOTE`);
+			errors.push(tr(ctx)("quote.fxFormat", { symbol: target.symbol }));
 			continue;
 		}
 		byBase.set(pair.base, [...(byBase.get(pair.base) ?? []), { target, quote: pair.quote }]);
@@ -573,7 +584,7 @@ async function erapiQuotes(targets: QuoteTarget[], ctx: FetchContext): Promise<A
 			for (const entry of entries) {
 				const price = num(rates[entry.quote]);
 				if (price === null) {
-					errors.push(`${entry.target.symbol}：open.er-api 不支持该币种`);
+					errors.push(tr(ctx)("quote.fxUnsupported", { symbol: entry.target.symbol, provider: "open.er-api" }));
 					continue;
 				}
 				quotes.push({
@@ -614,7 +625,7 @@ async function customQuotes(
 	config: CustomProviderConfig | null | undefined,
 ): Promise<AdapterResult> {
 	if (!config?.urlTemplate || !config.pricePath) {
-		throw new Error("自定义数据源未配置 URL 模板或价格路径");
+		throw new Error(tr(ctx)("quote.customNotConfigured"));
 	}
 	let extraHeaders: Record<string, string> = {};
 	if (config.headers) {
@@ -626,7 +637,7 @@ async function customQuotes(
 				);
 			}
 		} catch {
-			throw new Error("自定义请求头不是合法 JSON");
+			throw new Error(tr(ctx)("quote.customBadHeaders"));
 		}
 	}
 
@@ -640,7 +651,7 @@ async function customQuotes(
 		try {
 			const payload = await requestJson(url, ctx, { accept: "application/json", ...extraHeaders });
 			const price = num(readPath(payload, config.pricePath));
-			if (price === null) return { target, error: `路径 ${config.pricePath} 未取到价格` };
+			if (price === null) return { target, error: tr(ctx)("quote.customNoPrice", { path: config.pricePath }) };
 			const currency =
 				(config.currencyPath ? readPath(payload, config.currencyPath) : null) ?? target.currency;
 			return {
@@ -696,7 +707,7 @@ export async function runAdapter(
 			case "custom":
 				return await customQuotes(applicable, ctx, settings.custom);
 			default:
-				return { quotes: [], errors: [`数据源 ${providerId} 尚未实现`] };
+				return { quotes: [], errors: [`provider not implemented: ${providerId}`] };
 		}
 	} catch (error) {
 		return {

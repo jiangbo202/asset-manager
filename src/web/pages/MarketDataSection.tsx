@@ -1,11 +1,7 @@
 import { useEffect, useState } from "react";
-import {
-	api,
-	type QuoteStatusDto,
-	type RefreshReportDto,
-	type SettingsDto,
-} from "../lib/api";
+import { api, type QuoteStatusDto, type RefreshReportDto, type SettingsDto } from "../lib/api";
 import { useAsync, useSubmit } from "../lib/useAsync";
+import { useT } from "../lib/i18n";
 import { dateTime } from "../lib/format";
 
 /**
@@ -18,6 +14,7 @@ import { dateTime } from "../lib/format";
  *  - 改快照时间、手动拍快照、查看最近运行与缓存
  */
 export function MarketDataSection({ settings, onSaved }: { settings: SettingsDto | null; onSaved?: () => void }) {
+	const t = useT();
 	const status = useAsync<QuoteStatusDto>(() => api.quotes.status(), []);
 	const save = useSubmit();
 	const action = useSubmit();
@@ -61,14 +58,16 @@ export function MarketDataSection({ settings, onSaved }: { settings: SettingsDto
 
 	/**
 	 * 数据源列表有两个来源：
-	 *  - settings.providers：静态元信息（标签、覆盖范围、说明）
+	 *  - settings.providers：静态元信息（id、覆盖范围）
 	 *  - status.providers：运行时状态（是否在限流冷却、上次错误）
-	 * 合并后渲染，避免两边各画一份表格。
+	 * 展示名与说明走 i18n（provider.<id>.label / .note）
 	 */
 	const providers = (settings?.providers ?? []).map((meta) => {
 		const runtime = status.data?.providers.find((item) => item.id === meta.id);
 		return {
 			...meta,
+			label: t(`provider.${meta.id}.label`),
+			note: t(`provider.${meta.id}.note`),
 			enabled: enabled[meta.id] ?? runtime?.enabled ?? meta.defaultEnabled,
 			coolingDown: runtime?.coolingDown ?? false,
 			cooldownMinutesLeft: runtime?.cooldownMinutesLeft ?? 0,
@@ -98,7 +97,7 @@ export function MarketDataSection({ settings, onSaved }: { settings: SettingsDto
 				...(Object.keys(keys).length > 0 ? { providerKeys: keys } : {}),
 			});
 			setKeys({});
-			setMessage("已保存");
+			setMessage(t("market.saved"));
 			status.reload();
 			onSaved?.();
 		});
@@ -109,7 +108,11 @@ export function MarketDataSection({ settings, onSaved }: { settings: SettingsDto
 			const response = await api.quotes.refresh();
 			setLastReport(response.report);
 			setMessage(
-				`刷新完成：更新 ${response.report.updated} 条价格、${response.report.fxUpdated} 条汇率，失败 ${response.report.failed.length} 条`,
+				t("market.refreshDone", {
+					updated: response.report.updated,
+					fxUpdated: response.report.fxUpdated,
+					failed: response.report.failed.length,
+				}),
 			);
 			status.reload();
 			onSaved?.();
@@ -119,7 +122,13 @@ export function MarketDataSection({ settings, onSaved }: { settings: SettingsDto
 	const takeSnapshot = async () => {
 		await action.run(async () => {
 			const result = await api.snapshots.take();
-			setMessage(`已生成 ${result.date} 的快照：${result.currency} ${result.total.toFixed(2)}`);
+			setMessage(
+				t("market.snapshotDone", {
+					date: result.date,
+					currency: result.currency,
+					total: result.total.toFixed(2),
+				}),
+			);
 			status.reload();
 			onSaved?.();
 		});
@@ -137,9 +146,9 @@ export function MarketDataSection({ settings, onSaved }: { settings: SettingsDto
 			});
 			if (response.ok) {
 				const quote = response.quotes[0] as { price: number; currency: string; symbol: string; source: string };
-				setTestResult(`✓ ${quote.symbol} = ${quote.price} ${quote.currency}（来自 ${quote.source}）`);
+				setTestResult(`✓ ${quote.symbol} = ${quote.price} ${quote.currency} (${quote.source})`);
 			} else {
-				setTestResult(`✗ ${response.errors.join("；") || "没有取到价格"}`);
+				setTestResult(`✗ ${response.errors.join("; ") || t("quote.allFailed")}`);
 			}
 		});
 	};
@@ -147,16 +156,14 @@ export function MarketDataSection({ settings, onSaved }: { settings: SettingsDto
 	return (
 		<div className="section">
 			<div className="section-head">
-				<h2>行情与快照</h2>
-				<span className="small muted hide-sm">
-					默认使用免费公开接口，无需 API Key；失败会自动回退到下一个数据源
-				</span>
+				<h2>{t("market.title")}</h2>
+				<span className="small muted hide-sm">{t("market.hint")}</span>
 				<div className="spacer" />
 				<button onClick={refreshNow} disabled={action.pending}>
-					立即刷新行情
+					{t("market.refreshNow")}
 				</button>
 				<button onClick={takeSnapshot} disabled={action.pending}>
-					立即拍快照
+					{t("market.snapshotNow")}
 				</button>
 			</div>
 
@@ -165,7 +172,7 @@ export function MarketDataSection({ settings, onSaved }: { settings: SettingsDto
 
 			<div className="grid cols-2">
 				<div className="card panel">
-					<h3 style={{ marginTop: 0, fontSize: 14 }}>开关与时间</h3>
+					<h3 style={{ marginTop: 0, fontSize: 14 }}>{t("market.switches")}</h3>
 					<label className="small" style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 12 }}>
 						<input
 							type="checkbox"
@@ -173,10 +180,10 @@ export function MarketDataSection({ settings, onSaved }: { settings: SettingsDto
 							style={{ width: "auto" }}
 							onChange={(e) => setMarketEnabled(e.target.checked)}
 						/>
-						启用行情自动更新与每日快照
+						{t("market.enable")}
 					</label>
 					<label className="field">
-						<span>每日快照时间（UTC 小时，0–23）</span>
+						<span>{t("market.snapshotHour")}</span>
 						<input
 							type="number"
 							min={0}
@@ -186,17 +193,17 @@ export function MarketDataSection({ settings, onSaved }: { settings: SettingsDto
 						/>
 					</label>
 					<p className="small muted" style={{ marginBottom: 0 }}>
-						Worker 的 Cron 每小时跑一次，只在这个小时里真正干活：先刷新行情、再拍快照。
-						默认 22 点（UTC）≈ 美股收盘后。上次运行：
-						{status.data?.lastRunAt ? dateTime(status.data.lastRunAt) : "尚未运行"}
+						{t("market.snapshotHint", {
+							time: status.data?.lastRunAt ? dateTime(status.data.lastRunAt) : t("market.never"),
+						})}
 					</p>
 				</div>
 
 				<div className="card panel">
-					<h3 style={{ marginTop: 0, fontSize: 14 }}>测试数据源</h3>
+					<h3 style={{ marginTop: 0, fontSize: 14 }}>{t("market.testTitle")}</h3>
 					<div className="row">
 						<label className="field">
-							<span>数据源</span>
+							<span>{t("market.provider")}</span>
 							<select value={testProvider} onChange={(e) => setTestProvider(e.target.value)}>
 								{providers.map((provider) => (
 									<option key={provider.id} value={provider.id}>
@@ -206,17 +213,17 @@ export function MarketDataSection({ settings, onSaved }: { settings: SettingsDto
 							</select>
 						</label>
 						<label className="field">
-							<span>类型</span>
+							<span>{t("market.kind")}</span>
 							<select value={testKind} onChange={(e) => setTestKind(e.target.value)}>
-								<option value="stock">股票</option>
-								<option value="crypto">加密</option>
-								<option value="fx">汇率</option>
+								<option value="stock">{t("market.kind.stock")}</option>
+								<option value="crypto">{t("market.kind.crypto")}</option>
+								<option value="fx">{t("market.kind.fx")}</option>
 							</select>
 						</label>
 					</div>
 					<div className="row">
 						<label className="field">
-							<span>代码</span>
+							<span>{t("market.symbol")}</span>
 							<input
 								value={testSymbol}
 								onChange={(e) => setTestSymbol(e.target.value)}
@@ -224,22 +231,22 @@ export function MarketDataSection({ settings, onSaved }: { settings: SettingsDto
 							/>
 						</label>
 						<label className="field">
-							<span>币种</span>
+							<span>{t("market.currency")}</span>
 							<input value={testCurrency} onChange={(e) => setTestCurrency(e.target.value.toUpperCase())} />
 						</label>
 						<label className="field">
-							<span>市场</span>
+							<span>{t("market.market")}</span>
 							<select value={testMarket} onChange={(e) => setTestMarket(e.target.value)}>
-								<option value="us">美股</option>
-								<option value="hk">港股</option>
-								<option value="cn">A 股</option>
-								<option value="crypto">加密</option>
-								<option value="">未指定</option>
+								<option value="us">{t("market.market.us")}</option>
+								<option value="hk">{t("market.market.hk")}</option>
+								<option value="cn">{t("market.market.cn")}</option>
+								<option value="crypto">{t("market.market.crypto")}</option>
+								<option value="">{t("market.market.none")}</option>
 							</select>
 						</label>
 					</div>
 					<button onClick={runTest} disabled={action.pending}>
-						测试
+						{t("market.test")}
 					</button>
 					{testResult && (
 						<p className="small" style={{ marginBottom: 0, marginTop: 10 }}>
@@ -253,77 +260,70 @@ export function MarketDataSection({ settings, onSaved }: { settings: SettingsDto
 				<table>
 					<thead>
 						<tr>
-							<th className="left">数据源</th>
-							<th className="left hide-sm">覆盖范围</th>
-							<th className="left">启用</th>
-							<th className="left">API Key</th>
-							<th className="left hide-sm">说明</th>
+							<th className="left">{t("market.colProvider")}</th>
+							<th className="left hide-sm">{t("market.colKinds")}</th>
+							<th className="left">{t("market.colEnabled")}</th>
+							<th className="left">{t("market.colKey")}</th>
+							<th className="left hide-sm">{t("market.colNote")}</th>
 						</tr>
 					</thead>
 					<tbody>
-						{providers.map((provider) => {
-							const on = provider.enabled;
-							return (
-								<tr key={provider.id}>
-									<td className="left">
-										{provider.docs ? (
-											<a href={provider.docs} target="_blank" rel="noreferrer">
-												{provider.label}
-											</a>
-										) : (
-											provider.label
-										)}
-										{provider.batch && <span className="badge" style={{ marginLeft: 6 }}>批量</span>}
-										{provider.coolingDown && (
-											<span className="badge warn" style={{ marginLeft: 6 }} title={provider.cooldownReason ?? ""}>
-												限流冷却 {provider.cooldownMinutesLeft} 分钟
-											</span>
-										)}
-									</td>
-									<td className="left hide-sm">{provider.kinds.join(" / ")}</td>
-									<td className="left">
+						{providers.map((provider) => (
+							<tr key={provider.id}>
+								<td className="left">
+									{provider.docs ? (
+										<a href={provider.docs} target="_blank" rel="noreferrer">
+											{provider.label}
+										</a>
+									) : (
+										provider.label
+									)}
+									{provider.batch && <span className="badge" style={{ marginLeft: 6 }}>{t("market.batchBadge")}</span>}
+									{provider.coolingDown && (
+										<span className="badge warn" style={{ marginLeft: 6 }} title={provider.cooldownReason ?? ""}>
+											{t("market.coolingBadge", { minutes: provider.cooldownMinutesLeft })}
+										</span>
+									)}
+								</td>
+								<td className="left hide-sm">{provider.kinds.map((kind) => t(`market.kind.${kind}`)).join(" / ")}</td>
+								<td className="left">
+									<input
+										type="checkbox"
+										checked={provider.enabled}
+										style={{ width: "auto" }}
+										onChange={(e) => setEnabled({ ...enabled, [provider.id]: e.target.checked })}
+									/>
+								</td>
+								<td className="left">
+									{provider.id === "custom" ? (
+										<span className="muted small">{t("market.keySeeCustom")}</span>
+									) : provider.needsKey ? (
 										<input
-											type="checkbox"
-											checked={on}
-											style={{ width: "auto" }}
-											onChange={(e) => setEnabled({ ...enabled, [provider.id]: e.target.checked })}
+											type="password"
+											placeholder={provider.hasKey ? t("market.keyPlaceholderSet") : t("market.keyPlaceholder")}
+											value={keys[provider.id] ?? ""}
+											onChange={(e) => setKeys({ ...keys, [provider.id]: e.target.value })}
+											style={{ minWidth: 180 }}
 										/>
-									</td>
-									<td className="left">
-										{provider.id === "custom" ? (
-											<span className="muted small">见下方自定义配置</span>
-										) : provider.needsKey ? (
-											<input
-												type="password"
-												placeholder={provider.hasKey ? "已设置（留空不修改）" : "填写 Key"}
-												value={keys[provider.id] ?? ""}
-												onChange={(e) => setKeys({ ...keys, [provider.id]: e.target.value })}
-												style={{ minWidth: 180 }}
-											/>
-										) : (
-											<span className="muted small">无需</span>
-										)}
-										{provider.lastError && !provider.coolingDown && (
-											<div className="small muted">上次错误：{provider.lastError}</div>
-										)}
-									</td>
-									<td className="left hide-sm muted small">{provider.note}</td>
-								</tr>
-							);
-						})}
+									) : (
+										<span className="muted small">{t("market.noKeyNeeded")}</span>
+									)}
+									{provider.lastError && !provider.coolingDown && (
+										<div className="small muted">{t("market.lastError", { message: provider.lastError })}</div>
+									)}
+								</td>
+								<td className="left hide-sm muted small">{provider.note}</td>
+							</tr>
+						))}
 					</tbody>
 				</table>
 			</div>
 
 			<div className="card panel" style={{ marginTop: 12 }}>
-				<h3 style={{ marginTop: 0, fontSize: 14 }}>自定义数据源（可对接任意 HTTP 行情服务）</h3>
-				<p className="small muted">
-					URL 模板里用 <code>{"{symbol}"}</code> 占位代码、<code>{"{key}"}</code> 占位下面填的 Key；
-					价格路径用点号表示层级（如 <code>data.price</code> 或 <code>quotes.0.close</code>）。
-					启用后它会**优先于内置源**被尝试。
-				</p>
+				<h3 style={{ marginTop: 0, fontSize: 14 }}>{t("market.customTitle")}</h3>
+				<p className="small muted">{t("market.customHint")}</p>
 				<label className="field">
-					<span>URL 模板</span>
+					<span>{t("market.customUrl")}</span>
 					<input
 						value={custom.urlTemplate}
 						onChange={(e) => setCustom({ ...custom, urlTemplate: e.target.value })}
@@ -332,7 +332,7 @@ export function MarketDataSection({ settings, onSaved }: { settings: SettingsDto
 				</label>
 				<div className="row">
 					<label className="field">
-						<span>价格路径</span>
+						<span>{t("market.customPricePath")}</span>
 						<input
 							value={custom.pricePath}
 							onChange={(e) => setCustom({ ...custom, pricePath: e.target.value })}
@@ -340,7 +340,7 @@ export function MarketDataSection({ settings, onSaved }: { settings: SettingsDto
 						/>
 					</label>
 					<label className="field">
-						<span>币种路径（可选）</span>
+						<span>{t("market.customCurrencyPath")}</span>
 						<input
 							value={custom.currencyPath}
 							onChange={(e) => setCustom({ ...custom, currencyPath: e.target.value })}
@@ -350,7 +350,7 @@ export function MarketDataSection({ settings, onSaved }: { settings: SettingsDto
 				</div>
 				<div className="row">
 					<label className="field">
-						<span>额外请求头（JSON，可选）</span>
+						<span>{t("market.customHeaders")}</span>
 						<input
 							value={custom.headers}
 							onChange={(e) => setCustom({ ...custom, headers: e.target.value })}
@@ -358,61 +358,71 @@ export function MarketDataSection({ settings, onSaved }: { settings: SettingsDto
 						/>
 					</label>
 					<label className="field">
-						<span>Key（可选，会加密存储）</span>
+						<span>{t("market.customKey")}</span>
 						<input
 							type="password"
 							value={custom.key}
 							onChange={(e) => setCustom({ ...custom, key: e.target.value })}
-							placeholder={keysSet.has("custom") ? "已设置（留空不修改）" : ""}
+							placeholder={keysSet.has("custom") ? t("market.keyPlaceholderSet") : ""}
 						/>
 					</label>
 				</div>
 				<button className="primary" onClick={saveAll} disabled={save.pending}>
-					{save.pending ? "保存中…" : "保存设置"}
+					{save.pending ? t("common.saving") : t("market.saveSettings")}
 				</button>
 				{!custom.urlTemplate && (
 					<p className="small muted" style={{ marginBottom: 0 }}>
-						留空表示不使用自定义数据源。保存后点上方「立即刷新行情」即可生效。
+						{t("market.customEmptyHint")}
 					</p>
 				)}
 			</div>
 
 			{lastReport && lastReport.coolingDown.length > 0 && (
 				<div className="alert" style={{ marginTop: 12 }}>
-					以下数据源被暂时跳过：
-					{lastReport.coolingDown.map((item) => `${item.provider}（${item.reason}，约 ${item.minutesLeft} 分钟后恢复）`).join("；")}
+					{t("market.coolingAlert", {
+						list: lastReport.coolingDown
+							.map((item) => `${item.provider} (${item.reason}, ~${item.minutesLeft} min)`)
+							.join("; "),
+					})}
 				</div>
 			)}
 
 			{lastReport && lastReport.failed.length > 0 && (
 				<div className="alert error" style={{ marginTop: 12 }}>
-					上次刷新有 {lastReport.failed.length} 条失败：
-					{lastReport.failed.slice(0, 6).map((item) => `${item.symbol}（${item.reason}）`).join("；")}
+					{t("market.failedAlert", {
+						count: lastReport.failed.length,
+						list: lastReport.failed
+							.slice(0, 6)
+							.map((item) => `${item.symbol} (${item.reason})`)
+							.join("; "),
+					})}
 				</div>
 			)}
 
 			<div className="grid cols-2" style={{ marginTop: 16 }}>
 				<div className="card panel">
-					<h3 style={{ marginTop: 0, fontSize: 14 }}>最近运行</h3>
+					<h3 style={{ marginTop: 0, fontSize: 14 }}>{t("market.recentRuns")}</h3>
 					{(status.data?.recentRuns ?? []).length === 0 ? (
-						<div className="muted small">还没有运行记录。</div>
+						<div className="muted small">{t("market.noRuns")}</div>
 					) : (
 						<div className="table-wrap">
 							<table>
 								<thead>
 									<tr>
-										<th className="left">时间</th>
-										<th className="left">触发</th>
-										<th>更新</th>
-										<th>失败</th>
-										<th className="hide-sm">请求</th>
+										<th className="left">{t("market.colTime")}</th>
+										<th className="left">{t("market.colTrigger")}</th>
+										<th>{t("market.colUpdated")}</th>
+										<th>{t("market.colFailed")}</th>
+										<th className="hide-sm">{t("market.colRequests")}</th>
 									</tr>
 								</thead>
 								<tbody>
 									{(status.data?.recentRuns ?? []).map((run) => (
 										<tr key={run.id}>
 											<td className="left">{dateTime(run.started_at)}</td>
-											<td className="left">{run.trigger === "cron" ? "定时" : "手动"}</td>
+											<td className="left">
+												{run.trigger === "cron" ? t("market.triggerCron") : t("market.triggerManual")}
+											</td>
 											<td>{run.updated}</td>
 											<td className={run.failed > 0 ? "negative" : ""}>{run.failed}</td>
 											<td className="hide-sm">{run.requests}</td>
@@ -425,18 +435,18 @@ export function MarketDataSection({ settings, onSaved }: { settings: SettingsDto
 				</div>
 
 				<div className="card panel">
-					<h3 style={{ marginTop: 0, fontSize: 14 }}>已缓存的最新价格</h3>
+					<h3 style={{ marginTop: 0, fontSize: 14 }}>{t("market.cache")}</h3>
 					{(status.data?.cache ?? []).length === 0 ? (
-						<div className="muted small">还没有缓存。点「立即刷新行情」试试。</div>
+						<div className="muted small">{t("market.noCache")}</div>
 					) : (
 						<div className="table-wrap">
 							<table>
 								<thead>
 									<tr>
-										<th className="left">代码</th>
-										<th className="left hide-sm">数据源</th>
-										<th>价格</th>
-										<th className="left hide-sm">时间</th>
+										<th className="left">{t("market.colSymbol")}</th>
+										<th className="left hide-sm">{t("market.colProvider")}</th>
+										<th>{t("market.colPrice")}</th>
+										<th className="left hide-sm">{t("market.colTime")}</th>
 									</tr>
 								</thead>
 								<tbody>
@@ -459,7 +469,7 @@ export function MarketDataSection({ settings, onSaved }: { settings: SettingsDto
 
 			<div style={{ marginTop: 12 }}>
 				<button className="primary" onClick={saveAll} disabled={save.pending}>
-					{save.pending ? "保存中…" : "保存设置"}
+					{save.pending ? t("common.saving") : t("market.saveSettings")}
 				</button>
 			</div>
 		</div>

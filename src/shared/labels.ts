@@ -1,37 +1,32 @@
-/** 前后端共用的枚举与中文标签（避免两边各写一份导致不一致） */
+import type { Translator } from "../shared/i18n";
+
+/** 前后端共用的枚举与标签（标签通过 i18n 取，语言由调用方决定） */
 
 export const ASSET_CLASSES = ["stock", "etf", "crypto", "fund", "cash"] as const;
 export type AssetClass = (typeof ASSET_CLASSES)[number];
 
-export const CLASS_LABELS: Record<AssetClass, string> = {
-	stock: "股票",
-	etf: "ETF",
-	crypto: "加密货币",
-	fund: "基金",
-	cash: "现金",
-};
-
 export const ACCOUNT_KINDS = ["broker", "exchange", "cash"] as const;
 export type AccountKind = (typeof ACCOUNT_KINDS)[number];
-
-export const KIND_LABELS: Record<AccountKind, string> = {
-	broker: "券商",
-	exchange: "加密平台",
-	cash: "现金账户",
-};
 
 export const MARKETS = ["us", "hk", "cn", "crypto", "other"] as const;
 export type Market = (typeof MARKETS)[number];
 
-export const MARKET_LABELS: Record<Market, string> = {
-	us: "美股",
-	hk: "港股",
-	cn: "A股",
-	crypto: "加密",
-	other: "其他",
-};
+/** 资产类别标签：class.stock / class.etf … */
+export function classLabel(t: Translator, value: string): string {
+	return t(`class.${value}`);
+}
 
-/** 汇率相关：常见币种符号，仅用于展示 */
+/** 账户类型标签：kind.broker / kind.exchange / kind.cash */
+export function kindLabel(t: Translator, value: string): string {
+	return t(`kind.${value}`);
+}
+
+/** 市场标签：mkt.us / mkt.hk … */
+export function marketLabel(t: Translator, value: string): string {
+	return t(`mkt.${value}`);
+}
+
+/** 汇率相关：常见币种符号（与语言无关） */
 export const CURRENCY_SYMBOLS: Record<string, string> = {
 	USD: "$",
 	HKD: "HK$",

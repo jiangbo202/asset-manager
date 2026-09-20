@@ -71,5 +71,7 @@ export interface AppEnv {
 	Bindings: Env;
 	Variables: {
 		session: SessionRow | null;
+		/** 请求语言（由 Accept-Language 判定），用于把提示文案本地化 */
+		lang: "zh" | "en";
 	};
 }

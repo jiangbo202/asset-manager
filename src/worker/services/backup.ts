@@ -1,6 +1,7 @@
 import { BACKUP_FORMAT, BACKUP_SCHEMA_VERSION, APP_VERSION } from "../../shared/version";
 import { ApiError } from "../core/errors";
 import { isRecord } from "../core/utils";
+import type { Translator } from "../../shared/i18n";
 
 /**
  * 备份导出 / 导入（PRD FR-8）
@@ -148,31 +149,37 @@ const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 
 const bad = (message: string) => new ApiError(400, "invalid_backup", message);
 
+/**
+ * 结构性校验错误（备份文件被手工改坏时才会出现）用英文技术描述，便于定位是哪一行；
+ * 用户真正会遇到的错误（格式/版本/引用完整性/警告）都走 i18n。
+ */
+const badRaw = (message: string) => new ApiError(400, "invalid_backup", message);
+
 const asArray = (value: unknown, label: string, limit: number): unknown[] => {
 	if (value === undefined || value === null) return [];
-	if (!Array.isArray(value)) throw bad(`${label} 必须是数组`);
-	if (value.length > limit) throw bad(`${label} 条数超过上限 ${limit}，请改用 wrangler d1 execute 导入`);
+	if (!Array.isArray(value)) throw badRaw(`${label} 必须是数组`);
+	if (value.length > limit) throw badRaw(`${label} 条数超过上限 ${limit}，请改用 wrangler d1 execute 导入`);
 	return value;
 };
 
 const str = (value: unknown, label: string, max = 500): string => {
-	if (typeof value !== "string" || value.trim() === "") throw bad(`${label} 必须是非空字符串`);
+	if (typeof value !== "string" || value.trim() === "") throw badRaw(`${label} 必须是非空字符串`);
 	const trimmed = value.trim();
-	if (trimmed.length > max) throw bad(`${label} 过长（>${max}）`);
+	if (trimmed.length > max) throw badRaw(`${label} 过长（>${max}）`);
 	return trimmed;
 };
 
 const strOrNull = (value: unknown, max = 500): string | null => {
 	if (value === undefined || value === null || value === "") return null;
-	if (typeof value !== "string") throw bad("期望字符串或 null");
+	if (typeof value !== "string") throw badRaw("期望字符串或 null");
 	return value.length > max ? value.slice(0, max) : value;
 };
 
 const num = (value: unknown, label: string, options: { min?: number; max?: number } = {}): number => {
 	const parsed = typeof value === "number" ? value : Number(value);
-	if (!Number.isFinite(parsed)) throw bad(`${label} 必须是数字`);
-	if (options.min !== undefined && parsed < options.min) throw bad(`${label} 不能小于 ${options.min}`);
-	if (options.max !== undefined && parsed > options.max) throw bad(`${label} 不能大于 ${options.max}`);
+	if (!Number.isFinite(parsed)) throw badRaw(`${label} 必须是数字`);
+	if (options.min !== undefined && parsed < options.min) throw badRaw(`${label} 不能小于 ${options.min}`);
+	if (options.max !== undefined && parsed > options.max) throw badRaw(`${label} 不能大于 ${options.max}`);
 	return parsed;
 };
 
@@ -185,7 +192,7 @@ const flag = (value: unknown): number => (value === true || value === 1 || value
 
 const iso = (value: unknown, label: string): string => {
 	const text = str(value, label, 40);
-	if (Number.isNaN(Date.parse(text))) throw bad(`${label} 不是合法时间`);
+	if (Number.isNaN(Date.parse(text))) throw badRaw(`${label} 不是合法时间`);
 	return text;
 };
 
@@ -196,7 +203,7 @@ const isoOrNull = (value: unknown, label: string): string | null => {
 
 const currency = (value: unknown, label: string): string => {
 	const text = str(value, label, 5).toUpperCase();
-	if (!CURRENCY.test(text)) throw bad(`${label} 必须是 3~5 个字母`);
+	if (!CURRENCY.test(text)) throw badRaw(`${label} 必须是 3~5 个字母`);
 	return text;
 };
 
@@ -237,17 +244,17 @@ export async function exportBackup(db: D1Database, options: { includeAudit: bool
 }
 
 /** 全量校验 + 规范化：任何结构问题都直接报错，不做"猜" */
-export function parseBackup(input: unknown): { file: BackupFile; warnings: string[] } {
-	if (!isRecord(input)) throw bad("备份文件内容必须是 JSON 对象");
-	if (input.format !== BACKUP_FORMAT) throw bad(`备份文件格式不匹配（期望 format=${BACKUP_FORMAT}）`);
+export function parseBackup(input: unknown, t: Translator): { file: BackupFile; warnings: string[] } {
+	if (!isRecord(input)) throw bad(t("error.invalid_backup"));
+	if (input.format !== BACKUP_FORMAT) throw bad(t("error.backupFormat", { format: BACKUP_FORMAT }));
 
 	const schemaVersion = num(input.schemaVersion, "schemaVersion", { min: 1, max: 1000 });
 	if (schemaVersion > BACKUP_SCHEMA_VERSION) {
-		throw bad(`备份来自更高版本（schemaVersion=${schemaVersion}），请先升级本应用`);
+		throw bad(t("error.backupVersion", { version: schemaVersion }));
 	}
 
 	const data = input.data;
-	if (!isRecord(data)) throw bad("备份文件缺少 data 字段");
+	if (!isRecord(data)) throw bad(t("error.backupMissingData"));
 
 	const warnings: string[] = [];
 
@@ -268,8 +275,8 @@ export function parseBackup(input: unknown): { file: BackupFile; warnings: strin
 			created_at: iso(row.created_at, `accounts[${index}].created_at`),
 			updated_at: iso(row.updated_at, `accounts[${index}].updated_at`),
 		};
-		if (!KINDS.has(record.kind)) throw bad(`accounts[${index}].kind 取值非法：${record.kind}`);
-		if (accountIds.has(record.id)) throw bad(`accounts 存在重复 id：${record.id}`);
+		if (!KINDS.has(record.kind)) throw badRaw(`accounts[${index}].kind invalid: ${record.kind}`);
+		if (accountIds.has(record.id)) throw badRaw(`accounts duplicate id: ${record.id}`);
 		accountIds.add(record.id);
 		return record;
 	});
@@ -293,8 +300,8 @@ export function parseBackup(input: unknown): { file: BackupFile; warnings: strin
 			created_at: iso(row.created_at, `holdings[${index}].created_at`),
 			updated_at: iso(row.updated_at, `holdings[${index}].updated_at`),
 		};
-		if (!CLASSES.has(record.class)) throw bad(`holdings[${index}].class 取值非法：${record.class}`);
-		if (record.avg_cost !== null && record.avg_cost < 0) throw bad(`holdings[${index}].avg_cost 不能为负`);
+		if (!CLASSES.has(record.class)) throw badRaw(`holdings[${index}].class invalid: ${record.class}`);
+		if (record.avg_cost !== null && record.avg_cost < 0) throw badRaw(`holdings[${index}].avg_cost must not be negative`);
 		return record;
 	});
 
@@ -309,7 +316,7 @@ export function parseBackup(input: unknown): { file: BackupFile; warnings: strin
 			source: strOrNull(row.source, 16) ?? "import",
 			created_at: iso(row.created_at, `priceHistory[${index}].created_at`),
 		};
-		if (!ISO_DATE.test(record.effective_date)) throw bad(`priceHistory[${index}].effective_date 应为 YYYY-MM-DD`);
+		if (!ISO_DATE.test(record.effective_date)) throw badRaw(`priceHistory[${index}].effective_date must be YYYY-MM-DD`);
 		return record;
 	});
 
@@ -323,7 +330,7 @@ export function parseBackup(input: unknown): { file: BackupFile; warnings: strin
 			source: strOrNull(row.source, 16) ?? "import",
 			created_at: iso(row.created_at, `qtyHistory[${index}].created_at`),
 		};
-		if (!ISO_DATE.test(record.effective_date)) throw bad(`qtyHistory[${index}].effective_date 应为 YYYY-MM-DD`);
+		if (!ISO_DATE.test(record.effective_date)) throw badRaw(`qtyHistory[${index}].effective_date must be YYYY-MM-DD`);
 		return record;
 	});
 
@@ -351,8 +358,8 @@ export function parseBackup(input: unknown): { file: BackupFile; warnings: strin
 	const settingsRaw = isRecord(data.settings) ? data.settings : {};
 	const settings: Record<string, string> = {};
 	for (const [key, value] of Object.entries(settingsRaw)) {
-		if (typeof value !== "string") throw bad(`settings.${key} 必须是字符串`);
-		if (key.length > 60 || value.length > 500) throw bad(`settings.${key} 过长`);
+		if (typeof value !== "string") throw badRaw(`settings.${key} must be a string`);
+		if (key.length > 60 || value.length > 500) throw badRaw(`settings.${key} too long`);
 		settings[key] = value;
 	}
 
@@ -375,13 +382,13 @@ export function parseBackup(input: unknown): { file: BackupFile; warnings: strin
 	// 引用完整性：持仓必须能指向存在的账户；历史必须能指向存在的持仓
 	const orphanHoldings = holdings.filter((item) => !accountIds.has(item.account_id));
 	if (orphanHoldings.length > 0) {
-		throw bad(`有 ${orphanHoldings.length} 条持仓引用了不存在的账户（例：${orphanHoldings[0].id}）`);
+		throw bad(t("error.backupOrphanHolding", { count: orphanHoldings.length, id: orphanHoldings[0].id }));
 	}
 	const missingHoldingHistory =
 		priceHistory.filter((item) => !holdingIds.has(item.holding_id)).length +
 		qtyHistory.filter((item) => !holdingIds.has(item.holding_id)).length;
 	if (missingHoldingHistory > 0) {
-		warnings.push(`有 ${missingHoldingHistory} 条价格/数量历史引用不到持仓，导入时会被忽略`);
+		warnings.push(t("backup.warnOrphanHistory", { count: missingHoldingHistory }));
 	}
 
 	const file: BackupFile = {
@@ -402,7 +409,7 @@ export function parseBackup(input: unknown): { file: BackupFile; warnings: strin
 	};
 
 	if (schemaVersion < BACKUP_SCHEMA_VERSION) {
-		warnings.push(`备份由较旧版本（schemaVersion=${schemaVersion}）导出，已按当前格式读取`);
+		warnings.push(t("backup.warnOlderSchema", { version: schemaVersion }));
 	}
 
 	return { file, warnings };
@@ -419,6 +426,7 @@ export async function previewBackup(
 	file: BackupFile,
 	mode: ImportMode,
 	parseWarnings: string[] = [],
+	t?: Translator,
 ): Promise<ImportPreview> {
 	const [accountIds, holdingIds, priceIds, qtyIds, fxHistoryIds, auditIds, currentSettings] = await Promise.all([
 		existingIds(db, "accounts"),
@@ -480,6 +488,7 @@ export async function previewBackup(
 	};
 
 	const statementCount = countStatements(file, mode);
+	const tr = t ?? ((key: string) => key);
 	const warnings = [...parseWarnings];
 
 	const missingFx = new Set<string>();
@@ -494,15 +503,13 @@ export async function previewBackup(
 		}
 	}
 	if (missingFx.size > 0) {
-		warnings.push(`缺少汇率：${[...missingFx].join("、")}（导入后这些持仓会显示为"未折算"，补上汇率即可）`);
+		warnings.push(tr("backup.warnMissingFx", { currencies: [...missingFx].join(", ") }));
 	}
 	if (mode === "replace") {
-		warnings.push("replace 模式会先清空现有账户/持仓/汇率/设置，再写入备份内容；操作历史会保留并追加。");
+		warnings.push(tr("backup.warnReplace"));
 	}
 	if (statementCount > SINGLE_BATCH_MAX) {
-		warnings.push(
-			`数据量较大（${statementCount} 条语句），将分批写入；如中途失败可能只写入了一部分，建议先导出当前数据。`,
-		);
+		warnings.push(tr("backup.warnLarge", { count: statementCount }));
 	}
 
 	return {

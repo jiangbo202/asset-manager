@@ -3,6 +3,7 @@ import type { AppEnv } from "./types";
 import { readSession } from "./core/session";
 import { ApiError } from "./core/errors";
 import api from "./api";
+import { detectLang, translator } from "./core/i18n";
 
 const app = new Hono<AppEnv>();
 
@@ -11,6 +12,7 @@ const app = new Hono<AppEnv>();
  * （静态资源请求不会到 Worker，所以这里只覆盖 /api/*）
  */
 app.use("*", async (c, next) => {
+	c.set("lang", detectLang(c.req.header("accept-language")));
 	c.set("session", await readSession(c));
 	await next();
 });
@@ -24,7 +26,9 @@ app.use("/api/*", async (c, next) => {
 
 app.route("/api", api);
 
-app.notFound((c) => c.json({ ok: false, error: { code: "not_found", message: "接口不存在" } }, 404));
+app.notFound((c) =>
+	c.json({ ok: false, error: { code: "not_found", message: translator(c.get("lang"))("http.apiNotFound") } }, 404),
+);
 
 app.onError((err, c) => {
 	if (err instanceof ApiError) {

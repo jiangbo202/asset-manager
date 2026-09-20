@@ -1,4 +1,5 @@
 import { Hono } from "hono";
+import { tOf } from "../core/i18n";
 import type { AppEnv } from "../types";
 import { ASSET_CLASSES, MARKETS } from "../../shared/labels";
 import { badRequest, notFound, ok } from "../core/errors";
@@ -48,31 +49,32 @@ holdings.get("/", async (c) => {
 });
 
 holdings.post("/", async (c) => {
-	const payload = asRecord(await c.req.json());
-	const accountId = requireString(payload, "accountId", { label: "账户", max: 64 });
+		const t = tOf(c);
+	const payload = asRecord(await c.req.json(), t);
+	const accountId = requireString(payload, "accountId", { labelKey: "field.account", max: 64 }, t);
 	const account = await getAccount(c.env.DB, accountId);
-	if (!account) throw badRequest("指定的账户不存在");
+	if (!account) throw badRequest(t("error.not_found"));
 
-	const assetClass = requireOneOf(payload, "class", ASSET_CLASSES, "资产类别");
+	const assetClass = requireOneOf(payload, "class", ASSET_CLASSES, "field.class", t);
 	const isCash = assetClass === "cash";
-	const market = optionalString(payload, "market", { label: "市场", max: 16 }) ?? null;
+	const market = optionalString(payload, "market", { labelKey: "field.market", max: 16 }, t) ?? null;
 	if (market && !MARKETS.includes(market as (typeof MARKETS)[number])) {
-		throw badRequest(`市场必须是以下之一：${MARKETS.join(" / ")}`);
+		throw badRequest(t("error.field_enum", { label: t("field.market"), allowed: MARKETS.join(" / ") }));
 	}
 
 	const input = {
 		account_id: accountId,
 		class: assetClass,
 		market: isCash ? null : market,
-		symbol: isCash ? null : optionalString(payload, "symbol", { label: "代码", max: 32 }),
-		name: requireString(payload, "name", { label: "名称", max: 80 }),
-		currency: requireCurrency(payload),
-		qty: requireNumber(payload, "qty", { label: isCash ? "余额" : "数量", min: -1e15, max: 1e15 }),
-		price: isCash ? 1 : requireNumber(payload, "price", { label: "价格", min: 0, max: 1e15 }),
-		avg_cost: isCash ? null : optionalNumber(payload, "avgCost", { label: "平均成本", min: 0, max: 1e15 }) ?? null,
-		quote_source: isCash ? null : optionalString(payload, "quoteSource", { label: "行情数据源", max: 20 }) ?? null,
-		quote_symbol: isCash ? null : optionalString(payload, "quoteSymbol", { label: "行情代码", max: 40 }) ?? null,
-		note: optionalString(payload, "note", { label: "备注", max: 200 }) ?? null,
+		symbol: isCash ? null : optionalString(payload, "symbol", { labelKey: "field.symbol", max: 32 }, t),
+		name: requireString(payload, "name", { labelKey: "field.name", max: 80 }, t),
+		currency: requireCurrency(payload, "currency", t),
+		qty: requireNumber(payload, "qty", { labelKey: isCash ? "field.balance" : "field.qty", min: -1e15, max: 1e15 }, t),
+		price: isCash ? 1 : requireNumber(payload, "price", { labelKey: "field.price", min: 0, max: 1e15 }, t),
+		avg_cost: isCash ? null : optionalNumber(payload, "avgCost", { labelKey: "field.avgCost", min: 0, max: 1e15 }, t) ?? null,
+		quote_source: isCash ? null : optionalString(payload, "quoteSource", { labelKey: "field.quoteSource", max: 20 }, t) ?? null,
+		quote_symbol: isCash ? null : optionalString(payload, "quoteSymbol", { labelKey: "field.quoteSymbol", max: 40 }, t) ?? null,
+		note: optionalString(payload, "note", { labelKey: "field.note", max: 200 }, t) ?? null,
 	};
 
 	const created = await createHolding(c.env.DB, input);
@@ -85,47 +87,48 @@ holdings.post("/", async (c) => {
 });
 
 holdings.patch("/:id", async (c) => {
-	const id = requireId(c.req.param("id"), "持仓 id");
+		const t = tOf(c);
+	const id = requireId(c.req.param("id"), t,  "持仓 id");
 	const before = await getHolding(c.env.DB, id);
-	if (!before) throw notFound("持仓不存在");
+	if (!before) throw notFound(t("error.not_found"));
 
-	const payload = asRecord(await c.req.json());
+	const payload = asRecord(await c.req.json(), t);
 	const patch: Record<string, unknown> = {};
 	if (payload.accountId !== undefined) {
-		const accountId = requireString(payload, "accountId", { label: "账户", max: 64 });
-		if (!(await getAccount(c.env.DB, accountId))) throw badRequest("指定的账户不存在");
+		const accountId = requireString(payload, "accountId", { labelKey: "field.account", max: 64 }, t);
+		if (!(await getAccount(c.env.DB, accountId))) throw badRequest(t("error.not_found"));
 		patch.account_id = accountId;
 	}
-	if (payload.class !== undefined) patch.class = requireOneOf(payload, "class", ASSET_CLASSES, "资产类别");
-	if (payload.name !== undefined) patch.name = requireString(payload, "name", { label: "名称", max: 80 });
-	if (payload.currency !== undefined) patch.currency = requireCurrency(payload);
-	if (payload.symbol !== undefined) patch.symbol = optionalString(payload, "symbol", { label: "代码", max: 32 }) ?? null;
-	if (payload.market !== undefined) patch.market = optionalString(payload, "market", { label: "市场", max: 16 }) ?? null;
-	if (payload.note !== undefined) patch.note = optionalString(payload, "note", { label: "备注", max: 200 }) ?? null;
+	if (payload.class !== undefined) patch.class = requireOneOf(payload, "class", ASSET_CLASSES, "field.class", t);
+	if (payload.name !== undefined) patch.name = requireString(payload, "name", { labelKey: "field.name", max: 80 }, t);
+	if (payload.currency !== undefined) patch.currency = requireCurrency(payload, "currency", t);
+	if (payload.symbol !== undefined) patch.symbol = optionalString(payload, "symbol", { labelKey: "field.symbol", max: 32 }, t) ?? null;
+	if (payload.market !== undefined) patch.market = optionalString(payload, "market", { labelKey: "field.market", max: 16 }, t) ?? null;
+	if (payload.note !== undefined) patch.note = optionalString(payload, "note", { labelKey: "field.note", max: 200 }, t) ?? null;
 	if (payload.archived !== undefined) patch.archived = Boolean(payload.archived);
-	if (payload.qty !== undefined) patch.qty = requireNumber(payload, "qty", { label: "数量", min: -1e15, max: 1e15 });
-	if (payload.price !== undefined) patch.price = requireNumber(payload, "price", { label: "价格", min: 0, max: 1e15 });
+	if (payload.qty !== undefined) patch.qty = requireNumber(payload, "qty", { labelKey: "field.qty", min: -1e15, max: 1e15 }, t);
+	if (payload.price !== undefined) patch.price = requireNumber(payload, "price", { labelKey: "field.price", min: 0, max: 1e15 }, t);
 	if (payload.avgCost !== undefined) {
-		patch.avg_cost = optionalNumber(payload, "avgCost", { label: "平均成本", min: 0, max: 1e15 }) ?? null;
+		patch.avg_cost = optionalNumber(payload, "avgCost", { labelKey: "field.avgCost", min: 0, max: 1e15 }, t) ?? null;
 	}
 	if (payload.quoteSource !== undefined) {
-		patch.quote_source = optionalString(payload, "quoteSource", { label: "行情数据源", max: 20 }) ?? null;
+		patch.quote_source = optionalString(payload, "quoteSource", { labelKey: "field.quoteSource", max: 20 }, t) ?? null;
 	}
 	if (payload.quoteSymbol !== undefined) {
-		patch.quote_symbol = optionalString(payload, "quoteSymbol", { label: "行情代码", max: 40 }) ?? null;
+		patch.quote_symbol = optionalString(payload, "quoteSymbol", { labelKey: "field.quoteSymbol", max: 40 }, t) ?? null;
 	}
 
 	const nextClass = (patch.class as string | undefined) ?? before.class;
 	const effectiveDate =
-		optionalString(payload, "effectiveDate", { label: "生效日期", max: 10 }) ?? todayUtc();
-	if (!/^\d{4}-\d{2}-\d{2}$/.test(effectiveDate)) throw badRequest("生效日期格式应为 YYYY-MM-DD");
+		optionalString(payload, "effectiveDate", { labelKey: "field.effectiveDate", max: 10 }, t) ?? todayUtc();
+	if (!/^\d{4}-\d{2}-\d{2}$/.test(effectiveDate)) throw badRequest(t("error.dateFormat"));
 
 	const priceChanged = typeof patch.price === "number" && patch.price !== before.price;
 	const qtyChanged = typeof patch.qty === "number" && patch.qty !== before.qty;
 	const priceUpdatedAt = priceChanged ? nowIso() : undefined;
 
 	const after = await updateHolding(c.env.DB, id, patch, priceUpdatedAt);
-	if (!after) throw notFound("持仓不存在");
+	if (!after) throw notFound(t("error.not_found"));
 
 	// v1 只写不读：为 v2 走势图预埋历史（PRD FR-3.2）
 	if (nextClass !== "cash") {
@@ -138,9 +141,10 @@ holdings.patch("/:id", async (c) => {
 });
 
 holdings.delete("/:id", async (c) => {
-	const id = requireId(c.req.param("id"), "持仓 id");
+		const t = tOf(c);
+	const id = requireId(c.req.param("id"), t,  "持仓 id");
 	const before = await getHolding(c.env.DB, id);
-	if (!before) throw notFound("持仓不存在");
+	if (!before) throw notFound(t("error.not_found"));
 	await deleteHolding(c.env.DB, id);
 	await writeAudit(c.env.DB, { entity: "holding", entityId: id, action: "delete", before });
 	return ok(c, { deleted: true });
@@ -148,21 +152,22 @@ holdings.delete("/:id", async (c) => {
 
 /** 批量更新价格：一屏填完一次提交（PRD FR-3.5） */
 holdings.post("/bulk-price", async (c) => {
-	const payload = asRecord(await c.req.json());
+		const t = tOf(c);
+	const payload = asRecord(await c.req.json(), t);
 	const rawItems = payload.items;
-	if (!Array.isArray(rawItems) || rawItems.length === 0) throw badRequest("items 必须是非空数组");
-	if (rawItems.length > 500) throw badRequest("单次最多更新 500 条");
+	if (!Array.isArray(rawItems) || rawItems.length === 0) throw badRequest(t("error.invalid_field"));
+	if (rawItems.length > 500) throw badRequest(t("error.invalid_field"));
 
 	const statements: D1PreparedStatement[] = [];
 	const touched: Array<{ id: string; price: number; before: number }> = [];
 	const now = nowIso();
 
 	for (const raw of rawItems) {
-		const item = asRecord(raw, "items[]");
-		const id = requireString(item, "id", { label: "持仓 id", max: 64 });
-		const price = requireNumber(item, "price", { label: "价格", min: 0, max: 1e15 });
+		const item = asRecord(raw, t);
+		const id = requireString(item, "id", { labelKey: "field.name", max: 64 }, t);
+		const price = requireNumber(item, "price", { labelKey: "field.price", min: 0, max: 1e15 }, t);
 		const holding = await getHolding(c.env.DB, id);
-		if (!holding) throw notFound(`持仓 ${id} 不存在`);
+		if (!holding) throw notFound(t("error.not_found"));
 		if (holding.price === price) continue;
 
 		statements.push(
@@ -188,7 +193,7 @@ holdings.post("/bulk-price", async (c) => {
 			entityId: null,
 			action: "update",
 			after: { bulkPrice: touched.length },
-			note: `批量更新 ${touched.length} 条价格`,
+			note: t("audit.bulkPrice", { count: touched.length }),
 		});
 	}
 

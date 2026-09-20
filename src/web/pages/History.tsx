@@ -1,26 +1,17 @@
 import { useState } from "react";
 import { api, type AuditItemDto } from "../lib/api";
 import { useAsync } from "../lib/useAsync";
+import { useT } from "../lib/i18n";
 import { dateTime } from "../lib/format";
+import type { Translator } from "../../shared/i18n";
 
-const ENTITY_LABELS: Record<string, string> = {
-	account: "账户",
-	holding: "持仓",
-	settings: "设置",
-	fx: "汇率",
-	auth: "认证",
-};
+const ENTITY_KEYS = ["account", "holding", "settings", "fx", "auth", "backup", "quotes", "snapshot"] as const;
+const ACTION_KEYS = ["create", "update", "delete", "import", "replace", "login", "setup", "security"] as const;
 
-const ACTION_LABELS: Record<string, string> = {
-	create: "创建",
-	update: "修改",
-	delete: "删除",
-	import: "导入",
-	replace: "覆盖导入",
-	login: "登录",
-	setup: "初始化",
-	security: "安全操作",
-};
+const entityLabel = (t: Translator, entity: string): string =>
+	(ENTITY_KEYS as readonly string[]).includes(entity) ? t(`history.entity.${entity}`) : entity;
+const actionLabel = (t: Translator, action: string): string =>
+	(ACTION_KEYS as readonly string[]).includes(action) ? t(`history.action.${action}`) : action;
 
 const renderValue = (value: unknown): string => {
 	if (value === null || value === undefined) return "—";
@@ -29,11 +20,12 @@ const renderValue = (value: unknown): string => {
 };
 
 function AuditRow({ item }: { item: AuditItemDto }) {
+	const t = useT();
 	return (
 		<details className="audit">
 			<summary>
-				<span className="badge">{ENTITY_LABELS[item.entity] ?? item.entity}</span>
-				<strong>{ACTION_LABELS[item.action] ?? item.action}</strong>
+				<span className="badge">{entityLabel(t, item.entity)}</span>
+				<strong>{actionLabel(t, item.action)}</strong>
 				<span className="muted small">{item.note ?? item.entityId ?? ""}</span>
 				<span className="spacer" style={{ flex: 1 }} />
 				<span className="muted small">
@@ -42,7 +34,7 @@ function AuditRow({ item }: { item: AuditItemDto }) {
 			</summary>
 			<div className="body">
 				{item.diff.length === 0 ? (
-					<div className="muted small">没有字段级变化（可能是整体新增/删除）。</div>
+					<div className="muted small">{t("history.noFieldChange")}</div>
 				) : (
 					item.diff.map((change) => (
 						<div className="diff-row" key={change.field}>
@@ -61,6 +53,7 @@ function AuditRow({ item }: { item: AuditItemDto }) {
 }
 
 export function HistoryPage() {
+	const t = useT();
 	const [entity, setEntity] = useState("");
 	const [action, setAction] = useState("");
 	const [from, setFrom] = useState("");
@@ -72,7 +65,15 @@ export function HistoryPage() {
 	const toIso = to ? new Date(`${to}T23:59:59.999`).toISOString() : undefined;
 
 	const history = useAsync(
-		() => api.history({ entity: entity || undefined, action: action || undefined, from: fromIso, to: toIso, page, pageSize: 50 }),
+		() =>
+			api.history({
+				entity: entity || undefined,
+				action: action || undefined,
+				from: fromIso,
+				to: toIso,
+				page,
+				pageSize: 50,
+			}),
 		[entity, action, fromIso, toIso, page],
 	);
 
@@ -83,7 +84,7 @@ export function HistoryPage() {
 	return (
 		<>
 			<div className="section-head">
-				<h2>操作历史</h2>
+				<h2>{t("history.title")}</h2>
 				<div className="spacer" />
 				<select
 					value={entity}
@@ -91,12 +92,12 @@ export function HistoryPage() {
 						setEntity(e.target.value);
 						resetPage();
 					}}
-					style={{ width: 130 }}
+					style={{ width: 140 }}
 				>
-					<option value="">全部类型</option>
-					{Object.entries(ENTITY_LABELS).map(([key, label]) => (
+					<option value="">{t("history.allEntities")}</option>
+					{ENTITY_KEYS.map((key) => (
 						<option key={key} value={key}>
-							{label}
+							{entityLabel(t, key)}
 						</option>
 					))}
 				</select>
@@ -106,12 +107,12 @@ export function HistoryPage() {
 						setAction(e.target.value);
 						resetPage();
 					}}
-					style={{ width: 120 }}
+					style={{ width: 140 }}
 				>
-					<option value="">全部操作</option>
-					{Object.entries(ACTION_LABELS).map(([key, label]) => (
+					<option value="">{t("history.allActions")}</option>
+					{ACTION_KEYS.map((key) => (
 						<option key={key} value={key}>
-							{label}
+							{actionLabel(t, key)}
 						</option>
 					))}
 				</select>
@@ -123,7 +124,7 @@ export function HistoryPage() {
 						resetPage();
 					}}
 					style={{ width: 150 }}
-					title="开始日期"
+					title={t("history.dateFrom")}
 				/>
 				<input
 					type="date"
@@ -133,7 +134,7 @@ export function HistoryPage() {
 						resetPage();
 					}}
 					style={{ width: 150 }}
-					title="结束日期"
+					title={t("history.dateTo")}
 				/>
 				{(entity || action || from || to) && (
 					<button
@@ -146,15 +147,15 @@ export function HistoryPage() {
 							resetPage();
 						}}
 					>
-						清除筛选
+						{t("history.clearFilters")}
 					</button>
 				)}
 			</div>
 
 			{!data ? (
-				<div className="empty">加载中…</div>
+				<div className="empty">{t("common.loading")}</div>
 			) : data.items.length === 0 ? (
-				<div className="card empty">还没有操作记录。</div>
+				<div className="card empty">{t("history.empty")}</div>
 			) : (
 				<>
 					<div className="card">
@@ -164,14 +165,14 @@ export function HistoryPage() {
 					</div>
 					<div className="section-head" style={{ marginTop: 12 }}>
 						<span className="small muted">
-							共 {data.total} 条 · 第 {data.page} / {totalPages} 页
+							{t("history.summary", { total: data.total, page: data.page, pages: totalPages })}
 						</span>
 						<div className="spacer" />
 						<button className="ghost" disabled={page <= 1} onClick={() => setPage((v) => v - 1)}>
-							上一页
+							{t("history.prev")}
 						</button>
 						<button className="ghost" disabled={page >= totalPages} onClick={() => setPage((v) => v + 1)}>
-							下一页
+							{t("history.next")}
 						</button>
 					</div>
 				</>

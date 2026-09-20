@@ -2,8 +2,10 @@ import { useState } from "react";
 import { api } from "../lib/api";
 import { deriveCredential } from "../lib/crypto";
 import { useSubmit } from "../lib/useAsync";
+import { useT } from "../lib/i18n";
 
 export function LoginPage({ onDone }: { onDone: () => void }) {
+	const t = useT();
 	const [password, setPassword] = useState("");
 	const { pending, error, run } = useSubmit();
 
@@ -11,7 +13,7 @@ export function LoginPage({ onDone }: { onDone: () => void }) {
 		event.preventDefault();
 		await run(async () => {
 			const params = await api.auth.params();
-			if (!params.initialized || !params.kdfSalt) throw new Error("尚未初始化");
+			if (!params.initialized || !params.kdfSalt) throw new Error(t("error.not_initialized"));
 			const credential = await deriveCredential(password, params.kdfSalt, params.iterations);
 			await api.auth.login({ credential });
 			setPassword("");
@@ -22,13 +24,13 @@ export function LoginPage({ onDone }: { onDone: () => void }) {
 	return (
 		<div className="center-screen">
 			<form className="card auth-card" onSubmit={submit}>
-				<h1>资产管理</h1>
-				<p className="sub">请输入密码登录</p>
+				<h1>{t("login.title")}</h1>
+				<p className="sub">{t("login.subtitle")}</p>
 
 				{error && <div className="alert error">{error}</div>}
 
 				<label className="field">
-					<span>密码</span>
+					<span>{t("login.password")}</span>
 					<input
 						type="password"
 						value={password}
@@ -40,7 +42,7 @@ export function LoginPage({ onDone }: { onDone: () => void }) {
 				</label>
 
 				<button className="primary" type="submit" disabled={pending} style={{ width: "100%" }}>
-					{pending ? "登录中…" : "登录"}
+					{pending ? t("login.submitting") : t("login.submit")}
 				</button>
 			</form>
 		</div>

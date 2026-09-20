@@ -1,4 +1,5 @@
-import { MARKET_LABELS, MARKETS } from "../../shared/labels";
+import { MARKETS, marketLabel } from "../../shared/labels";
+import { useT } from "../lib/i18n";
 
 /**
  * 市场筛选（可多选，FR-6.3）
@@ -11,8 +12,9 @@ export function MarketFilter({
 	selected: string[];
 	onChange: (next: string[]) => void;
 }) {
+	const t = useT();
 	return (
-		<div className="chips" role="group" aria-label="按市场筛选">
+		<div className="chips" role="group" aria-label={t("accounts.market")}>
 			{MARKETS.map((market) => {
 				const on = selected.includes(market);
 				return (
@@ -23,13 +25,13 @@ export function MarketFilter({
 						aria-pressed={on}
 						onClick={() => onChange(on ? selected.filter((item) => item !== market) : [...selected, market])}
 					>
-						{MARKET_LABELS[market]}
+						{marketLabel(t, market)}
 					</button>
 				);
 			})}
 			{selected.length > 0 && (
 				<button type="button" className="ghost" onClick={() => onChange([])}>
-					清除
+					{t("dashboard.clearFilters")}
 				</button>
 			)}
 		</div>

@@ -59,7 +59,9 @@ describe("账户 / 持仓 / 组合视图", () => {
 		expect(data.total).toBeCloseTo(2000, 2);
 		expect(data.counts.holdings).toBe(1);
 		expect(data.holdings[0].pnl).toBeCloseTo(500, 2);
-		expect(data.byClass[0].label).toBe("股票");
+		// v0.12 起 byClass 只返回原始 key，具体文案由前端按语言翻译
+		expect(data.byClass[0].key).toBe("stock");
+		expect(data.byClass[0].label).toBe("stock");
 	});
 
 	it("缺少汇率时不按 1:1 处理，而是标记未折算并从总额中排除", async () => {

@@ -1,7 +1,9 @@
-import { lazy, Suspense, useCallback } from "react";
+import { lazy, Suspense, useCallback, useEffect } from "react";
 import { api, type AuthMeDto } from "./lib/api";
 import { useAsync } from "./lib/useAsync";
 import { Link, RouterProvider, useRouter } from "./lib/router";
+import { I18nProvider, useI18n, useT } from "./lib/i18n";
+import type { LanguageSetting } from "../shared/i18n";
 // 首屏只需要 登录 / 初始化 / 总览；其余页面按需加载，避免把设置页和趋势图算进首包
 import { SetupPage } from "./pages/Setup";
 import { LoginPage } from "./pages/Login";
@@ -16,19 +18,21 @@ const HistoryPage = lazy(() => import("./pages/History").then((module) => ({ def
 const SettingsPage = lazy(() => import("./pages/Settings").then((module) => ({ default: module.SettingsPage })));
 
 function PageLoading() {
-	return <div className="empty">页面加载中…</div>;
+	const t = useT();
+	return <div className="empty">{t("common.loadingPage")}</div>;
 }
 
 const NAV = [
-	{ to: "/", label: "总览" },
-	{ to: "/accounts", label: "账户" },
-	{ to: "/holdings", label: "持仓" },
-	{ to: "/history", label: "操作历史" },
-	{ to: "/settings", label: "设置" },
-];
+	{ to: "/", key: "nav.overview" },
+	{ to: "/accounts", key: "nav.accounts" },
+	{ to: "/holdings", key: "nav.holdings" },
+	{ to: "/history", key: "nav.history" },
+	{ to: "/settings", key: "nav.settings" },
+] as const;
 
 function Shell({ onAuthChanged }: { onAuthChanged: () => void }) {
 	const { path } = useRouter();
+	const t = useT();
 
 	const page = (() => {
 		if (path.startsWith("/accounts")) return <AccountsPage />;
@@ -41,11 +45,11 @@ function Shell({ onAuthChanged }: { onAuthChanged: () => void }) {
 	return (
 		<div className="app-shell">
 			<div className="topbar">
-				<span className="brand">资产管理</span>
+				<span className="brand">{t("app.name")}</span>
 				<nav className="nav">
 					{NAV.map((item) => (
 						<Link key={item.to} to={item.to} className={path === item.to ? "active" : ""}>
-							{item.label}
+							{t(item.key)}
 						</Link>
 					))}
 				</nav>
@@ -57,7 +61,7 @@ function Shell({ onAuthChanged }: { onAuthChanged: () => void }) {
 						onAuthChanged();
 					}}
 				>
-					登出
+					{t("nav.logout")}
 				</button>
 			</div>
 			<Suspense fallback={<PageLoading />}>{page}</Suspense>
@@ -67,49 +71,58 @@ function Shell({ onAuthChanged }: { onAuthChanged: () => void }) {
 
 function Gate() {
 	const me = useAsync<AuthMeDto>(() => api.auth.me(), []);
+	const t = useT();
+	const { applySetting } = useI18n();
+
+	// 服务端保存的语言偏好：进入页面即生效（localStorage 里也存一份，下次开屏不等网络）
+	const serverLanguage = me.data?.language;
+	useEffect(() => {
+		if (serverLanguage) applySetting(serverLanguage as LanguageSetting);
+	}, [serverLanguage, applySetting]);
 
 	const refresh = useCallback(() => {
 		me.reload();
 	}, [me]);
 
-	if (me.loading && !me.data) {
-		return <div className="center-screen muted">加载中…</div>;
-	}
 	if (me.data?.migrationRequired || me.errorCode === "migration_required") {
 		return (
 			<div className="center-screen">
 				<div className="card auth-card">
-					<h1>数据库需要升级</h1>
+					<h1>{t("gate.migrationTitle")}</h1>
 					<p className="sub">
-						代码是新的，但数据库还停在旧结构（缺少新版本新增的表/字段）。
+						{t("gate.migrationIntro")}
 						<br />
-						升级是幂等的，不会动已有数据。
+						{t("gate.migrationIdempotent")}
 					</p>
 					{me.data?.migrationRequired && (
 						<p className="small muted">
-							当前结构版本 v{me.data.schemaVersion}，代码需要 v{me.data.expectedSchemaVersion}。
+							{t("gate.migrationVersion", {
+								current: me.data.schemaVersion,
+								expected: me.data.expectedSchemaVersion,
+							})}
 						</p>
 					)}
 					<div className="token-box">
 						<code>npm run db:migrate:local</code>
 					</div>
-					<p className="small muted">
-						线上环境：重新执行 <code>npm run deploy:safe</code>（部署脚本会自动应用迁移），
-						或单独运行 <code>npm run db:migrate:remote</code>。
-					</p>
-					<button onClick={() => me.reload()}>已升级，重试</button>
+					<p className="small muted">{t("gate.migrationRemote")}</p>
+					<button onClick={() => me.reload()}>{t("gate.migrationRetry")}</button>
 				</div>
 			</div>
 		);
+	}
+
+	if (me.loading && !me.data) {
+		return <div className="center-screen muted">{t("common.loading")}</div>;
 	}
 
 	if (me.error || !me.data) {
 		return (
 			<div className="center-screen">
 				<div className="card auth-card">
-					<h1>无法连接</h1>
-					<p className="sub">{me.error ?? "未知错误"}</p>
-					<button onClick={() => me.reload()}>重试</button>
+					<h1>{t("gate.cannotConnect")}</h1>
+					<p className="sub">{me.error ?? t("common.unknownError")}</p>
+					<button onClick={() => me.reload()}>{t("common.retry")}</button>
 				</div>
 			</div>
 		);
@@ -128,8 +141,10 @@ function Gate() {
 
 export function App() {
 	return (
-		<RouterProvider>
-			<Gate />
-		</RouterProvider>
+		<I18nProvider>
+			<RouterProvider>
+				<Gate />
+			</RouterProvider>
+		</I18nProvider>
 	);
 }

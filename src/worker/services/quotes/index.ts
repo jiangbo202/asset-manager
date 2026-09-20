@@ -4,6 +4,7 @@ import { getSetting, setSetting, SETTING_DISPLAY_CURRENCY } from "../../data/set
 import { listHoldings } from "../../data/accounts.repo";
 import { listFxRates, upsertAutoFxRate } from "../../data/fx.repo";
 import { applyHealth, cooldownOf, parseHealth, type ProviderHealth } from "./health";
+import { makeTranslator, type Translator } from "../../../shared/i18n";
 import {
 	DEFAULT_PRIORITY,
 	planProviders,
@@ -119,8 +120,9 @@ export function apiKeysOf(settings: ProviderSettings): Partial<Record<ProviderId
 
 export async function refreshQuotes(
 	env: { DB: D1Database; SESSION_SECRET: string },
-	options: { trigger: "cron" | "manual"; fetcher?: typeof fetch } = { trigger: "manual" },
+	options: { trigger: "cron" | "manual"; fetcher?: typeof fetch; t?: Translator } = { trigger: "manual" },
 ): Promise<RefreshReport> {
+	const t = options.t ?? makeTranslator("zh");
 	const startedAt = nowIso();
 	const db = env.DB;
 	const enabled = (await getSetting(db, "market_data_enabled")) !== "0";
@@ -138,7 +140,7 @@ export async function refreshQuotes(
 	};
 
 	if (!enabled) {
-		report.skipped.push("行情功能已关闭");
+		report.skipped.push(t("quote.disabled"));
 		report.finishedAt = nowIso();
 		return report;
 	}
@@ -150,6 +152,7 @@ export async function refreshQuotes(
 	const ctx: FetchContext = {
 		fetcher: options.fetcher ?? ((input, init) => fetch(input, init)),
 		apiKeys: apiKeysOf(settings),
+		t,
 	};
 
 	const { holdingTargets, fxTargets } = await collectTargets(db, { displayCurrency });
@@ -179,7 +182,7 @@ export async function refreshQuotes(
 		const providers = planProviders(kind, settings);
 		if (providers.length === 0) {
 			for (const target of remaining) {
-				report.failed.push({ symbol: target.symbol, reason: "没有可用的数据源（请在设置里启用）" });
+				report.failed.push({ symbol: target.symbol, reason: t("quote.noProvider") });
 			}
 			continue;
 		}
@@ -193,7 +196,7 @@ export async function refreshQuotes(
 			for (const target of remaining) {
 				report.failed.push({
 					symbol: target.symbol,
-					reason: `所有数据源都在限流冷却中（最快 ${soonest.state.minutesLeft} 分钟后恢复）`,
+					reason: t("quote.allCooling", { minutes: soonest.state.minutesLeft }),
 				});
 			}
 			continue;
@@ -212,7 +215,7 @@ export async function refreshQuotes(
 				report.coolingDown.push({
 					provider: meta.label,
 					minutesLeft: cooldown.minutesLeft,
-					reason: cooldown.reason ?? "限流冷却中",
+					reason: cooldown.reason ?? t("quote.rateLimited"),
 				});
 				continue;
 			}
@@ -222,7 +225,7 @@ export async function refreshQuotes(
 			if (report.requests + needed > MAX_REQUESTS) {
 				const accepted = meta.batch ? remaining : remaining.slice(0, Math.max(0, MAX_REQUESTS - report.requests));
 				report.skipped.push(
-					`${meta.label}：本次请求预算用尽，剩余 ${remaining.length - accepted.length} 个标的顺延到下次`,
+					t("quote.budget", { provider: meta.label, rest: remaining.length - accepted.length }),
 				);
 				remaining = accepted;
 				if (remaining.length === 0) break;
@@ -238,11 +241,13 @@ export async function refreshQuotes(
 			report.requests += meta.batch ? 1 : applicable.length;
 
 			// 更新数据源健康度：成功清零，限流/连续失败则进入冷却
-			health = applyHealth(health, provider, {
-				ok: result.quotes.length > 0,
-				status: result.status,
-				error: result.errors[0],
-			});
+			health = applyHealth(
+				health,
+				provider,
+				{ ok: result.quotes.length > 0, status: result.status, error: result.errors[0] },
+				new Date(),
+				t,
+			);
 
 			for (const quote of result.quotes) {
 				resolvedKeys.add(quote.key);
@@ -260,7 +265,7 @@ export async function refreshQuotes(
 			if (resolvedKeys.has(target.key)) continue;
 			report.failed.push({
 				symbol: target.symbol,
-				reason: errorsByKey.get(target.symbol) ?? "所有数据源都没能取到价格",
+				reason: errorsByKey.get(target.symbol) ?? t("quote.allFailed"),
 			});
 		}
 	}

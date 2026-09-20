@@ -2,17 +2,11 @@ import { useMemo, useState } from "react";
 import { api, type AccountDto, type HoldingListDto, type LookupCandidate } from "../lib/api";
 import { useAsync, useSubmit } from "../lib/useAsync";
 import { BrandIcon } from "../lib/icons";
+import { useT } from "../lib/i18n";
 import { money, number, relativeDays, stalenessClass } from "../lib/format";
-import { MarketFilter, parseMarketParam } from "../components/MarketFilter";
+import { ASSET_CLASSES, classLabel, marketLabel, MARKETS, type AssetClass, type Market } from "../../shared/labels";
 import { useRouter } from "../lib/router";
-import {
-	ASSET_CLASSES,
-	CLASS_LABELS,
-	MARKET_LABELS,
-	MARKETS,
-	type AssetClass,
-	type Market,
-} from "../../shared/labels";
+import { MarketFilter, parseMarketParam } from "../components/MarketFilter";
 
 interface FormState {
 	accountId: string;
@@ -54,17 +48,8 @@ function daysSince(iso: string | null): number | null {
 	return Math.floor((Date.now() - parsed) / 86_400_000);
 }
 
-const SORT_COLUMNS: Array<{ key: SortKey; label: string; className?: string }> = [
-	{ key: "name", label: "名称", className: "left" },
-	{ key: "account", label: "账户", className: "left hide-sm" },
-	{ key: "class", label: "类别", className: "left hide-sm" },
-	{ key: "qty", label: "数量", className: "hide-sm" },
-	{ key: "price", label: "价格" },
-	{ key: "value", label: "市值（原币）" },
-	{ key: "stale", label: "价格更新" },
-];
-
 export function HoldingsPage() {
+	const t = useT();
 	const { query, setQuery } = useRouter();
 	const showArchived = query.get("archived") === "1";
 	const filterAccount = query.get("account") ?? "";
@@ -93,6 +78,16 @@ export function HoldingsPage() {
 	const accountList = accounts.data?.items ?? [];
 	const allItems = holdings.data?.items ?? [];
 	const hasFilter = Boolean(filterAccount || filterClass || filterMarkets.length > 0);
+
+	const sortColumns: Array<{ key: SortKey; label: string; className?: string }> = [
+		{ key: "name", label: t("dashboard.colName"), className: "left" },
+		{ key: "account", label: t("dashboard.colAccount"), className: "left hide-sm" },
+		{ key: "class", label: t("dashboard.colClass"), className: "left hide-sm" },
+		{ key: "qty", label: t("dashboard.colQty"), className: "hide-sm" },
+		{ key: "price", label: t("dashboard.colPrice") },
+		{ key: "value", label: t("holdings.colValue") },
+		{ key: "stale", label: t("dashboard.colPriceUpdated") },
+	];
 
 	const items = useMemo(() => {
 		const filtered = allItems.filter(
@@ -127,7 +122,7 @@ export function HoldingsPage() {
 			const left = valueOf(a);
 			const right = valueOf(b);
 			if (typeof left === "string" || typeof right === "string") {
-				return String(left).localeCompare(String(right), "zh-CN") * direction;
+				return String(left).localeCompare(String(right)) * direction;
 			}
 			return (left - right) * direction;
 		});
@@ -148,7 +143,7 @@ export function HoldingsPage() {
 
 	const startCreate = () => {
 		if (accountList.length === 0) {
-			setError("请先在「账户」页创建一个账户");
+			setError(t("holdings.errorNeedAccount"));
 			return;
 		}
 		const first = accountList[0];
@@ -178,11 +173,11 @@ export function HoldingsPage() {
 	 * 代码查询：填名称/币种/市场，也可以顺便把最新价填进价格框
 	 * 走 /api/quotes/lookup（服务端缓存 24h，避免反复打第三方接口被限流）
 	 */
-	const runLookup = async (options: { fillPrice: boolean; force?: boolean; symbolOverride?: string }) => {
+	const runLookup = async (options: { fillPrice: boolean; force?: boolean }) => {
 		if (!form) return;
-		const symbol = (options.symbolOverride ?? form.symbol).trim();
+		const symbol = form.symbol.trim();
 		if (!symbol) {
-			setLookup({ loading: false, message: null, error: "请先填写代码", candidates: [] });
+			setLookup({ loading: false, message: null, error: t("holdings.lookupNeedSymbol"), candidates: [] });
 			return;
 		}
 		setLookup({ loading: true, message: null, error: null, candidates: [] });
@@ -198,8 +193,8 @@ export function HoldingsPage() {
 					loading: false,
 					message: null,
 					error: result.rateLimited
-						? "行情接口暂时被限流，稍后再试（或到设置页换一个数据源）"
-						: result.errors[0] ?? "没有找到这个代码",
+						? t("holdings.lookupRateLimited")
+						: (result.errors[0] ?? t("holdings.lookupNoResult")),
 					candidates: [],
 				});
 				return;
@@ -216,10 +211,18 @@ export function HoldingsPage() {
 			if (best.symbol && (!form.symbol.trim() || options.fillPrice)) patch.symbol = best.symbol;
 			setForm((current) => (current ? { ...current, ...patch } : current));
 
-			const priceNote = best.price !== null ? `，最新价 ${best.price} ${best.currency ?? ""}` : "";
 			setLookup({
 				loading: false,
-				message: `${result.cached ? "（缓存）" : ""}已从 ${best.source} 匹配：${best.name}${priceNote}`,
+				message:
+					(result.cached ? t("holdings.lookupCached") : "") +
+					t("holdings.lookupMatched", {
+						source: best.source,
+						name: best.name,
+						price:
+							best.price !== null
+								? t("holdings.lookupPrice", { price: best.price, currency: best.currency ?? "" })
+								: "",
+					}),
 				error: null,
 				candidates: result.candidates,
 			});
@@ -227,7 +230,7 @@ export function HoldingsPage() {
 			setLookup({
 				loading: false,
 				message: null,
-				error: lookupError instanceof Error ? lookupError.message : "查询失败",
+				error: lookupError instanceof Error ? lookupError.message : t("error.requestFailed"),
 				candidates: [],
 			});
 		}
@@ -248,15 +251,15 @@ export function HoldingsPage() {
 		event.preventDefault();
 		if (!form) return;
 		if (form.name.trim() === "") {
-			setError("名称不能为空");
+			setError(t("holdings.errorNameRequired"));
 			return;
 		}
 		if (form.qty === "" || Number.isNaN(Number(form.qty))) {
-			setError(form.class === "cash" ? "余额必须是数字" : "数量必须是数字");
+			setError(form.class === "cash" ? t("holdings.errorBalanceNumber") : t("holdings.errorQtyNumber"));
 			return;
 		}
 		if (form.class !== "cash" && (form.price === "" || Number.isNaN(Number(form.price)))) {
-			setError("价格必须是数字");
+			setError(t("holdings.errorPriceNumber"));
 			return;
 		}
 
@@ -280,12 +283,13 @@ export function HoldingsPage() {
 			else await api.holdings.create(payload);
 			setForm(null);
 			setEditingId(null);
+			setLookup({ loading: false, message: null, error: null, candidates: [] });
 			holdings.reload();
 		});
 	};
 
 	const remove = async (holding: HoldingListDto) => {
-		if (!window.confirm(`确定删除「${holding.name}」？`)) return;
+		if (!window.confirm(t("holdings.confirmDelete", { name: holding.name }))) return;
 		await run(async () => {
 			await api.holdings.remove(holding.id);
 			holdings.reload();
@@ -319,7 +323,7 @@ export function HoldingsPage() {
 	return (
 		<>
 			<div className="section-head">
-				<h2>持仓</h2>
+				<h2>{t("holdings.title")}</h2>
 				<div className="spacer" />
 				<label className="small muted" style={{ display: "inline-flex", gap: 6, alignItems: "center" }}>
 					<input
@@ -328,43 +332,39 @@ export function HoldingsPage() {
 						style={{ width: "auto" }}
 						onChange={(e) => setQuery({ archived: e.target.checked ? "1" : null })}
 					/>
-					显示已归档
+					{t("accounts.showArchived")}
 				</label>
 				<select
 					value={filterAccount}
 					onChange={(e) => setQuery({ account: e.target.value || null })}
 					style={{ width: 170 }}
 				>
-					<option value="">全部账户</option>
+					<option value="">{t("dashboard.allAccounts")}</option>
 					{accountList.map((account) => (
 						<option key={account.id} value={account.id}>
 							{account.name}
 						</option>
 					))}
 				</select>
-				<select
-					value={filterClass}
-					onChange={(e) => setQuery({ class: e.target.value || null })}
-					style={{ width: 120 }}
-				>
-					<option value="">全部类别</option>
+				<select value={filterClass} onChange={(e) => setQuery({ class: e.target.value || null })} style={{ width: 130 }}>
+					<option value="">{t("dashboard.allClasses")}</option>
 					{ASSET_CLASSES.map((value) => (
 						<option key={value} value={value}>
-							{CLASS_LABELS[value]}
+							{classLabel(t, value)}
 						</option>
 					))}
 				</select>
 				<div className="chips" style={{ marginLeft: 4 }}>
-					<span className="small muted">市场：</span>
+					<span className="small muted">{t("accounts.market")}:</span>
 					<MarketFilter selected={filterMarkets} onChange={(next) => setQuery({ market: next.join(",") || null })} />
 				</div>
 				{hasFilter && (
 					<button className="ghost" onClick={() => setQuery({ account: null, class: null, market: null })}>
-						清除筛选
+						{t("dashboard.clearFilters")}
 					</button>
 				)}
 				<button className="primary" onClick={startCreate}>
-					新建持仓
+					{t("holdings.create")}
 				</button>
 			</div>
 
@@ -375,7 +375,7 @@ export function HoldingsPage() {
 				<form className="card panel" onSubmit={submit} style={{ marginBottom: 16 }}>
 					<div className="row">
 						<label className="field">
-							<span>账户</span>
+							<span>{t("holdings.account")}</span>
 							<select value={form.accountId} onChange={(e) => changeAccount(e.target.value)}>
 								{accountList.map((account) => (
 									<option key={account.id} value={account.id}>
@@ -385,7 +385,7 @@ export function HoldingsPage() {
 							</select>
 						</label>
 						<label className="field">
-							<span>类别</span>
+							<span>{t("holdings.class")}</span>
 							<select
 								value={form.class}
 								onChange={(e) => {
@@ -400,29 +400,29 @@ export function HoldingsPage() {
 							>
 								{ASSET_CLASSES.map((value) => (
 									<option key={value} value={value}>
-										{CLASS_LABELS[value]}
+										{classLabel(t, value)}
 									</option>
 								))}
 							</select>
 						</label>
 						{form.class !== "cash" && (
 							<label className="field">
-								<span>市场</span>
+								<span>{t("holdings.market")}</span>
 								<select
 									value={form.market}
 									onChange={(e) => setForm({ ...form, market: e.target.value as Market | "" })}
 								>
-									<option value="">未指定</option>
+									<option value="">{t("mkt.none")}</option>
 									{MARKETS.map((market) => (
 										<option key={market} value={market}>
-											{MARKET_LABELS[market]}
+											{marketLabel(t, market)}
 										</option>
 									))}
 								</select>
 							</label>
 						)}
 						<label className="field">
-							<span>币种（默认跟随账户）</span>
+							<span>{t("holdings.currencyFollowAccount")}</span>
 							<select value={form.currency} onChange={(e) => setForm({ ...form, currency: e.target.value })}>
 								{["USD", "HKD", "CNY"].map((currency) => (
 									<option key={currency} value={currency}>
@@ -436,7 +436,7 @@ export function HoldingsPage() {
 					<div className="row">
 						{form.class !== "cash" && (
 							<label className="field">
-								<span>代码（如 AAPL / 0700.HK / BTC）——填完自动查名称</span>
+								<span>{t("holdings.symbolLabel")}</span>
 								<div className="input-with-button">
 									<input
 										value={form.symbol}
@@ -444,27 +444,27 @@ export function HoldingsPage() {
 										onBlur={() => {
 											if (form.symbol.trim() && !form.name.trim()) void runLookup({ fillPrice: false });
 										}}
-										placeholder="输入代码后点右侧按钮查询"
+										placeholder={t("holdings.symbolPlaceholder")}
 									/>
 									<button
 										type="button"
 										onClick={() => void runLookup({ fillPrice: false })}
 										disabled={lookup.loading || !form.symbol.trim()}
 									>
-										{lookup.loading ? "查询中…" : "查名称"}
+										{lookup.loading ? t("holdings.lookupLoading") : t("holdings.lookupName")}
 									</button>
 								</div>
 							</label>
 						)}
 						<label className="field">
-							<span>名称</span>
+							<span>{t("holdings.name")}</span>
 							<input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required />
 						</label>
 					</div>
 
 					<div className="row">
 						<label className="field">
-							<span>{form.class === "cash" ? "余额" : "数量"}</span>
+							<span>{form.class === "cash" ? t("holdings.balance") : t("holdings.qty")}</span>
 							<input
 								type="number"
 								step="any"
@@ -476,7 +476,7 @@ export function HoldingsPage() {
 						{form.class !== "cash" && (
 							<>
 								<label className="field">
-									<span>当前价格（可手动填，也可点按钮取最新价）</span>
+									<span>{t("holdings.price")}</span>
 									<div className="input-with-button">
 										<input
 											type="number"
@@ -489,31 +489,26 @@ export function HoldingsPage() {
 											type="button"
 											onClick={() => void runLookup({ fillPrice: true, force: true })}
 											disabled={lookup.loading || !form.symbol.trim()}
-											title="立即联网取一次最新价（不走缓存）"
 										>
-											{lookup.loading ? "…" : "取最新价"}
+											{lookup.loading ? "…" : t("holdings.fetchPrice")}
 										</button>
 									</div>
 								</label>
 								<label className="field">
-									<span>平均成本（可选，用于算盈亏）</span>
+									<span>{t("holdings.avgCost")}</span>
 									<input
 										type="number"
 										step="any"
 										value={form.avgCost}
 										onChange={(e) => setForm({ ...form, avgCost: e.target.value })}
-										placeholder="留空则不计盈亏"
+										placeholder={t("holdings.avgCostPlaceholder")}
 									/>
 								</label>
 							</>
 						)}
 					</div>
 
-					{form.class === "cash" && (
-						<div className="small muted" style={{ marginBottom: 12 }}>
-							现金只需填余额，价格恒为 1
-						</div>
-					)}
+					{form.class === "cash" && <div className="small muted" style={{ marginBottom: 12 }}>{t("holdings.cashHint")}</div>}
 
 					{lookup.error && <div className="alert error">{lookup.error}</div>}
 					{lookup.message && (
@@ -523,7 +518,7 @@ export function HoldingsPage() {
 					)}
 					{lookup.candidates.length > 1 && (
 						<div style={{ marginBottom: 12 }}>
-							<div className="small muted">其它匹配结果（点一下替换）：</div>
+							<div className="small muted">{t("holdings.candidatesHint")}</div>
 							<div className="chips">
 								{lookup.candidates.slice(1, 6).map((candidate) => (
 									<button
@@ -556,47 +551,48 @@ export function HoldingsPage() {
 					{form.class !== "cash" && (
 						<div className="row">
 							<label className="field">
-								<span>行情数据源（可选，留空自动选择）</span>
+								<span>{t("holdings.quoteSource")}</span>
 								<select
 									value={form.quoteSource}
 									onChange={(e) => setForm({ ...form, quoteSource: e.target.value })}
 								>
-									<option value="">自动（按推荐顺序回退）</option>
+									<option value="">{t("holdings.quoteSourceAuto")}</option>
 									<option value="coingecko">CoinGecko</option>
 									<option value="binance">Binance</option>
 									<option value="yahoo">Yahoo Finance</option>
-									<option value="tencent">腾讯行情</option>
-									<option value="custom">自定义数据源</option>
+									<option value="tencent">Tencent</option>
+									<option value="custom">{t("provider.custom.label")}</option>
 								</select>
 							</label>
 							<label className="field">
-								<span>行情代码覆盖（可选）</span>
+								<span>{t("holdings.quoteSymbol")}</span>
 								<input
 									value={form.quoteSymbol}
 									onChange={(e) => setForm({ ...form, quoteSymbol: e.target.value })}
-									placeholder="如 bitcoin / 0700.HK / 600519.SS"
+									placeholder={t("holdings.quoteSymbolPlaceholder")}
 								/>
 							</label>
 						</div>
 					)}
 
 					<label className="field">
-						<span>备注（可选）</span>
+						<span>{t("holdings.note")}</span>
 						<input value={form.note} onChange={(e) => setForm({ ...form, note: e.target.value })} />
 					</label>
 
 					<div className="row">
 						<button className="primary" type="submit" disabled={pending}>
-							{pending ? "保存中…" : editingId ? "保存修改" : "创建持仓"}
+							{pending ? t("common.saving") : editingId ? t("common.saveChanges") : t("holdings.createSubmit")}
 						</button>
 						<button
 							type="button"
 							onClick={() => {
 								setForm(null);
 								setEditingId(null);
+								setLookup({ loading: false, message: null, error: null, candidates: [] });
 							}}
 						>
-							取消
+							{t("common.cancel")}
 						</button>
 					</div>
 				</form>
@@ -607,29 +603,24 @@ export function HoldingsPage() {
 					<div className="skeleton" style={{ height: 120 }} />
 				</div>
 			) : items.length === 0 ? (
-				<div className="card empty">
-					{allItems.length === 0
-						? "还没有持仓。点击右上角「新建持仓」。"
-						: "当前筛选条件下没有持仓，试试右上角「清除筛选」。"}
-				</div>
+				<div className="card empty">{allItems.length === 0 ? t("holdings.empty") : t("holdings.emptyFiltered")}</div>
 			) : (
 				<div className="card table-wrap">
 					<table>
 						<thead>
 							<tr>
-								{SORT_COLUMNS.map((column) => (
+								{sortColumns.map((column) => (
 									<th
 										key={column.key}
 										className={`sortable ${column.className ?? ""}`}
 										onClick={() => toggleSort(column.key)}
-										title="点击切换排序"
 									>
 										{column.label}
 										{sortKey === column.key && <span className="muted"> {sortDir === "asc" ? "▲" : "▼"}</span>}
 									</th>
 								))}
-								<th>平均成本</th>
-								<th>操作</th>
+								<th>{t("holdings.colAvgCost")}</th>
+								<th>{t("holdings.colActions")}</th>
 							</tr>
 						</thead>
 						<tbody>
@@ -640,7 +631,7 @@ export function HoldingsPage() {
 										<td className="left">
 											{holding.symbol ? <strong>{holding.symbol}</strong> : holding.name}
 											{holding.symbol && <span className="muted small"> {holding.name}</span>}
-											{holding.archived === 1 && <span className="badge"> 已归档</span>}
+											{holding.archived === 1 && <span className="badge"> {t("accounts.archivedBadge")}</span>}
 										</td>
 										<td className="left hide-sm">
 											<div className="cell-account">
@@ -649,30 +640,27 @@ export function HoldingsPage() {
 											</div>
 										</td>
 										<td className="left hide-sm">
-											{CLASS_LABELS[holding.class]}
+											{classLabel(t, holding.class)}
 											{holding.market && (
-												<span className="muted small">
-													{" "}
-													· {MARKET_LABELS[holding.market as Market] ?? holding.market}
-												</span>
+												<span className="muted small"> · {marketLabel(t, holding.market as Market)}</span>
 											)}
 										</td>
 										<td className="hide-sm">{number(holding.qty)}</td>
 										<td>{holding.class === "cash" ? "1" : number(holding.price)}</td>
 										<td>{money(holding.qty * holding.price, holding.currency)}</td>
 										<td className={holding.class === "cash" ? "" : stalenessClass(days)}>
-											{holding.class === "cash" ? "—" : relativeDays(days)}
+											{holding.class === "cash" ? t("common.none") : relativeDays(t, days)}
 										</td>
-										<td>{holding.avg_cost === null ? "—" : number(holding.avg_cost)}</td>
+										<td>{holding.avg_cost === null ? t("common.none") : number(holding.avg_cost)}</td>
 										<td>
 											<button className="ghost" onClick={() => startEdit(holding)}>
-												编辑
+												{t("common.edit")}
 											</button>
 											<button className="ghost" onClick={() => toggleArchive(holding)}>
-												{holding.archived === 1 ? "恢复" : "归档"}
+												{holding.archived === 1 ? t("accounts.restore") : t("accounts.archive")}
 											</button>
 											<button className="ghost danger" onClick={() => remove(holding)}>
-												删除
+												{t("common.delete")}
 											</button>
 										</td>
 									</tr>
@@ -685,27 +673,29 @@ export function HoldingsPage() {
 
 			<div className="section">
 				<div className="section-head">
-					<h2>批量更新价格</h2>
-					<span className="small muted hide-sm">
-						v1 不接行情，价格需要手动维护；这里可以一屏改完一次提交
-					</span>
+					<h2>{t("holdings.bulkTitle")}</h2>
+					<span className="small muted hide-sm">{t("holdings.bulkHint")}</span>
 					<div className="spacer" />
 					<button className="primary" onClick={submitBulk} disabled={bulk.pending || changedCount === 0}>
-						{bulk.pending ? "提交中…" : changedCount > 0 ? `提交 ${changedCount} 条` : "提交价格"}
+						{bulk.pending
+							? t("holdings.bulkSubmitting")
+							: changedCount > 0
+								? t("holdings.bulkSubmitCount", { count: changedCount })
+								: t("holdings.bulkSubmit")}
 					</button>
 				</div>
 				{pricedItems.length === 0 ? (
-					<div className="card empty">没有需要更新价格的持仓。</div>
+					<div className="card empty">{t("holdings.bulkEmpty")}</div>
 				) : (
 					<div className="card table-wrap">
 						<table>
 							<thead>
 								<tr>
-									<th className="left">名称</th>
-									<th className="left hide-sm">账户</th>
-									<th>当前价格</th>
-									<th className="left">新价格</th>
-									<th className="left hide-sm">变化</th>
+									<th className="left">{t("dashboard.colName")}</th>
+									<th className="left hide-sm">{t("dashboard.colAccount")}</th>
+									<th>{t("holdings.bulkColCurrent")}</th>
+									<th className="left">{t("holdings.bulkColNew")}</th>
+									<th className="left hide-sm">{t("holdings.bulkColDelta")}</th>
 								</tr>
 							</thead>
 							<tbody>
@@ -724,7 +714,7 @@ export function HoldingsPage() {
 												<input
 													type="number"
 													step="any"
-													placeholder="留空表示不修改"
+													placeholder={t("holdings.bulkPlaceholder")}
 													value={raw}
 													onChange={(e) => setPrices({ ...prices, [holding.id]: e.target.value })}
 													style={{ maxWidth: 180 }}
@@ -736,9 +726,9 @@ export function HoldingsPage() {
 												}`}
 											>
 												{delta === null || delta === 0
-													? "—"
+													? t("common.none")
 													: `${delta > 0 ? "+" : ""}${number(delta)} (${
-															pct === null ? "—" : `${pct > 0 ? "+" : ""}${pct.toFixed(1)}%`
+															pct === null ? t("common.none") : `${pct > 0 ? "+" : ""}${pct.toFixed(1)}%`
 														})`}
 											</td>
 										</tr>

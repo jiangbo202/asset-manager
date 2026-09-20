@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ApiError } from "./api";
+import { useT } from "./i18n";
 
 export interface AsyncState<T> {
 	data: T | null;
@@ -13,6 +14,7 @@ export interface AsyncState<T> {
 
 /** 极简数据请求 hook（不引 react-query） */
 export function useAsync<T>(loader: () => Promise<T>, deps: unknown[] = []): AsyncState<T> {
+	const t = useT();
 	const [data, setData] = useState<T | null>(null);
 	const [loading, setLoading] = useState(true);
 	const [error, setError] = useState<string | null>(null);
@@ -34,7 +36,7 @@ export function useAsync<T>(loader: () => Promise<T>, deps: unknown[] = []): Asy
 			})
 			.catch((err: unknown) => {
 				if (!alive) return;
-				setError(err instanceof ApiError ? err.message : "加载失败");
+				setError(err instanceof ApiError ? err.message : t("error.requestFailed"));
 				setErrorCode(err instanceof ApiError ? err.code : null);
 			})
 			.finally(() => {
@@ -52,6 +54,7 @@ export function useAsync<T>(loader: () => Promise<T>, deps: unknown[] = []): Asy
 
 /** 表单提交状态 */
 export function useSubmit() {
+	const t = useT();
 	const [pending, setPending] = useState(false);
 	const [error, setError] = useState<string | null>(null);
 
@@ -62,7 +65,7 @@ export function useSubmit() {
 			await action();
 			return true;
 		} catch (err) {
-			setError(err instanceof ApiError ? err.message : "操作失败");
+			setError(err instanceof ApiError ? err.message : t("error.requestFailed"));
 			return false;
 		} finally {
 			setPending(false);

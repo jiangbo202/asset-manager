@@ -22,6 +22,7 @@ import {
 	setSessionCookie,
 } from "../core/session";
 import { asString, isRecord, timingSafeEqual } from "../core/utils";
+import { tOf } from "../core/i18n";
 
 const ALGO = "pbkdf2-sha256+sha256/v1";
 const MAX_FAILS = 5;
@@ -31,22 +32,25 @@ const KEY_LOCK = "login_locked_until";
 
 const auth = new Hono<AppEnv>();
 
-async function body(c: { req: { json: () => Promise<unknown> } }): Promise<Record<string, unknown>> {
+async function body(
+	c: { req: { json: () => Promise<unknown> } },
+	t: ReturnType<typeof tOf>,
+): Promise<Record<string, unknown>> {
 	try {
 		const parsed = await c.req.json();
 		if (!isRecord(parsed)) throw new Error("not an object");
 		return parsed;
 	} catch {
-		throw badRequest("请求体必须是 JSON 对象");
+		throw badRequest(t("error.jsonBody"));
 	}
 }
 
 /** 登录限流（PRD FR-1.7） */
-async function assertNotLocked(db: D1Database): Promise<void> {
+async function assertNotLocked(db: D1Database, t: ReturnType<typeof tOf>): Promise<void> {
 	const until = await getSetting(db, KEY_LOCK);
 	if (until && Date.parse(until) > Date.now()) {
 		const minutes = Math.ceil((Date.parse(until) - Date.now()) / 60_000);
-		throw new ApiError(429, "locked", `登录失败次数过多，请 ${minutes} 分钟后再试`);
+		throw new ApiError(429, "locked", t("error.locked", { minutes }));
 	}
 }
 
@@ -80,6 +84,8 @@ auth.get("/me", async (c) => {
 	const schemaRaw = await getSetting(c.env.DB, "schema_version");
 	const schemaVersion = Number.parseInt(schemaRaw ?? "0", 10) || 0;
 	const migrationRequired = schemaVersion < SCHEMA_VERSION;
+	// 语言偏好：前端首屏就能用服务端设置，而不是等进设置页
+	const language = (await getSetting(c.env.DB, "language")) ?? "auto";
 
 	return ok(c, {
 		initialized,
@@ -90,6 +96,7 @@ auth.get("/me", async (c) => {
 		schemaVersion,
 		expectedSchemaVersion: SCHEMA_VERSION,
 		migrationRequired,
+		language,
 	});
 });
 
@@ -104,18 +111,19 @@ auth.get("/params", async (c) => {
 
 /** 首次初始化：必须携带部署时生成的一次性 setup token（PRD FR-1.9） */
 auth.post("/setup", async (c) => {
+	const t = tOf(c);
 	if (await isInitialized(c.env.DB)) {
-		throw conflict("已经初始化过了", "already_initialized");
+		throw conflict(t("error.already_initialized"), "already_initialized");
 	}
 	const secret = c.env.SETUP_TOKEN;
 	if (!secret || secret.length < 8) {
-		throw new ApiError(500, "setup_token_missing", "服务端未配置 SETUP_TOKEN，请重新部署并写入该 Secret");
+		throw new ApiError(500, "setup_token_missing", t("error.setup_token_missing"));
 	}
 
-	const payload = await body(c);
+	const payload = await body(c, t);
 	const setupToken = asString(payload.setupToken);
 	if (!setupToken || !timingSafeEqual(setupToken, secret)) {
-		throw unauthorized("setup token 不正确");
+		throw unauthorized(t("error.setup_token_invalid"));
 	}
 
 	const credential = parseCredential(payload.credential);
@@ -126,7 +134,7 @@ auth.post("/setup", async (c) => {
 	const verifier = await computeVerifier(credential, verifierSalt);
 
 	const inserted = await insertAuthIfAbsent(c.env.DB, { algo: ALGO, kdfSalt, iterations, verifier, verifierSalt });
-	if (!inserted) throw conflict("已经初始化过了", "already_initialized");
+	if (!inserted) throw conflict(t("error.already_initialized"), "already_initialized");
 
 	const displayCurrency = asString(payload.displayCurrency);
 	if (displayCurrency && /^[A-Za-z]{3,5}$/.test(displayCurrency)) {
@@ -141,24 +149,25 @@ auth.post("/setup", async (c) => {
 		entityId: "1",
 		action: "setup",
 		source: "system",
-		note: "首次初始化完成",
+		note: t("audit.setupDone"),
 	});
 
 	return ok(c, { initialized: true });
 });
 
 auth.post("/login", async (c) => {
+	const t = tOf(c);
 	const row = await getAuth(c.env.DB);
-	if (!row) throw conflict("尚未初始化，请先完成初始化", "not_initialized");
-	await assertNotLocked(c.env.DB);
+	if (!row) throw conflict(t("error.not_initialized"), "not_initialized");
+	await assertNotLocked(c.env.DB, t);
 
-	const payload = await body(c);
+	const payload = await body(c, t);
 	const credential = parseCredential(payload.credential);
 	const valid = await verifyCredential(credential, row.verifier_salt, row.verifier);
 
 	if (!valid) {
 		await registerFailure(c.env.DB);
-		throw unauthorized("密码不正确");
+		throw unauthorized(t("error.password_incorrect"));
 	}
 
 	await resetFailures(c.env.DB);
@@ -176,29 +185,31 @@ auth.post("/logout", async (c) => {
 });
 
 auth.post("/logout-all", async (c) => {
+	const t = tOf(c);
 	const count = await revokeAllSessions(c);
 	clearSessionCookie(c);
 	await writeAudit(c.env.DB, {
 		entity: "auth",
 		entityId: "1",
 		action: "security",
-		note: `登出所有设备（${count} 个会话）`,
+		note: t("audit.logoutAll", { count }),
 	});
 	return ok(c, { revoked: count });
 });
 
 auth.post("/change-password", async (c) => {
+	const t = tOf(c);
 	const session = c.get("session");
 	if (!session) throw unauthorized();
 
 	const row = await getAuth(c.env.DB);
-	if (!row) throw conflict("尚未初始化", "not_initialized");
+	if (!row) throw conflict(t("error.not_initialized"), "not_initialized");
 
-	const payload = await body(c);
+	const payload = await body(c, t);
 	const oldCredential = parseCredential(payload.oldCredential);
 	if (!(await verifyCredential(oldCredential, row.verifier_salt, row.verifier))) {
 		await registerFailure(c.env.DB);
-		throw unauthorized("当前密码不正确");
+		throw unauthorized(t("error.current_password_incorrect"));
 	}
 
 	const newCredential = parseCredential(payload.newCredential);
@@ -216,7 +227,7 @@ auth.post("/change-password", async (c) => {
 		entity: "auth",
 		entityId: "1",
 		action: "security",
-		note: "修改密码，并吊销其他所有会话",
+		note: t("audit.changePassword"),
 	});
 
 	return ok(c, { changed: true });

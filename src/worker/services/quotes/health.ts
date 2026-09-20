@@ -1,4 +1,5 @@
 import { isRecord } from "../../core/utils";
+import { makeTranslator, type Translator } from "../../../shared/i18n";
 
 /**
  * 数据源健康度与限流冷却
@@ -83,6 +84,7 @@ export function applyHealth(
 	providerId: string,
 	result: { ok: boolean; status?: number; error?: string },
 	now = new Date(),
+	t: Translator = makeTranslator("zh"),
 ): ProviderHealth {
 	const current = health[providerId] ?? { failures: 0 };
 	const next: ProviderHealth = { ...health };
@@ -113,8 +115,11 @@ export function applyHealth(
 		cooldownUntil: shouldCooldown ? new Date(now.getTime() + cooldownMs).toISOString() : undefined,
 		cooldownReason: shouldCooldown
 			? rateLimited
-				? `被限流（${result.error ?? "HTTP 429"}），暂停 ${Math.round(cooldownMs / 60_000)} 分钟`
-				: `连续失败 ${failures} 次，暂停 ${Math.round(cooldownMs / 60_000)} 分钟`
+				? t("quote.cooldownRateLimit", {
+						error: result.error ?? "HTTP 429",
+						minutes: Math.round(cooldownMs / 60_000),
+					})
+				: t("quote.cooldownFailures", { count: failures, minutes: Math.round(cooldownMs / 60_000) })
 			: undefined,
 	};
 	return next;

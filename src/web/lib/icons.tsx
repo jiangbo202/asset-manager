@@ -1,4 +1,13 @@
 import type { AccountKind } from "../../shared/labels";
+import { useT } from "./i18n";
+
+/** 分组名 → i18n key */
+const GROUP_KEYS: Record<string, string> = {
+	"券商 / 交易": "iconGroup.brokerTrade",
+	加密平台: "iconGroup.exchange",
+	"银行 / 现金": "iconGroup.bank",
+	通用: "iconGroup.generic",
+};
 
 /**
  * 平台图标库（PRD FR-2.2 / D10）
@@ -170,6 +179,7 @@ export function IconPicker({
 	value: string | null;
 	onChange: (key: string | null) => void;
 }) {
+	const t = useT();
 	const groups = [...new Set(BRAND_ICONS.map((icon) => icon.group))];
 
 	return (
@@ -177,7 +187,7 @@ export function IconPicker({
 			{groups.map((group) => (
 				<div key={group}>
 					<div className="small muted" style={{ margin: "8px 0 6px" }}>
-						{group}
+						{GROUP_KEYS[group] ? t(GROUP_KEYS[group]) : group}
 					</div>
 					<div className="icon-grid">
 						{BRAND_ICONS.filter((icon) => icon.group === group).map((icon) => (
@@ -201,8 +211,8 @@ export function IconPicker({
 			))}
 			<div className="small muted" style={{ marginTop: 8 }}>
 				{value
-					? `已选：${resolveIcon(value).label}（再点一次可取消，取消后用名称首字母）`
-					: "未选择：将使用账户名称首字母 + 自动配色"}
+					? t("iconPicker.selected", { label: resolveIcon(value).label })
+					: t("iconPicker.none")}
 			</div>
 		</div>
 	);

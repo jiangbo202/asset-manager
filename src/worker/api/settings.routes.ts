@@ -1,4 +1,5 @@
 import { Hono } from "hono";
+import { tOf } from "../core/i18n";
 import type { AppEnv } from "../types";
 import { badRequest, notFound, ok } from "../core/errors";
 import { writeAudit } from "../core/audit";
@@ -51,16 +52,24 @@ settings.get("/", async (c) => {
 });
 
 settings.put("/", async (c) => {
-	const payload = asRecord(await c.req.json());
+		const t = tOf(c);
+	const payload = asRecord(await c.req.json(), t);
 	const before = await getSettings(c.env.DB);
 
 	if (payload.displayCurrency !== undefined) {
-		const currency = requireCurrency(payload, "displayCurrency");
+		const currency = requireCurrency(payload, "displayCurrency", t);
 		await setSetting(c.env.DB, SETTING_DISPLAY_CURRENCY, currency);
 	}
 	if (payload.snapshotHourUtc !== undefined) {
-		const hour = requireNumber(payload, "snapshotHourUtc", { label: "快照小时", min: 0, max: 23 });
+		const hour = requireNumber(payload, "snapshotHourUtc", { labelKey: "field.snapshotHour", min: 0, max: 23 }, t);
 		await setSetting(c.env.DB, "snapshot_hour_utc", String(Math.round(hour)));
+	}
+	if (payload.language !== undefined) {
+		const value = requireString(payload, "language", { labelKey: "field.language", max: 10 }, t);
+		if (!["auto", "zh", "en"].includes(value)) {
+			throw badRequest(t("error.field_enum", { label: t("field.language"), allowed: "auto / zh / en" }));
+		}
+		await setSetting(c.env.DB, "language", value);
 	}
 	if (payload.marketDataEnabled !== undefined) {
 		await setSetting(c.env.DB, "market_data_enabled", payload.marketDataEnabled ? "1" : "0");
@@ -68,7 +77,7 @@ settings.put("/", async (c) => {
 
 	// 数据源开关 + 自定义源配置
 	if (payload.providerConfig !== undefined) {
-		const config = asRecord(payload.providerConfig, "providerConfig");
+		const config = asRecord(payload.providerConfig, t);
 		const enabledRaw = isRecord(config.enabled) ? config.enabled : {};
 		const enabled: Record<string, boolean> = {};
 		for (const [key, value] of Object.entries(enabledRaw)) {
@@ -98,7 +107,7 @@ settings.put("/", async (c) => {
 
 	// API Key：与已有 Key 合并后整体加密存储（传空字符串表示删除）
 	if (payload.providerKeys !== undefined) {
-		const incoming = asRecord(payload.providerKeys, "providerKeys");
+		const incoming = asRecord(payload.providerKeys, t);
 		const plain = await decryptSecret(before.provider_keys ?? "", c.env.SESSION_SECRET);
 		const merged: Record<string, string> = plain ? (JSON.parse(plain) as Record<string, string>) : {};
 		for (const [key, value] of Object.entries(incoming)) {
@@ -129,11 +138,12 @@ settings.get("/fx", async (c) => {
 });
 
 settings.put("/fx", async (c) => {
-	const payload = asRecord(await c.req.json());
-	const base = requireCurrency(payload, "base");
-	const quote = requireCurrency(payload, "quote");
-	if (base === quote) throw badRequest("基准币种与目标币种不能相同");
-	const rate = requireNumber(payload, "rate", { label: "汇率", min: 0.0000001, max: 1e9 });
+		const t = tOf(c);
+	const payload = asRecord(await c.req.json(), t);
+	const base = requireCurrency(payload, "base", t);
+	const quote = requireCurrency(payload, "quote", t);
+	if (base === quote) throw badRequest(t("error.invalid_field"));
+	const rate = requireNumber(payload, "rate", { labelKey: "field.rate", min: 0.0000001, max: 1e9 }, t);
 
 	await upsertFxRate(c.env.DB, base, quote, rate);
 	await writeAudit(c.env.DB, {
@@ -146,9 +156,10 @@ settings.put("/fx", async (c) => {
 });
 
 settings.delete("/fx", async (c) => {
-	const base = requireString({ base: c.req.query("base") }, "base", { label: "基准币种", max: 5 }).toUpperCase();
-	const quote = requireString({ quote: c.req.query("quote") }, "quote", { label: "目标币种", max: 5 }).toUpperCase();
-	if (!(await deleteFxRate(c.env.DB, base, quote))) throw notFound("该汇率不存在");
+		const t = tOf(c);
+	const base = requireString({ base: c.req.query("base") }, "base", { labelKey: "field.base", max: 5 }, t).toUpperCase();
+	const quote = requireString({ quote: c.req.query("quote") }, "quote", { labelKey: "field.quote", max: 5 }, t).toUpperCase();
+	if (!(await deleteFxRate(c.env.DB, base, quote))) throw notFound(t("error.not_found"));
 	await writeAudit(c.env.DB, {
 		entity: "fx",
 		entityId: `${base}:${quote}`,

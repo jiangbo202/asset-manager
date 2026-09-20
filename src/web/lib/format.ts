@@ -1,9 +1,16 @@
+import type { Translator } from "../../shared/i18n";
 import { currencySymbol } from "../../shared/labels";
+
+/** 数字格式跟随界面语言（浏览器自带的 locale 映射） */
+function locale(): string {
+	if (typeof navigator === "undefined") return "zh-CN";
+	return (navigator.language ?? "zh-CN").startsWith("zh") ? "zh-CN" : "en-US";
+}
 
 /** 金额：带币种符号，千分位，默认 2 位小数 */
 export function money(value: number | null | undefined, currency: string, digits = 2): string {
 	if (value === null || value === undefined || !Number.isFinite(value)) return "—";
-	const formatted = value.toLocaleString("zh-CN", {
+	const formatted = value.toLocaleString(locale(), {
 		minimumFractionDigits: digits,
 		maximumFractionDigits: digits,
 	});
@@ -12,7 +19,7 @@ export function money(value: number | null | undefined, currency: string, digits
 
 export function number(value: number | null | undefined, digits = 4): string {
 	if (value === null || value === undefined || !Number.isFinite(value)) return "—";
-	return value.toLocaleString("zh-CN", { maximumFractionDigits: digits });
+	return value.toLocaleString(locale(), { maximumFractionDigits: digits });
 }
 
 export function percent(value: number | null | undefined, digits = 1): string {
@@ -41,22 +48,22 @@ export function dateTime(iso: string | null | undefined): string {
 	if (!iso) return "—";
 	const date = new Date(iso);
 	if (Number.isNaN(date.getTime())) return "—";
-	return date.toLocaleString("zh-CN", { hour12: false });
+	return date.toLocaleString(locale(), { hour12: false });
 }
 
 export function dateOnly(iso: string | null | undefined): string {
 	if (!iso) return "—";
 	const date = new Date(iso);
 	if (Number.isNaN(date.getTime())) return "—";
-	return date.toLocaleDateString("zh-CN");
+	return date.toLocaleDateString(locale());
 }
 
 /** 相对时间：用于"价格最后更新" */
-export function relativeDays(days: number | null | undefined): string {
-	if (days === null || days === undefined) return "从未更新";
-	if (days <= 0) return "今天";
-	if (days === 1) return "昨天";
-	return `${days} 天前`;
+export function relativeDays(t: Translator, days: number | null | undefined): string {
+	if (days === null || days === undefined) return t("time.never");
+	if (days <= 0) return t("time.today");
+	if (days === 1) return t("time.yesterday");
+	return t("time.daysAgo", { days });
 }
 
 export function stalenessClass(days: number | null | undefined): string {

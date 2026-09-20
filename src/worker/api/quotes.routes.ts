@@ -8,12 +8,14 @@ import { lookupSymbol } from "../services/quotes/lookup";
 import { getSetting } from "../data/settings.repo";
 import { decryptSecret } from "../core/secrets";
 import { asRecord, requireString } from "./validate";
+import { tOf } from "../core/i18n";
 
 const quotes = new Hono<AppEnv>();
 
 /** 手动刷新行情（设置页按钮 / 总览页按钮） */
 quotes.post("/refresh", async (c) => {
-	const report = await refreshQuotes(c.env, { trigger: "manual" });
+	const t = tOf(c);
+	const report = await refreshQuotes(c.env, { trigger: "manual", t });
 
 	await writeAudit(c.env.DB, {
 		entity: "quotes",
@@ -26,7 +28,11 @@ quotes.post("/refresh", async (c) => {
 			failed: report.failed.length,
 		},
 		source: "system",
-		note: `手动刷新行情：更新 ${report.updated} 条价格、${report.fxUpdated} 条汇率，失败 ${report.failed.length} 条`,
+		note: t("audit.refreshQuotes", {
+			updated: report.updated,
+			fxUpdated: report.fxUpdated,
+			failed: report.failed.length,
+		}),
 	});
 
 	return ok(c, { report });
@@ -42,9 +48,10 @@ quotes.get("/status", async (c) => {
  * 持仓表单用它做"输入代码自动填名称"与"一键取最新价"
  */
 quotes.get("/lookup", async (c) => {
+	const t = tOf(c);
 	const symbol = (c.req.query("symbol") ?? "").trim();
-	if (!symbol) throw badRequest("请提供 symbol 参数");
-	if (symbol.length > 40) throw badRequest("代码过长");
+	if (!symbol) throw badRequest(t("error.lookupSymbolRequired"));
+	if (symbol.length > 40) throw badRequest(t("error.lookupSymbolTooLong"));
 
 	const result = await lookupSymbol(c.env, {
 		symbol,
@@ -57,14 +64,15 @@ quotes.get("/lookup", async (c) => {
 
 /** 单点测试：设置页里验证某个数据源对某个代码能不能取到价 */
 quotes.post("/test", async (c) => {
-	const payload = asRecord(await c.req.json());
-	const provider = requireString(payload, "provider", { label: "数据源", max: 20 }) as ProviderId;
-	const symbol = requireString(payload, "symbol", { label: "代码", max: 40 });
-	const kind = (requireString(payload, "kind", { label: "类型", max: 10 }) || "stock") as QuoteKind;
-	const currency = requireString(payload, "currency", { label: "币种", max: 5 }).toUpperCase();
+	const t = tOf(c);
+	const payload = asRecord(await c.req.json(), t);
+	const provider = requireString(payload, "provider", { labelKey: "field.provider", max: 20 }, t) as ProviderId;
+	const symbol = requireString(payload, "symbol", { labelKey: "field.symbol", max: 40 }, t);
+	const kind = (requireString(payload, "kind", { labelKey: "field.type", max: 10 }, t) || "stock") as QuoteKind;
+	const currency = requireString(payload, "currency", { labelKey: "field.currency", max: 5 }, t).toUpperCase();
 	const market = typeof payload.market === "string" ? payload.market : null;
 
-	if (!["crypto", "stock", "fx"].includes(kind)) throw badRequest("kind 只能是 crypto / stock / fx");
+	if (!["crypto", "stock", "fx"].includes(kind)) throw badRequest(t("error.kindInvalid"));
 
 	const raw = await getSetting(c.env.DB, "provider_config");
 	const settings = parseProviderSettings(raw);

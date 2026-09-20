@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import type { TrendPoint } from "../../shared/api-types";
-import { CLASS_LABELS, type AssetClass } from "../../shared/labels";
+import { classLabel } from "../../shared/labels";
 import { money } from "./format";
+import { useT } from "./i18n";
 
 /**
  * 每日走势图：手写 SVG（面积 + 折线 + 悬浮提示）
@@ -52,15 +53,12 @@ export function TrendChart({
 	stacked?: boolean;
 	palette: string[];
 }) {
+	const t = useT();
 	const [containerRef, width] = useElementWidth<HTMLDivElement>();
 	const [hover, setHover] = useState<number | null>(null);
 
 	if (points.length === 0) {
-		return (
-			<div className="empty">
-				还没有历史快照。快照每天自动生成一次，也可以在「设置 → 行情与快照」里手动拍一张。
-			</div>
-		);
+		return <div className="empty">{t("dashboard.trendEmpty")}</div>;
 	}
 
 	const padding = { top: 16, right: 12, bottom: 26, left: 54 };
@@ -239,7 +237,10 @@ export function TrendChart({
 						left: Math.min(Math.max(x(hover ?? 0) - 80, 0), Math.max(width - 180, 0)),
 					}}
 				>
-					<div className="small muted">{hoverPoint.date}{hoverPoint.filled && "（沿用前一日）"}</div>
+					<div className="small muted">
+						{hoverPoint.date}
+						{hoverPoint.filled && t("dashboard.filledDay")}
+					</div>
 					<div style={{ fontWeight: 600 }}>{money(hoverValue.total, currency)}</div>
 					{stacked &&
 						hoverValue.segments
@@ -248,9 +249,7 @@ export function TrendChart({
 							.map((segment) => (
 								<div key={segment.key} className="small" style={{ display: "flex", gap: 6 }}>
 									<span className="swatch" style={{ background: classColor.get(segment.key) }} />
-									<span style={{ flex: 1 }}>
-										{CLASS_LABELS[segment.key as AssetClass] ?? segment.key}
-									</span>
+									<span style={{ flex: 1 }}>{classLabel(t, segment.key)}</span>
 									<span>{money(segment.to - segment.from, currency, 0)}</span>
 								</div>
 							))}
@@ -262,7 +261,7 @@ export function TrendChart({
 					{classes.map((key) => (
 						<span key={key} className="legend-row" style={{ width: "auto", fontSize: 12 }}>
 							<span className="swatch" style={{ background: classColor.get(key) }} />
-							{CLASS_LABELS[key as AssetClass] ?? key}
+							{classLabel(t, key)}
 						</span>
 					))}
 				</div>

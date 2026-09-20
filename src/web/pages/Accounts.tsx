@@ -1,9 +1,10 @@
 import { useState } from "react";
 import { api, type AccountDto } from "../lib/api";
 import { useAsync, useSubmit } from "../lib/useAsync";
-import { money, percent } from "../lib/format";
 import { BrandIcon, defaultIconFor, IconPicker } from "../lib/icons";
-import { ACCOUNT_KINDS, KIND_LABELS, MARKET_LABELS, MARKETS, type AccountKind, type Market } from "../../shared/labels";
+import { useT } from "../lib/i18n";
+import { money, percent } from "../lib/format";
+import { ACCOUNT_KINDS, kindLabel, marketLabel, MARKETS, type AccountKind, type Market } from "../../shared/labels";
 
 const CURRENCIES = ["USD", "HKD", "CNY"];
 
@@ -26,6 +27,7 @@ const emptyForm = (): FormState => ({
 });
 
 export function AccountsPage() {
+	const t = useT();
 	const [showArchived, setShowArchived] = useState(false);
 	const accounts = useAsync<{ items: AccountDto[] }>(() => api.accounts.list(showArchived), [showArchived]);
 	const portfolio = useAsync(() => api.portfolio(), []);
@@ -56,7 +58,7 @@ export function AccountsPage() {
 	const submit = async (event: React.FormEvent) => {
 		event.preventDefault();
 		if (form.name.trim() === "") {
-			setError("账户名称不能为空");
+			setError(t("accounts.errorNameRequired"));
 			return;
 		}
 		await run(async () => {
@@ -77,17 +79,18 @@ export function AccountsPage() {
 	};
 
 	const remove = async (account: AccountDto) => {
-		const confirmed = window.confirm(`确定删除账户「${account.name}」？该操作会记录在操作历史中。`);
+		const confirmed = window.confirm(t("accounts.confirmDelete", { name: account.name }));
 		if (!confirmed) return;
 		await run(async () => {
 			try {
 				await api.accounts.remove(account.id);
 			} catch {
-				const cascade = window.confirm("该账户下还有持仓，是否连同持仓一起删除？");
+				const cascade = window.confirm(t("accounts.confirmCascade"));
 				if (!cascade) return;
 				await api.accounts.remove(account.id, true);
 			}
 			accounts.reload();
+			portfolio.reload();
 		});
 	};
 
@@ -95,6 +98,7 @@ export function AccountsPage() {
 		await run(async () => {
 			await api.accounts.update(account.id, { archived: account.archived !== 1 });
 			accounts.reload();
+			portfolio.reload();
 		});
 	};
 
@@ -106,7 +110,7 @@ export function AccountsPage() {
 	return (
 		<>
 			<div className="section-head">
-				<h2>账户</h2>
+				<h2>{t("accounts.title")}</h2>
 				<div className="spacer" />
 				<label className="small muted" style={{ display: "inline-flex", gap: 6, alignItems: "center" }}>
 					<input
@@ -115,10 +119,10 @@ export function AccountsPage() {
 						style={{ width: "auto" }}
 						onChange={(e) => setShowArchived(e.target.checked)}
 					/>
-					显示已归档
+					{t("accounts.showArchived")}
 				</label>
 				<button className="primary" onClick={startCreate}>
-					新建账户
+					{t("accounts.create")}
 				</button>
 			</div>
 
@@ -128,16 +132,16 @@ export function AccountsPage() {
 				<form className="card panel" onSubmit={submit} style={{ marginBottom: 16 }}>
 					<div className="row">
 						<label className="field">
-							<span>名称</span>
+							<span>{t("accounts.name")}</span>
 							<input
 								value={form.name}
 								onChange={(e) => setForm({ ...form, name: e.target.value })}
-								placeholder="如：盈透证券主账户"
+								placeholder={t("accounts.namePlaceholder")}
 								required
 							/>
 						</label>
 						<label className="field">
-							<span>类型</span>
+							<span>{t("accounts.kind")}</span>
 							<select
 								value={form.kind}
 								onChange={(e) => {
@@ -152,13 +156,13 @@ export function AccountsPage() {
 							>
 								{ACCOUNT_KINDS.map((kind) => (
 									<option key={kind} value={kind}>
-										{KIND_LABELS[kind]}
+										{kindLabel(t, kind)}
 									</option>
 								))}
 							</select>
 						</label>
 						<label className="field">
-							<span>币种</span>
+							<span>{t("accounts.currency")}</span>
 							<select value={form.currency} onChange={(e) => setForm({ ...form, currency: e.target.value })}>
 								{CURRENCIES.map((currency) => (
 									<option key={currency} value={currency}>
@@ -169,15 +173,15 @@ export function AccountsPage() {
 						</label>
 						{form.kind !== "cash" && (
 							<label className="field">
-								<span>市场</span>
+								<span>{t("accounts.market")}</span>
 								<select
 									value={form.market}
 									onChange={(e) => setForm({ ...form, market: e.target.value as Market | "" })}
 								>
-									<option value="">未指定</option>
+									<option value="">{t("mkt.none")}</option>
 									{MARKETS.map((market) => (
 										<option key={market} value={market}>
-											{MARKET_LABELS[market]}
+											{marketLabel(t, market)}
 										</option>
 									))}
 								</select>
@@ -186,18 +190,18 @@ export function AccountsPage() {
 					</div>
 
 					<label className="field">
-						<span>备注（可选）</span>
+						<span>{t("accounts.note")}</span>
 						<input value={form.note} onChange={(e) => setForm({ ...form, note: e.target.value })} />
 					</label>
 
 					<label className="field">
-						<span>平台图标</span>
+						<span>{t("accounts.icon")}</span>
 					</label>
 					<IconPicker value={form.iconKey} onChange={(iconKey) => setForm({ ...form, iconKey })} />
 
 					<div className="row" style={{ marginTop: 16 }}>
 						<button className="primary" type="submit" disabled={pending}>
-							{pending ? "保存中…" : editingId ? "保存修改" : "创建账户"}
+							{pending ? t("common.saving") : editingId ? t("common.saveChanges") : t("accounts.createSubmit")}
 						</button>
 						<button
 							type="button"
@@ -206,31 +210,31 @@ export function AccountsPage() {
 								setEditingId(null);
 							}}
 						>
-							取消
+							{t("common.cancel")}
 						</button>
 					</div>
 				</form>
 			)}
 
 			{!accounts.data ? (
-				<div className="empty">加载中…</div>
+				<div className="empty">{t("common.loading")}</div>
 			) : items.length === 0 ? (
 				<div className="card empty">
-					{showArchived ? "没有账户（含已归档）。" : "还没有账户。点击右上角「新建账户」开始。"}
+					{showArchived ? t("accounts.emptyWithArchived") : t("accounts.empty")}
 				</div>
 			) : (
 				<div className="card table-wrap">
 					<table>
 						<thead>
 							<tr>
-								<th className="left">账户</th>
-								<th className="left">类型</th>
-								<th className="left">市场</th>
-								<th className="left">币种</th>
-								<th className="left">备注</th>
-								<th>市值（{displayCurrency}）</th>
-								<th>占比</th>
-								<th>操作</th>
+								<th className="left">{t("accounts.colAccount")}</th>
+								<th className="left">{t("accounts.colKind")}</th>
+								<th className="left">{t("accounts.colMarket")}</th>
+								<th className="left">{t("accounts.colCurrency")}</th>
+								<th className="left hide-sm">{t("accounts.colNote")}</th>
+								<th>{t("accounts.colValue", { currency: displayCurrency })}</th>
+								<th>{t("accounts.colShare")}</th>
+								<th>{t("accounts.colActions")}</th>
 							</tr>
 						</thead>
 						<tbody>
@@ -240,32 +244,32 @@ export function AccountsPage() {
 										<div className="cell-account">
 											<BrandIcon iconKey={account.icon_key} name={account.name} />
 											{account.name}
-											{account.archived === 1 && <span className="badge">已归档</span>}
+											{account.archived === 1 && <span className="badge">{t("accounts.archivedBadge")}</span>}
 										</div>
 									</td>
-									<td className="left">{KIND_LABELS[account.kind]}</td>
+									<td className="left">{kindLabel(t, account.kind)}</td>
 									<td className="left">
-										{account.market ? (MARKET_LABELS[account.market as Market] ?? account.market) : "—"}
+										{account.market ? marketLabel(t, account.market as Market) : t("common.none")}
 									</td>
 									<td className="left">{account.currency}</td>
-									<td className="left muted">{account.note ?? "—"}</td>
+									<td className="left muted hide-sm">{account.note ?? t("common.none")}</td>
 									<td>
 										{account.archived === 1
-											? "—"
+											? t("common.none")
 											: money(shareByAccount.get(account.id)?.value ?? 0, displayCurrency)}
 									</td>
 									<td>
-										{account.archived === 1 ? "—" : percent(shareByAccount.get(account.id)?.share ?? 0)}
+										{account.archived === 1 ? t("common.none") : percent(shareByAccount.get(account.id)?.share ?? 0)}
 									</td>
 									<td>
 										<button className="ghost" onClick={() => startEdit(account)}>
-											编辑
+											{t("common.edit")}
 										</button>
 										<button className="ghost" onClick={() => toggleArchive(account)}>
-											{account.archived === 1 ? "恢复" : "归档"}
+											{account.archived === 1 ? t("accounts.restore") : t("accounts.archive")}
 										</button>
 										<button className="ghost danger" onClick={() => remove(account)}>
-											删除
+											{t("common.delete")}
 										</button>
 									</td>
 								</tr>
@@ -276,7 +280,7 @@ export function AccountsPage() {
 			)}
 
 			<p className="small muted" style={{ marginTop: 12 }}>
-				归档后的账户与其中的持仓不会出现在总览与统计里，但数据保留、可随时恢复。
+				{t("accounts.archiveHint")}
 			</p>
 		</>
 	);

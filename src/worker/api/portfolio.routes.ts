@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import type { AppEnv } from "../types";
 import { badRequest, ok } from "../core/errors";
+import { tOf } from "../core/i18n";
 import { writeAudit } from "../core/audit";
 import { listHoldings } from "../data/accounts.repo";
 import { listFxRates } from "../data/fx.repo";
@@ -69,9 +70,10 @@ portfolio.get("/snapshots", async (c) => {
 
 /** 立即拍一张快照（不等 Cron） */
 portfolio.post("/snapshots", async (c) => {
+	const t = tOf(c);
 	const body = await c.req.json().catch(() => ({}) as Record<string, unknown>);
 	const date = typeof body?.date === "string" ? body.date : undefined;
-	if (date && !/^\d{4}-\d{2}-\d{2}$/.test(date)) throw badRequest("date 格式应为 YYYY-MM-DD");
+	if (date && !/^\d{4}-\d{2}-\d{2}$/.test(date)) throw badRequest(t("error.dateFormat"));
 
 	const result = await takeSnapshot(c.env.DB, { date, force: true });
 	await writeAudit(c.env.DB, {
@@ -80,16 +82,17 @@ portfolio.post("/snapshots", async (c) => {
 		action: "create",
 		after: { date: result.date, total: result.total, currency: result.currency, holdings: result.holdings },
 		source: "system",
-		note: `手动生成快照（${result.currency} ${result.total}）`,
+		note: t("audit.snapshot", { currency: result.currency, total: result.total }),
 	});
 	return ok(c, result);
 });
 
 portfolio.delete("/snapshots/:date", async (c) => {
+	const t = tOf(c);
 	const date = c.req.param("date");
-	if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) throw badRequest("日期格式应为 YYYY-MM-DD");
+	if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) throw badRequest(t("error.dateFormat"));
 	const deleted = await deleteSnapshot(c.env.DB, date);
-	if (!deleted) throw badRequest("该日期没有快照");
+	if (!deleted) throw badRequest(t("error.noSnapshot"));
 	await writeAudit(c.env.DB, { entity: "snapshot", entityId: date, action: "delete", source: "system" });
 	return ok(c, { deleted: true });
 });

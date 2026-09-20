@@ -103,6 +103,8 @@ export interface FxRateDto {
 	quote: string;
 	rate: number;
 	updated_at: string;
+	/** manual = 手工维护（不会被自动抓取覆盖）；auto = 行情抓取写入 */
+	source: string;
 }
 
 export interface SettingsDto {
@@ -271,6 +273,8 @@ export interface AuthMeDto {
 	expectedSchemaVersion: number;
 	/** 数据库结构落后于代码（需要跑迁移） */
 	migrationRequired: boolean;
+	/** 服务端保存的语言偏好：auto / zh / en */
+	language: string;
 }
 
 export interface OverviewDto {
