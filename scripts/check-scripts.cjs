@@ -48,11 +48,13 @@ for (const [, label, args] of steps) {
 	const script = args.match(/"run",\s*"([^"]+)"/)?.[1];
 	if (!script || !scripts.has(script)) note(`deploy-safe.cjs 步骤「${label}」引用了不存在的脚本 ${script}`);
 }
-// 脚本文件里不能出现 ["wrangler", ...] 这种"把本地二进制当 npm 命令"的写法
+// 脚本文件里不能出现 ["wrangler", ...] 这种"把本地二进制当 npm 命令"的写法。
+// 例外：作为 npx 的参数 —— spawn("npx", ["wrangler", ...]) 是正确用法。
 for (const file of scriptFiles) {
-	if (file === "setup-d1.cjs" || file === "setup-secrets.cjs") continue; // 这两个用 npx，是允许的
 	const content = stripComments(fs.readFileSync(path.join(ROOT, "scripts", file), "utf8"));
-	if (/\[\s*"wrangler"\s*,/.test(content)) {
+	for (const match of content.matchAll(/\[\s*"wrangler"\s*,/g)) {
+		const before = content.slice(Math.max(0, (match.index ?? 0) - 48), match.index);
+		if (/"npx"\s*,\s*$/.test(before)) continue; // 合法：npx 的参数
 		note(`${file} 把 wrangler 当 npm 命令传递了（应改用 npm run 或 npx）`);
 	}
 }

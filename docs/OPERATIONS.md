@@ -94,6 +94,7 @@ npm run deploy:safe
 |---|---|---|
 | Workers 请求 | < 1,000/天 | 100,000/天 |
 | CPU/请求 | 1–3ms（仪表盘、写操作） | 10ms |
+| 查看 CPU/日志 | `npm run watch:cpu`（实时 p50/p95）、`npx wrangler tail`、仪表盘 Metrics | — |
 | D1 行读 | < 50,000/天 | 5,000,000/天 |
 | D1 行写 | < 100/天 | 100,000/天 |
 | D1 存储 | 快照约 1–2MB/年 | 5GB |

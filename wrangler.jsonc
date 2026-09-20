@@ -15,7 +15,7 @@
       // - Deploy to Cloudflare 按钮会在向导里让用户改名，并回写真实 id
       // - 命令行路径由 `npm run setup:d1` 创建/查找到真实 id 后回写本文件
       "database_name": "asset-manager-db",
-      "database_id": "REPLACE_WITH_YOUR_D1_ID",
+      "database_id": "5de5408e-5a3f-4764-9600-cb1a95fb7e0e",
       "migrations_dir": "migrations"
     }
   ],

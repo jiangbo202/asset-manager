@@ -134,7 +134,16 @@ npm run build && npm run preview     # 用构建产物在 workerd 里跑，接�
 npx wrangler tail
 ```
 
-`wrangler tail` 里关注 `cpuTime`：仪表盘与写操作应在 **1–3ms**；偶发超过 10ms 会被 Cloudflare 判为
+`wrangler tail` 的默认输出**不含 `cpuTime`**，用项目自带的脚本来统计：
+
+```bash
+npm run watch:cpu          # 实时打印每次请求的 CPU 时间，Ctrl-C 给出 p50/p95/max
+npm run watch:cpu -- --demo   # 先用合成数据看一眼输出格式
+```
+
+也可以直接看 `wrangler tail --format json` 的原始事件，或仪表盘的 Metrics → CPU time 曲线。
+
+关注 `cpuTime`：仪表盘与写操作应在 **1–3ms**；偶发超过 10ms 会被 Cloudflare 判为
 `exceededCpu` 并返回 502。若持续超标，先看是否有人手动改过代码引入了重计算。
 
 ## 5. 自定义域名（可选）
