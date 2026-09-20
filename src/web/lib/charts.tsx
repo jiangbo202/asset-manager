@@ -117,16 +117,11 @@ export interface TreemapNode {
 		name: string;
 		value: number;
 		/**
-		 * 鼠标悬停时的完整说明。
+		 * 鼠标悬停时的完整说明（可以用 \n 换行）。
 		 * 方块上写不下那么多字（小方块只显示 name），所以两者分开：
 		 * name 是"能认出来这是哪一块"，title 是"完整信息"。
 		 */
 		title?: string;
-		/**
-		 * 方块被点击时传给 `onSelectLeaf` 的值。
-		 * 用于"按标的合并"模式：外层是标的、内层是各账户份额，点内层应当下钻到那个账户。
-		 */
-		selectKey?: string;
 	}>;
 }
 
@@ -212,15 +207,12 @@ export function Treemap({
 	height = 320,
 	colorByChild = false,
 	onSelect,
-	onSelectLeaf,
 }: {
 	items: TreemapNode[];
 	currency: string;
 	height?: number;
 	colorByChild?: boolean;
 	onSelect?: (groupKey: string) => void;
-	/** 点是方块（叶子）而非图例时的回调；取 `child.selectKey`，没给就回退到外层 key */
-	onSelectLeaf?: (key: string) => void;
 }) {
 	const t = useT();
 	const groups = items
@@ -236,11 +228,11 @@ export function Treemap({
 	const leaves: Array<{
 		rect: Rect;
 		name: string;
-		title: string;
+		/** 自定义悬停说明（多行）；没给就用"名称：金额（占比）" */
+		title?: string;
 		value: number;
 		color: string;
 		groupKey: string;
-		selectKey?: string;
 	}> = [];
 	groups.forEach((group, groupIndex) => {
 		const box = groupRects[groupIndex];
@@ -253,11 +245,10 @@ export function Treemap({
 			leaves.push({
 				rect: { x: box.x + innerRect.x, y: box.y + innerRect.y, w: innerRect.w, h: innerRect.h },
 				name: child.name,
-				title: child.title ?? child.name,
+				title: child.title,
 				value: child.value,
 				color: colorByChild ? colorAt(childIndex) : colorAt(groupIndex),
 				groupKey: group.key,
-				selectKey: child.selectKey,
 			});
 		});
 	});
@@ -267,28 +258,23 @@ export function Treemap({
 			<div className="treemap" style={{ height }}>
 				{leaves.map((leaf, index) => {
 					const wide = leaf.rect.w > 9 && leaf.rect.h > 9;
-					const clickable = Boolean(onSelectLeaf ?? onSelect);
 					return (
 						<div
 							key={`${leaf.groupKey}-${leaf.name}-${index}`}
 							className="treemap-cell"
-							title={`${leaf.title}：${money(leaf.value, currency)}（${((leaf.value / total) * 100).toFixed(1)}%）`}
+							title={
+								leaf.title ??
+								`${leaf.name}：${money(leaf.value, currency)}（${((leaf.value / total) * 100).toFixed(1)}%）`
+							}
 							style={{
 								left: `${leaf.rect.x}%`,
 								top: `${leaf.rect.y}%`,
 								width: `${leaf.rect.w}%`,
 								height: `${leaf.rect.h}%`,
 								background: leaf.color,
-								cursor: clickable ? "pointer" : undefined,
+								cursor: onSelect ? "pointer" : undefined,
 							}}
-							onClick={
-								clickable
-									? () => {
-											if (onSelectLeaf) onSelectLeaf(leaf.selectKey ?? leaf.groupKey);
-											else onSelect?.(leaf.groupKey);
-										}
-									: undefined
-							}
+							onClick={onSelect ? () => onSelect(leaf.groupKey) : undefined}
 						>
 							{wide ? leaf.name : ""}
 						</div>

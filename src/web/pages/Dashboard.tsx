@@ -147,55 +147,56 @@ export function DashboardPage() {
 	const treemapItems = useMemo(() => {
 		if (!data) return [];
 
-		// 合并模式：同一标的跨账户合并（外层是标的，内层是各账户的份额）
-		// 分开模式（默认）：外层是账户，内层是标的，并且标签带上账户名——
+		// 分开模式（默认）：外层是账户，内层是标的，标签带上账户名——
 		// 同一个标的在多个券商时，光靠颜色分不清哪一个属于谁。
+		// 合并模式：一个标的 = 一块（跨账户金额相加），账户明细放进悬停提示。
 		if (mergeSymbols) {
-			// 先数一下每个标的出现在几个账户里：出现多次的才需要在方块上标账户名
-			const accountCount = new Map<string, Set<string>>();
-			for (const holding of data.holdings) {
-				if (holding.marketValueDisplay === null) continue;
-				if (zoom && holding.accountId !== zoom) continue;
-				const label = holding.symbol ?? holding.name;
-				const seen = accountCount.get(label) ?? new Set<string>();
-				seen.add(holding.accountId);
-				accountCount.set(label, seen);
-			}
-			const multiAccount = new Set(
-				[...accountCount.entries()].filter(([, accounts]) => accounts.size > 1).map(([label]) => label),
-			);
-
 			const bySymbol = new Map<
 				string,
-				{
-					key: string;
-					name: string;
-					value: number;
-					children: Array<{ key: string; name: string; title: string; value: number; selectKey: string }>;
-				}
+				{ label: string; value: number; parts: Array<{ accountName: string; value: number }> }
 			>();
+			let grandTotal = 0;
 			for (const holding of data.holdings) {
 				if (holding.marketValueDisplay === null) continue;
 				if (zoom && holding.accountId !== zoom) continue;
 				const label = holding.symbol ?? holding.name;
-				const group = bySymbol.get(label) ?? { key: `symbol:${label}`, name: label, value: 0, children: [] };
-				group.children.push({
-					key: holding.id,
-					// 同一标的分散在多个账户时，方块上要写清楚是哪一家（否则看到一排"嘉信"）
-					// 单账户的标的就不加前缀，避免"嘉信现金 · 嘉信"这种冗余
-					name: multiAccount.has(label) ? `${label} · ${holding.accountName}` : label,
-					title: `${label} · ${holding.accountName}`,
-					value: Number(holding.marketValueDisplay.toFixed(2)),
-					selectKey: holding.accountId,
-				});
-				group.value += holding.marketValueDisplay;
-				bySymbol.set(label, group);
+				const entry = bySymbol.get(label) ?? { label, value: 0, parts: [] };
+				entry.value += holding.marketValueDisplay;
+				entry.parts.push({ accountName: holding.accountName, value: holding.marketValueDisplay });
+				bySymbol.set(label, entry);
+				grandTotal += holding.marketValueDisplay;
 			}
+
+			const percent = (value: number) => (grandTotal > 0 ? ((value / grandTotal) * 100).toFixed(1) : "0.0");
 			return [...bySymbol.values()]
-				.map((group) => ({
-					...group,
-					value: Number(group.value.toFixed(2)),
-					children: group.children.sort((a, b) => b.value - a.value),
+				.map((entry) => ({
+					key: `symbol:${entry.label}`,
+					name: entry.label,
+					value: Number(entry.value.toFixed(2)),
+					children: [
+						{
+							key: `merged:${entry.label}`,
+							name: entry.label,
+							value: Number(entry.value.toFixed(2)),
+							// 多行提示：总额 + 每个账户各多少（原生 title 支持 \n 换行）
+							title: [
+								t("dashboard.treemapTotalLine", {
+									name: entry.label,
+									value: money(entry.value, currency),
+									percent: percent(entry.value),
+								}),
+								...entry.parts
+									.sort((a, b) => b.value - a.value)
+									.map((part) =>
+										t("dashboard.treemapAccountLine", {
+											name: part.accountName,
+											value: money(part.value, currency),
+											percent: percent(part.value),
+										}),
+									),
+							].join("\n"),
+						},
+					],
 				}))
 				.sort((a, b) => b.value - a.value);
 		}
@@ -504,7 +505,6 @@ export function DashboardPage() {
 								currency={currency}
 								colorByChild={Boolean(zoom)}
 								onSelect={mergeSymbols ? undefined : (key) => setQuery({ zoom: key })}
-								onSelectLeaf={mergeSymbols ? (key) => setQuery({ zoom: key }) : undefined}
 							/>
 						</div>
 					</div>
