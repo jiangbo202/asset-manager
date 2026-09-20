@@ -112,7 +112,16 @@ export interface TreemapNode {
 	key: string;
 	name: string;
 	value: number;
-	children?: Array<{ key: string; name: string; value: number }>;
+	children?: Array<{
+		key: string;
+		name: string;
+		value: number;
+		/**
+		 * 方块被点击时传给 `onSelectLeaf` 的值。
+		 * 用于"按标的合并"模式：外层是标的、内层是各账户份额，点内层应当下钻到那个账户。
+		 */
+		selectKey?: string;
+	}>;
 }
 
 interface Rect {
@@ -197,12 +206,15 @@ export function Treemap({
 	height = 320,
 	colorByChild = false,
 	onSelect,
+	onSelectLeaf,
 }: {
 	items: TreemapNode[];
 	currency: string;
 	height?: number;
 	colorByChild?: boolean;
 	onSelect?: (groupKey: string) => void;
+	/** 点是方块（叶子）而非图例时的回调；取 `child.selectKey`，没给就回退到外层 key */
+	onSelectLeaf?: (key: string) => void;
 }) {
 	const t = useT();
 	const groups = items
@@ -215,7 +227,14 @@ export function Treemap({
 	const total = groups.reduce((sum, item) => sum + item.value, 0);
 	const groupRects = squarify(groups.map((item) => item.value));
 
-	const leaves: Array<{ rect: Rect; name: string; value: number; color: string; groupKey: string }> = [];
+	const leaves: Array<{
+		rect: Rect;
+		name: string;
+		value: number;
+		color: string;
+		groupKey: string;
+		selectKey?: string;
+	}> = [];
 	groups.forEach((group, groupIndex) => {
 		const box = groupRects[groupIndex];
 		if (!box) return;
@@ -230,6 +249,7 @@ export function Treemap({
 				value: child.value,
 				color: colorByChild ? colorAt(childIndex) : colorAt(groupIndex),
 				groupKey: group.key,
+				selectKey: child.selectKey,
 			});
 		});
 	});
@@ -239,6 +259,7 @@ export function Treemap({
 			<div className="treemap" style={{ height }}>
 				{leaves.map((leaf, index) => {
 					const wide = leaf.rect.w > 9 && leaf.rect.h > 9;
+					const clickable = Boolean(onSelectLeaf ?? onSelect);
 					return (
 						<div
 							key={`${leaf.groupKey}-${leaf.name}-${index}`}
@@ -250,9 +271,16 @@ export function Treemap({
 								width: `${leaf.rect.w}%`,
 								height: `${leaf.rect.h}%`,
 								background: leaf.color,
-								cursor: onSelect ? "pointer" : undefined,
+								cursor: clickable ? "pointer" : undefined,
 							}}
-							onClick={onSelect ? () => onSelect(leaf.groupKey) : undefined}
+							onClick={
+								clickable
+									? () => {
+											if (onSelectLeaf) onSelectLeaf(leaf.selectKey ?? leaf.groupKey);
+											else onSelect?.(leaf.groupKey);
+										}
+									: undefined
+							}
 						>
 							{wide ? leaf.name : ""}
 						</div>

@@ -59,6 +59,7 @@ export const BRAND_ICONS: BrandIcon[] = [
 	{ key: "coinbase", label: "Coinbase", color: "#0052ff", mark: "CB", group: "加密平台" },
 	{ key: "kraken", label: "Kraken", color: "#5741d9", mark: "KR", group: "加密平台" },
 	{ key: "bybit", label: "Bybit", color: "#f7a600", mark: "BY", group: "加密平台" },
+	{ key: "neverless", label: "Neverless", color: "#c6ff4f", mark: "NV", group: "加密平台" },
 	{ key: "bitget", label: "Bitget", color: "#00c2a8", mark: "BG", group: "加密平台" },
 	{ key: "gate", label: "Gate.io", color: "#17e6a1", mark: "G", group: "加密平台" },
 	{ key: "kucoin", label: "KuCoin", color: "#24ae8f", mark: "KC", group: "加密平台" },

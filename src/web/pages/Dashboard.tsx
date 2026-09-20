@@ -59,6 +59,8 @@ export function DashboardPage() {
 	const zoom = query.get("zoom") ?? "";
 	const range = query.get("range") ?? "3M";
 	const stacked = query.get("stack") === "1";
+	// treemap：同一标的跨账户合并统计（默认分开，按账户分组）
+	const mergeSymbols = query.get("merge") === "1";
 	const [refreshing, setRefreshing] = useState(false);
 	const [refreshNote, setRefreshNote] = useState<string | null>(null);
 
@@ -144,6 +146,43 @@ export function DashboardPage() {
 
 	const treemapItems = useMemo(() => {
 		if (!data) return [];
+
+		// 合并模式：同一标的跨账户合并（外层是标的，内层是各账户的份额）
+		// 分开模式（默认）：外层是账户，内层是标的，并且标签带上账户名——
+		// 同一个标的在多个券商时，光靠颜色分不清哪一个属于谁。
+		if (mergeSymbols) {
+			const bySymbol = new Map<
+				string,
+				{
+					key: string;
+					name: string;
+					value: number;
+					children: Array<{ key: string; name: string; value: number; selectKey: string }>;
+				}
+			>();
+			for (const holding of data.holdings) {
+				if (holding.marketValueDisplay === null) continue;
+				if (zoom && holding.accountId !== zoom) continue;
+				const label = holding.symbol ?? holding.name;
+				const group = bySymbol.get(label) ?? { key: `symbol:${label}`, name: label, value: 0, children: [] };
+				group.children.push({
+					key: holding.id,
+					name: holding.accountName,
+					value: Number(holding.marketValueDisplay.toFixed(2)),
+					selectKey: holding.accountId,
+				});
+				group.value += holding.marketValueDisplay;
+				bySymbol.set(label, group);
+			}
+			return [...bySymbol.values()]
+				.map((group) => ({
+					...group,
+					value: Number(group.value.toFixed(2)),
+					children: group.children.sort((a, b) => b.value - a.value),
+				}))
+				.sort((a, b) => b.value - a.value);
+		}
+
 		const groups = new Map<
 			string,
 			{ key: string; name: string; value: number; children: Array<{ key: string; name: string; value: number }> }
@@ -156,7 +195,7 @@ export function DashboardPage() {
 				{ key: holding.accountId, name: holding.accountName, value: 0, children: [] };
 			group.children.push({
 				key: holding.id,
-				name: holding.symbol ?? holding.name,
+				name: `${holding.accountName} ${holding.symbol ?? holding.name}`,
 				value: Number(holding.marketValueDisplay.toFixed(2)),
 			});
 			group.value += holding.marketValueDisplay;
@@ -169,7 +208,7 @@ export function DashboardPage() {
 				children: group.children.sort((a, b) => b.value - a.value),
 			}))
 			.sort((a, b) => b.value - a.value);
-	}, [data, zoom]);
+	}, [data, zoom, mergeSymbols]);
 
 	const rows = useMemo(() => {
 		if (!data) return [];
@@ -212,7 +251,8 @@ export function DashboardPage() {
 
 	const currency = data.displayCurrency;
 	const accountOptions = accounts.data?.items ?? [];
-	const zoomName = treemapItems[0]?.name ?? "";
+	// 下钻时显示的是账户名（不能从 treemapItems 取：合并模式下外层是标的）
+	const zoomName = accounts.data?.items.find((item) => item.id === zoom)?.name ?? "";
 	// 多币种汇总必须用折算后的值（costDisplay / pnlDisplay），否则会把不同币种的数字相加
 	const costTotal = data.holdings.reduce((sum, item) => sum + (item.costDisplay ?? 0), 0);
 	const pnlTotal = data.holdings.reduce((sum, item) => sum + (item.pnlDisplay ?? 0), 0);
@@ -415,16 +455,29 @@ export function DashboardPage() {
 											</button>
 											/ {zoomName}
 										</>
+									) : mergeSymbols ? (
+										t("dashboard.treemapHintMerged")
 									) : (
 										t("dashboard.treemapHint")
 									)}
 								</span>
+								<span className="spacer" style={{ flex: 1 }} />
+								<label className="small" style={{ display: "flex", gap: 6, alignItems: "center", whiteSpace: "nowrap" }}>
+									<input
+										type="checkbox"
+										checked={mergeSymbols}
+										style={{ width: "auto" }}
+										onChange={(e) => setQuery({ merge: e.target.checked ? "1" : null })}
+									/>
+									{t("dashboard.mergeSymbols")}
+								</label>
 							</div>
 							<Treemap
 								items={treemapItems}
 								currency={currency}
 								colorByChild={Boolean(zoom)}
-								onSelect={(key) => setQuery({ zoom: key })}
+								onSelect={mergeSymbols ? undefined : (key) => setQuery({ zoom: key })}
+								onSelectLeaf={mergeSymbols ? (key) => setQuery({ zoom: key }) : undefined}
 							/>
 						</div>
 					</div>

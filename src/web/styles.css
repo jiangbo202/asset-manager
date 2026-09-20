@@ -724,3 +724,18 @@ details.audit .body {
 	padding: 10px 12px;
 	background: var(--surface-2);
 }
+
+/* 历史列表行：谁（标的/名称）与改了什么，不展开就能看懂 */
+.audit-subject {
+	font-weight: 600;
+}
+
+.audit-summary {
+	color: var(--muted);
+}
+
+@media (max-width: 720px) {
+	.audit-summary {
+		display: none;
+	}
+}

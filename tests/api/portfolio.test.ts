@@ -107,13 +107,27 @@ describe("账户 / 持仓 / 组合视图", () => {
 			.all<{ price: number }>();
 		expect(priceRows.results?.map((row) => row.price)).toEqual([200, 250]);
 
-		const audit = await call<Envelope<{ total: number; items: Array<{ entity: string; diff: unknown[] }> }>>(
-			"/api/history",
-			{ cookie },
-		);
+		const audit = await call<
+			Envelope<{
+				total: number;
+				items: Array<{
+					entity: string;
+					diff: Array<{ field: string; from: unknown; to: unknown }>;
+					before: Record<string, unknown> | null;
+					after: Record<string, unknown> | null;
+				}>;
+			}>
+		>("/api/history", { cookie });
 		expect(audit.body.data.total).toBeGreaterThanOrEqual(2);
 		const holdingUpdate = audit.body.data.items.find((item) => item.entity === "holding");
 		expect(holdingUpdate?.diff.length).toBeGreaterThan(0);
+
+		// 前端"操作历史"靠 before/after 里的 symbol/name 显示"改的是谁"，
+		// 而不是把原始 id 摆给用户看 —— 这两个快照必须一直下发
+		expect(holdingUpdate?.after?.symbol).toBe("AAPL");
+		expect(holdingUpdate?.after?.name).toBe("苹果");
+		expect(holdingUpdate?.before?.price).toBe(200);
+		expect(holdingUpdate?.diff).toContainEqual({ field: "price", from: 200, to: 250 });
 	});
 
 	it("删除仍有持仓的账户会被拒绝，除非显式级联", async () => {
