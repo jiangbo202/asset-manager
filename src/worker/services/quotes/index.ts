@@ -351,15 +351,12 @@ export async function refreshQuotes(
 		);
 	}
 
-	if (statements.length > 0) {
-		for (let index = 0; index < statements.length; index += 500) {
-			await db.batch(statements.slice(index, index + 500));
-		}
-	}
-
 	report.finishedAt = nowIso();
-	// 三次写合并成一次 batch：少两次数据库往返
+	// 收尾的 3 次写和上面的价格写入合成一次 batch：
+	// 实测一次往返约等于 5–6 条语句的固定开销，所以能合并就合并。
+	// 代价：这个 batch 是事务性的，写入失败时运行记录也不会落库（日志里仍看得到异常）。
 	await db.batch([
+		...statements,
 		settingStatement(db, "market_data_last_run", report.finishedAt),
 		settingStatement(db, "provider_health", JSON.stringify(health)),
 		db

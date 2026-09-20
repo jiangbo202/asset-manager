@@ -596,7 +596,7 @@ const en: Dict = {
 	"field.timezone": "Time zone",
 	"error.invalidTimezone": "Invalid time zone: {{value}} (use an IANA name such as Asia/Shanghai)",
 	"market.snapshotHourTz": "Daily snapshot hour ({{timezone}} time, 0–23)",
-	"market.snapshotHintTz": "The Cron trigger runs hourly and re-reads settings each time. It acts only once that hour has arrived or passed and the day has no snapshot yet (refresh quotes, then take the snapshot). If the run at that hour does not complete (for example by exceeding the free CPU limit), it is retried in the following hours of the same day. Last quote refresh: {{last}}; next scheduled run: {{next}}",
+	"market.snapshotHintTz": "The Cron trigger runs hourly, re-reads settings each time, and does only one heavy thing per invocation: at the configured hour it refreshes quotes; after that hour, if the day has no snapshot yet, it takes the snapshot (so the snapshot usually lands one hour later, using the prices fetched earlier that day). Whatever step does not complete is retried in the following hours of the same day. Last quote refresh: {{last}}; next scheduled run: {{next}}",
 	"http.apiNotFound": "API endpoint not found",
 };
 

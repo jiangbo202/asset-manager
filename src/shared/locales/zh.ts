@@ -596,7 +596,7 @@ const zh: Dict = {
 	"field.timezone": "时区",
 	"error.invalidTimezone": "时区名称无效：{{value}}（请使用 IANA 名称，如 Asia/Shanghai）",
 	"market.snapshotHourTz": "每日快照时间（{{timezone}} 小时，0–23）",
-	"market.snapshotHintTz": "Worker 的 Cron 每小时跑一次，每次重新读取设置：已到或已过该小时、且当天还没拍快照时才干活（先刷新行情、再拍快照）。到点那次没跑成（例如超出免费版 CPU 限额）当天后续小时会自动补拍。上次行情刷新：{{last}}；下次定时运行：{{next}}",
+	"market.snapshotHintTz": "Worker 的 Cron 每小时跑一次，每次重新读取设置，且一次调用只干一件事：正好到配置的小时 → 刷新行情；已过配置的小时且当天还没快照 → 拍快照（所以快照通常晚一个整点，用的是当天较早刷到的价格）。哪一步没跑成，当天后续小时会自动补做。上次行情刷新：{{last}}；下次定时运行：{{next}}",
 	"http.apiNotFound": "接口不存在",
 };
 

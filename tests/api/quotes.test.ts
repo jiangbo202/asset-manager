@@ -227,48 +227,53 @@ describe("v0.10 行情刷新 / 快照 / 走势", () => {
 		expect(after.body.data.total).toBeCloseTo(43380, 1);
 	});
 
-	it("Cron：小时不匹配不执行，匹配时先刷新行情再拍快照，同一天不重复", async () => {
-		await seed();
-		const now = new Date();
-
-		const wrongHour = await handleCron(env, new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 3, 0, 0)));
-		expect(wrongHour.ran).toBe(false);
-
-		// 默认快照小时是 22（UTC）
-		const atSnapshotHour = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 22, 0, 0));
-		const first = await handleCron(env, atSnapshotHour);
-		expect(first.ran).toBe(true);
-		expect(first.snapshot?.date).toBe(atSnapshotHour.toISOString().slice(0, 10));
-
-		const second = await handleCron(env, atSnapshotHour);
-		expect(second.ran).toBe(false);
-		expect(second.reason).toContain("已有快照");
-	});
-
-	it("Cron：错过配置时间后当天会自动补拍，而不是只能等第二天", async () => {
+	it("Cron：一次调用只干一件重活（先刷行情，快照留给下一个整点）", async () => {
 		await seed();
 		const now = new Date();
 		const at = (hour: number) =>
 			new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), hour, 0, 0));
 
+		const wrongHour = await handleCron(env, at(3));
+		expect(wrongHour.ran).toBe(false);
+
+		// 默认快照小时是 22（UTC）：到点先刷行情，并说明快照留给下一个整点
+		const refreshed = await handleCron(env, at(22));
+		expect(refreshed.ran).toBe(true);
+		expect(refreshed.reason).toContain("快照");
+		expect(refreshed.snapshot).toBeUndefined();
+
+		// 下一个整点：行情当天已刷过 → 拍快照
+		const snapshot = await handleCron(env, at(23));
+		expect(snapshot.ran).toBe(true);
+		expect(snapshot.snapshot?.date).toBe(now.toISOString().slice(0, 10));
+
+		const second = await handleCron(env, at(23));
+		expect(second.ran).toBe(false);
+		expect(second.reason).toContain("已有快照");
+	});
+
+	it("Cron：错过配置时间后当天会自动补做，而不是只能等第二天", async () => {
+		await seed();
+		const now = new Date();
+		const at = (hour: number) =>
+			new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), hour, 0, 0));
+		const today = now.toISOString().slice(0, 10);
+
 		// 默认快照小时是 22（UTC）：21 点还没到 → 不执行
 		expect((await handleCron(env, at(21))).ran).toBe(false);
 
-		// 23 点：已经过了配置时间、当天却还没有快照 → 说明到点那次没跑成，现在补拍
+		// 23 点：已经过了配置时间、当天还没快照 → 直接补拍
+		// （注意：刷新行情只在配置的那个小时做，所以这时不会再刷一次）
 		const catchUp = await handleCron(env, at(23));
 		expect(catchUp.ran).toBe(true);
 		expect(catchUp.reason).toContain("补");
-		expect(catchUp.snapshot?.date).toBe(now.toISOString().slice(0, 10));
+		expect(catchUp.snapshot?.date).toBe(today);
+		expect(catchUp.quotes).toBeUndefined();
 
-		// 同一天再跑：已有快照 → 跳过（补拍不会重复拍）
+		// 同一天再跑：已有快照 → 跳过
 		const again = await handleCron(env, at(23));
 		expect(again.ran).toBe(false);
 		expect(again.reason).toContain("已有快照");
-
-		// 第二天正常到点 → 正常拍（reason 不带"补"）
-		const nextDay = await handleCron(env, new Date(at(22).getTime() + 24 * 3600 * 1000));
-		expect(nextDay.ran).toBe(true);
-		expect(nextDay.reason).toContain("已生成当日快照");
 	});
 
 	it("刷新：分批上限——最旧的优先，超出的留到下一次，下次自然轮到它", async () => {

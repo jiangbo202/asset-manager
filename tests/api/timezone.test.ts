@@ -180,10 +180,16 @@ describe("时区设置与业务口径", () => {
 		expect(skipped.ran).toBe(false);
 		expect(skipped.reason).toContain("Asia/Shanghai");
 
-		const result = await handleCron(env, shanghai2200);
+		// 到点那次先刷行情（一次调用只干一件重活）
+		const refreshed = await handleCron(env, shanghai2200);
+		expect(refreshed.ran).toBe(true);
+		expect(refreshed.snapshot).toBeUndefined();
+
+		// 下一个整点（上海 23:00）拍快照，日期用上海日历日
+		const shanghai2300 = new Date(shanghai2200.getTime() + 3600_000);
+		const result = await handleCron(env, shanghai2300);
 		expect(result.ran).toBe(true);
-		// 快照日期用的是上海日历日
-		expect(result.snapshot?.date).toBe(dateIn("Asia/Shanghai", shanghai2200));
+		expect(result.snapshot?.date).toBe(dateIn("Asia/Shanghai", shanghai2300));
 
 		// 同一时刻如果时区是 UTC：14 点 ≠ 22 点 → 不执行
 		await save({ timezone: "UTC" });

@@ -1,5 +1,5 @@
 import type { Env } from "../types";
-import { getSetting, getSnapshotHour, getTimeZone } from "../data/settings.repo";
+import { getSettings, snapshotHourOf, timeZoneOf } from "../data/settings.repo";
 import { dateIn, hourIn } from "../../shared/time";
 import { refreshQuotes } from "./quotes";
 import { takeSnapshot } from "./snapshots";
@@ -10,21 +10,20 @@ import { takeSnapshot } from "./snapshots";
  * 为什么用"每小时 + 小时闸门"而不是"每天 22:00 精确触发"：
  *  - Worker 的 cron 表达式只能写 UTC，而"快照时间"是用户配置项；
  *    小时闸门让它可配置，且不用改代码/重新部署。
- *  - 顺便具备自愈能力：过了配置时间而当天还没有快照，后续每个小时都会再试一次。
+ *  - 顺便具备自愈能力：过了配置时间而当天的事没做完，后续每个小时会接着做。
  *
- * 顺序：**先刷新行情，再拍快照**，这样快照用的是当天较新的价格。
- *
- * 免费额度约束（免费版每次调用 10ms CPU）：真正的重活是"刷新行情 + 拍快照"这一趟，
- * 其余小时的闸门开销只是两次配置读取。所以重活做两件事控制开销：
- *  1. 持仓分批刷新（见 CRON_MAX_HOLDINGS）
- *  2. 一天只跑一次，其余小时直接返回
+ * **一次调用只干一件重活**（线上实测后的结构调整）：
+ *  正好是配置的小时 → 刷新行情（这一件事线上就要 10ms 左右）
+ *  已过配置的小时且当天还没快照 → 拍快照
+ * 免费版每次调用只有 10ms CPU，把两件事摍在一次调用里（原来就是这样）会稳定超限：
+ * 虽然 Cloudflare 有 CPU 时间结转机制不会每次都报错，但那是借额度，随时会真的失败。
+ * 拆开后两次调用各自都有余量，而快照用的是上一次刷新到的价格——它本来就是日级数据。
  */
 
 /**
  * 一次定时运行最多刷新多少个持仓。
  *
- * CPU 开销大致随标的数量线性增长，而免费版每次调用只有 10ms CPU；
- * 重跑一趟（行情 + 快照）在几条持仓时已经用掉约 7ms，不能让持仓数量无限推高它。
+ * CPU 开销随标的数量增长，而免费版每次调用只有 10ms CPU。
  * 超出上限的持仓会被留到下一次运行（按"最久没更新"排序，所以会公平轮转），
  * 快照照常拍摄，用这些标的当前已知的价格。手动点「立即刷新行情」不受此限制。
  */
@@ -45,8 +44,10 @@ export interface CronResult {
 }
 
 export async function handleCron(env: Env, now = new Date()): Promise<CronResult> {
-	const snapshotHour = await getSnapshotHour(env.DB);
-	const timeZone = await getTimeZone(env.DB);
+	// 一次读出全部设置（早先是两次 getSetting = 两次往返）
+	const settings = await getSettings(env.DB);
+	const snapshotHour = snapshotHourOf(settings);
+	const timeZone = timeZoneOf(settings);
 	const localHour = hourIn(timeZone, now);
 
 	// 还没到配置的小时 → 什么都不做
@@ -62,19 +63,13 @@ export async function handleCron(env: Env, now = new Date()): Promise<CronResult
 	const latest = await env.DB.prepare(`SELECT date FROM snapshots ORDER BY date DESC LIMIT 1`).first<{
 		date: string;
 	}>();
-	if (latest?.date === today) {
-		return { ran: false, reason: "今天已有快照" };
-	}
+	const hasSnapshotToday = latest?.date === today;
 
-	// 走到这里有两种情况：
-	//  - 正好是配置的小时；
-	//  - 已经过了配置的小时，但今天还没有快照 —— 那次没跑成（例如超出免费版 CPU 被中断），
-	//    现在补跑。这让"自愈"能覆盖"到点那次失败"，而不是只能等第二天。
-	const catchUp = localHour > snapshotHour;
-
+	/* ── 阶段一：刷新行情（只在配置的那个小时） ── */
 	let quotes: CronResult["quotes"];
-	const enabled = (await getSetting(env.DB, "market_data_enabled")) !== "0";
-	if (enabled) {
+	const enabled = settings.market_data_enabled !== "0";
+
+	if (enabled && localHour === snapshotHour) {
 		try {
 			const report = await refreshQuotes(env, { trigger: "cron", maxHoldings: CRON_MAX_HOLDINGS });
 			quotes = {
@@ -88,8 +83,20 @@ export async function handleCron(env: Env, now = new Date()): Promise<CronResult
 			// 行情失败不能影响快照：价格陈旧的快照也远比没有快照好
 			console.error("[cron] 行情刷新失败:", error instanceof Error ? error.message : error);
 		}
+
+		// 刷成功就把快照留给下一个整点：一次调用只干一件重活。
+		// 刷新失败（quotes 为空）则直接往下走，否则行情长期失败会导致快照永远拍不了。
+		if (quotes && !hasSnapshotToday) {
+			return { ran: true, reason: "已刷新行情，快照留给下一个整点", quotes };
+		}
 	}
 
+	if (hasSnapshotToday) {
+		return { ran: false, reason: "今天已有快照", quotes };
+	}
+
+	/* ── 阶段二：拍当日快照（包含过了点没拍成的补拍） ── */
+	const catchUp = localHour > snapshotHour;
 	const snapshot = await takeSnapshot(env.DB, { date: today });
 	return {
 		ran: true,
