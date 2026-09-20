@@ -51,8 +51,11 @@ if (fs.existsSync(cloudflareDir)) {
 			[
 				`node_modules 里的 workerd 是 [${installed.join(", ")}]，但当前 node 需要 ${expectedWorkerd}`,
 				`当前 node：${process.version}（${process.platform}-${process.arch}）→ ${process.execPath}`,
-				"这通常是因为依赖是用另一种架构的 node 装的。修法：",
-				"  rm -rf node_modules && npm install",
+				"两种可能，按顺序排查：",
+				"  1) 你换了另一个架构的 node（例如 Apple Silicon 上从 x64 的 node 切到 nvm 的 arm64 node）",
+				"     → 先确认用的是哪个 node，建议 `nvm use`（版本见 .nvmrc）后重试，不要急着重装依赖",
+				"  2) 依赖确实是用别的架构装的",
+				"     → rm -rf node_modules && npm install",
 			].join("\n    "),
 		);
 	}
