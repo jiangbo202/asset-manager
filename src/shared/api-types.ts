@@ -267,6 +267,10 @@ export interface AuthMeDto {
 	setupTokenRequired: boolean;
 	mustChange: boolean;
 	lastLoginAt: string | null;
+	schemaVersion: number;
+	expectedSchemaVersion: number;
+	/** 数据库结构落后于代码（需要跑迁移） */
+	migrationRequired: boolean;
 }
 
 export interface OverviewDto {

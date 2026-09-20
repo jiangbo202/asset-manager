@@ -30,7 +30,10 @@
     "setup:d1": "node scripts/setup-d1.cjs",
     "setup:secrets": "node scripts/setup-secrets.cjs",
     "deploy:safe": "node scripts/deploy-safe.cjs",
-    "deploy": "npm run db:migrate:remote && wrangler deploy"
+    "deploy": "npm run db:migrate:remote && wrangler deploy",
+    "predev": "npm run db:migrate:local",
+    "prepreview": "npm run db:migrate:local && npm run db:migrate:preview",
+    "db:migrate:preview": "wrangler d1 migrations apply DB --local"
   },
   "dependencies": {
     "hono": "^4.13.8",

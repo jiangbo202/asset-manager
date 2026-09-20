@@ -3,6 +3,7 @@ import type { AppEnv } from "../types";
 import { ApiError, badRequest, conflict, ok, unauthorized } from "../core/errors";
 import { writeAudit } from "../core/audit";
 import { getSetting, setSetting, SETTING_DISPLAY_CURRENCY } from "../data/settings.repo";
+import { SCHEMA_VERSION } from "../../shared/version";
 import { getAuth, insertAuthIfAbsent, isInitialized, touchLastLogin, updateCredential } from "../data/auth.repo";
 import {
 	computeVerifier,
@@ -74,12 +75,21 @@ auth.get("/me", async (c) => {
 		mustChange = row?.must_change === 1;
 		lastLoginAt = row?.last_login_at ?? null;
 	}
+
+	// 结构版本检查：库落后于代码时，第一屏就告诉用户怎么升级（而不是等他点进功能页报错）
+	const schemaRaw = await getSetting(c.env.DB, "schema_version");
+	const schemaVersion = Number.parseInt(schemaRaw ?? "0", 10) || 0;
+	const migrationRequired = schemaVersion < SCHEMA_VERSION;
+
 	return ok(c, {
 		initialized,
 		authenticated: Boolean(session) && initialized,
 		setupTokenRequired: true,
 		mustChange,
 		lastLoginAt,
+		schemaVersion,
+		expectedSchemaVersion: SCHEMA_VERSION,
+		migrationRequired,
 	});
 });
 

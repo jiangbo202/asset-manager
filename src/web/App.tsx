@@ -75,6 +75,34 @@ function Gate() {
 	if (me.loading && !me.data) {
 		return <div className="center-screen muted">加载中…</div>;
 	}
+	if (me.data?.migrationRequired || me.errorCode === "migration_required") {
+		return (
+			<div className="center-screen">
+				<div className="card auth-card">
+					<h1>数据库需要升级</h1>
+					<p className="sub">
+						代码是新的，但数据库还停在旧结构（缺少新版本新增的表/字段）。
+						<br />
+						升级是幂等的，不会动已有数据。
+					</p>
+					{me.data?.migrationRequired && (
+						<p className="small muted">
+							当前结构版本 v{me.data.schemaVersion}，代码需要 v{me.data.expectedSchemaVersion}。
+						</p>
+					)}
+					<div className="token-box">
+						<code>npm run db:migrate:local</code>
+					</div>
+					<p className="small muted">
+						线上环境：重新执行 <code>npm run deploy:safe</code>（部署脚本会自动应用迁移），
+						或单独运行 <code>npm run db:migrate:remote</code>。
+					</p>
+					<button onClick={() => me.reload()}>已升级，重试</button>
+				</div>
+			</div>
+		);
+	}
+
 	if (me.error || !me.data) {
 		return (
 			<div className="center-screen">

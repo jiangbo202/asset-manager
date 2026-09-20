@@ -33,6 +33,24 @@ app.onError((err, c) => {
 			err.status as 400,
 		);
 	}
+	// 数据库结构没升级（本地忘了 migrate、线上忘了跑迁移）：给出可直接照做的提示
+	const rawMessage = err instanceof Error ? err.message : String(err);
+	if (/no such table|no such column|has no column named/i.test(rawMessage)) {
+		console.error("[app] 数据库结构未升级:", rawMessage);
+		return c.json(
+			{
+				ok: false,
+				error: {
+					code: "migration_required",
+					message:
+						"数据库结构未升级：本地请运行 `npm run db:migrate:local`，线上请重新部署（部署脚本会自动应用迁移）或运行 `npm run db:migrate:remote`",
+					details: { hint: rawMessage },
+				},
+			},
+			503,
+		);
+	}
+
 	// 请求体不是合法 JSON 等解析错误
 	if (err instanceof SyntaxError) {
 		return c.json({ ok: false, error: { code: "bad_request", message: "请求体不是合法的 JSON" } }, 400);

@@ -160,6 +160,16 @@ Dashboard → Workers & Pages → D1 → 选库 → Time Travel，可以回滚�
 
 ## ❓ FAQ
 
+**升级后打开页面提示"数据库需要升级"？**
+说明数据库结构落后于代码（本地常见于 `git pull` 之后）。按页面上的提示执行：
+
+```bash
+npm run db:migrate:local     # 本地
+npm run db:migrate:remote    # 线上（或直接重新跑 npm run deploy:safe）
+```
+
+迁移是幂等的，不会动已有数据。`npm run dev` / `npm run preview` 现在会先自动跑一次本地迁移，通常不会再遇到。
+
 **忘记密码怎么办？**
 在 Cloudflare Dashboard → Workers & Pages → D1 → `asset-manager-db` → Console 执行：
 

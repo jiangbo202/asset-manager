@@ -654,6 +654,8 @@ export async function applyBackup(
 		);
 	}
 	for (const [key, value] of Object.entries(data.settings)) {
+		// schema_version 属于"这个库自己"的结构标记，不能被备份内容覆盖
+		if (key === "schema_version") continue;
 		statements.push(
 			db
 				.prepare(`INSERT INTO settings (key, value) VALUES (?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value`)

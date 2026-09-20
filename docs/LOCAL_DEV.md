@@ -32,7 +32,7 @@ npm run db:seed:local              # 可选：塞一批示例数据，方便看�
 | 方式 | 命令 | 用途 | 特点 |
 |---|---|---|---|
 | **开发服务器** | `npm run dev` | 日常开发 | Worker 跑在本地 workerd，前端 HMR，改 Worker 代码会热重载且**前端状态不丢**；端口 5173 |
-| **生产预览** | `npm run build && npm run preview` | 上线前验证 | 用构建产物在 workerd 里跑，行为与线上几乎一致（含 `_headers` 安全头、SPA 回退） |
+| **生产预览** | `npm run build && npm run preview` | 上线前验证 | 用构建产物在 workerd 里跑，行为与线上几乎一致（含 `_headers` 安全头、SPA 回退）；会自动应用本地迁移 |
 | **单元/集成测试** | `npm test` | 回归验证 | 跑在真实 workerd 运行时，用本地 D1，不是 jsdom 模拟 |
 
 `npm run dev` 起来后：
@@ -102,6 +102,10 @@ tests/                Vitest（跑在 workerd 里）
 
 **Q：想重新走一遍初始化**
 `npm run db:console:local -- "DELETE FROM auth"`，然后刷新页面。
+
+**Q：页面提示"数据库需要升级 / no such table"**
+`git pull` 拉到含新迁移的代码后，本地库还是旧结构。跑 `npm run db:migrate:local` 即可（`npm run dev` 现在会自动跑）。
+线上对应 `npm run db:migrate:remote` 或重新执行 `npm run deploy:safe`。
 
 **Q：改了 `migrations/0001_init.sql`（还没上线）**
 直接改文件 + `npm run db:reset:local`。
