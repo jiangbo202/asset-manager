@@ -35,3 +35,6 @@ jobs:
 
       - name: Check bundle budget
         run: node scripts/check-bundle.cjs
+
+      - name: Check scripts and docs wiring
+        run: node scripts/check-scripts.cjs

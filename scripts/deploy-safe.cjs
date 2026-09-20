@@ -10,12 +10,16 @@
 const { execFileSync } = require("node:child_process");
 
 const ROOT = process.cwd();
+// 每步都通过 `npm run <script>` 执行：
+//  - 跨平台（Windows 下 node_modules/.bin 的 .cmd 由 npm 处理）
+//  - 脚本名写错会立刻报错，而不是被当成 npm 命令
+//  - tests/scripts.test.ts 会校验这里引用的脚本都真实存在
 const steps = [
-	["检查登录状态", ["wrangler", "whoami"]],
+	["检查登录状态", ["run", "check:auth"]],
 	["创建 / 复用 D1 数据库", ["run", "setup:d1"]],
 	["构建前端与 Worker", ["run", "build"]],
 	["应用 D1 迁移（远程）", ["run", "db:migrate:remote"]],
-	["部署 Worker", ["wrangler", "deploy"]],
+	["部署 Worker", ["run", "deploy:worker"]],
 	["写入 SETUP_TOKEN / SESSION_SECRET", ["run", "setup:secrets"]],
 ];
 
@@ -25,7 +29,8 @@ function run(label, args) {
 		execFileSync("npm", args, { cwd: ROOT, stdio: "inherit" });
 	} catch (error) {
 		console.error(`\n✗ 「${label}」失败，已中止。`);
-		console.error("  常见原因：未登录（npx wrangler login）、API Token 权限不足、网络问题。");
+		console.error("  常见原因：未登录（npx wrangler login）、CLOUDFLARE_API_TOKEN 未设置或权限不足、网络问题。");
+		console.error("  权限要求：Workers 编辑 + D1 编辑。");
 		process.exit(1);
 	}
 }
@@ -43,6 +48,7 @@ console.log(`
 
 常用命令：
   npm run dev              本地开发（数据存在 .wrangler/state，不消耗线上额度）
+  npx wrangler tail        查看线上日志与 CPU 时间（免费版上限 10ms）
   npm run db:migrate:local 给本地数据库应用迁移
   npm run db:seed:local    插入一批示例数据方便调试
   npm run db:reset:local   清空本地数据并重新迁移

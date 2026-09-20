@@ -30,13 +30,16 @@
     "setup:d1": "node scripts/setup-d1.cjs",
     "setup:secrets": "node scripts/setup-secrets.cjs",
     "deploy:safe": "node scripts/deploy-safe.cjs",
-    "deploy": "npm run db:migrate:remote && wrangler deploy",
+    "deploy": "npm run db:migrate:remote && npm run deploy:worker",
     "predev": "npm run db:migrate:local",
     "prepreview": "npm run db:migrate:local && npm run db:migrate:preview",
     "db:migrate:preview": "wrangler d1 migrations apply DB --local",
     "check:bundle": "node scripts/check-bundle.cjs",
-    "verify": "npm run lint && npm test && npm run build && npm run check:bundle",
-    "setup:repo": "node scripts/set-repo.cjs"
+    "verify": "npm run lint && npm test && npm run build && npm run check:bundle && npm run check:scripts",
+    "setup:repo": "node scripts/set-repo.cjs",
+    "check:auth": "wrangler whoami",
+    "deploy:worker": "wrangler deploy",
+    "check:scripts": "node scripts/check-scripts.cjs"
   },
   "dependencies": {
     "hono": "^4.13.8",
