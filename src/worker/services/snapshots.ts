@@ -1,7 +1,7 @@
 import { newId, nowIso } from "../core/utils";
 import { dateIn } from "../../shared/time";
 import { listHoldings } from "../data/accounts.repo";
-import { buildFxLookup, listFxRates } from "../data/fx.repo";
+import { buildFxLookup, listFxRates, type FxRate } from "../data/fx.repo";
 import { getDisplayCurrency, getTimeZone } from "../data/settings.repo";
 import { buildPortfolio } from "./portfolio";
 
@@ -171,16 +171,33 @@ const MAX_POINTS = 400;
 
 /** 按日冻结的汇率表（date -> "BASE:QUOTE" -> rate） */
 async function loadDailyRates(db: D1Database): Promise<Map<string, Map<string, number>>> {
-	const { results } = await db
-		.prepare(`SELECT date, base, quote, rate FROM fx_daily ORDER BY date`)
-		.all<{ date: string; base: string; quote: string; rate: number }>();
+	const { results } = await fxDailyStatement(db).all<{ date: string; base: string; quote: string; rate: number }>();
+	return dailyRatesOf(results);
+}
+
+/** 按日冻结汇率的查询语句（不执行）：便于和别的查询合并成一次 batch */
+export function fxDailyStatement(db: D1Database): D1PreparedStatement {
+	return db.prepare(`SELECT date, base, quote, rate FROM fx_daily ORDER BY date`);
+}
+
+/** fx_daily 行 → date -> (base:quote -> rate) */
+export function dailyRatesOf(
+	rows: Array<{ date: string; base: string; quote: string; rate: number }> | undefined,
+): Map<string, Map<string, number>> {
 	const byDate = new Map<string, Map<string, number>>();
-	for (const row of results ?? []) {
+	for (const row of rows ?? []) {
 		const bucket = byDate.get(row.date) ?? new Map<string, number>();
 		bucket.set(`${row.base}:${row.quote}`, row.rate);
 		byDate.set(row.date, bucket);
 	}
 	return byDate;
+}
+
+/** 快照表的查询语句（不执行） */
+export function snapshotsStatement(db: D1Database, from: string | null): D1PreparedStatement {
+	return from
+		? db.prepare(`SELECT * FROM snapshots WHERE date >= ? ORDER BY date ASC`).bind(from)
+		: db.prepare(`SELECT * FROM snapshots ORDER BY date ASC`);
 }
 
 export function rangeToFromDate(range: TrendRange, today: string): string | null {
@@ -198,19 +215,32 @@ export interface TrendFilters {
 	markets?: string[];
 }
 
+/**
+ * 走势需要的输入数据。
+ * 路由层把这些查询和设置一起放进一次 `db.batch`（少跑几次往返），再传进来，
+ * 否则本函数内部会串行发出 5 条语句。
+ */
+export interface TrendPreload {
+	timeZone: string;
+	fxRates: FxRate[];
+	fxDailyRows: Array<{ date: string; base: string; quote: string; rate: number }>;
+	snapshots: SnapshotRow[];
+}
+
 export async function buildTrendSeries(
 	db: D1Database,
-	options: { range: TrendRange; displayCurrency?: string; filters?: TrendFilters },
+	options: { range: TrendRange; displayCurrency?: string; filters?: TrendFilters; preload?: TrendPreload },
 ): Promise<TrendSeries> {
 	const filters = options.filters ?? {};
-	const timeZone = await getTimeZone(db);
+	const preload = options.preload;
+	const timeZone = preload?.timeZone ?? (await getTimeZone(db));
 	const displayCurrency = options.displayCurrency ?? (await getDisplayCurrency(db));
-	const fxRates = await listFxRates(db);
+	const fxRates = preload?.fxRates ?? (await listFxRates(db));
 	const lookup = buildFxLookup(fxRates);
 	const missingFx = new Set<string>();
 
 	// 按日冻结的汇率：优先使用，缺失时回退到当前汇率
-	const dailyRates = await loadDailyRates(db);
+	const dailyRates = preload ? dailyRatesOf(preload.fxDailyRows) : await loadDailyRates(db);
 	const dailyDates = [...dailyRates.keys()].sort();
 	const rateFor = (date: string, from: string, to: string): { rate: number | null; frozen: boolean } => {
 		if (from === to) return { rate: 1, frozen: true };
@@ -234,14 +264,9 @@ export async function buildTrendSeries(
 	let currentHits = 0;
 
 	const from = rangeToFromDate(options.range, dateIn(timeZone));
-	const { results } = from
-		? await db
-				.prepare(`SELECT * FROM snapshots WHERE date >= ? ORDER BY date ASC`)
-				.bind(from)
-				.all<SnapshotRow>()
-		: await db.prepare(`SELECT * FROM snapshots ORDER BY date ASC`).all<SnapshotRow>();
-
-	const rows = results ?? [];
+	const rows = preload
+		? preload.snapshots
+		: ((await snapshotsStatement(db, from).all<SnapshotRow>()).results ?? []);
 	if (rows.length === 0) {
 		return {
 			displayCurrency,

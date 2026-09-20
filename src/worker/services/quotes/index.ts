@@ -1,7 +1,14 @@
 import { newId, nowIso } from "../../core/utils";
 import { dateIn } from "../../../shared/time";
 import { decryptSecret } from "../../core/secrets";
-import { getSettings, settingStatement, displayCurrencyOf, timeZoneOf } from "../../data/settings.repo";
+import {
+	getSettings,
+	settingStatement,
+	settingsStatement,
+	toSettingsMap,
+	displayCurrencyOf,
+	timeZoneOf,
+} from "../../data/settings.repo";
 import { listHoldings, type HoldingWithAccount } from "../../data/accounts.repo";
 import { listFxRates, upsertAutoFxRate } from "../../data/fx.repo";
 import { applyHealth, cooldownOf, parseHealth, type ProviderHealth } from "./health";
@@ -422,29 +429,40 @@ function countDeferred(reportJson: string | null): number {
 
 export async function getQuoteStatus(env: { DB: D1Database; SESSION_SECRET: string }): Promise<QuoteStatus> {
 	const db = env.DB;
-	const settingsMap = await getSettings(db);
+	// 设置、缓存、最近运行一次 batch 读完（原来是 3 条串行语句）
+	const [settingsResult, cacheResult, runsResult] = await db.batch([
+		settingsStatement(db),
+		db.prepare(
+			`SELECT key, source, symbol, price, currency, fetched_at FROM quote_cache ORDER BY fetched_at DESC LIMIT 100`,
+		),
+		db.prepare(
+			`SELECT id, started_at, trigger, updated, failed, requests, report_json FROM quote_runs ORDER BY started_at DESC LIMIT 10`,
+		),
+	]);
+	const settingsMap = toSettingsMap(settingsResult?.results as Array<{ key: string; value: string }> | undefined);
 	const settings = await providerSettingsFrom(
 		settingsMap.provider_config ?? null,
 		settingsMap.provider_keys ?? null,
 		env.SESSION_SECRET,
 	);
 	const keys = apiKeysOf(settings);
-	const cache = await db
-		.prepare(`SELECT key, source, symbol, price, currency, fetched_at FROM quote_cache ORDER BY fetched_at DESC LIMIT 100`)
-		.all<{ key: string; source: string; symbol: string; price: number; currency: string; fetched_at: string }>();
-	const runs = await db
-		.prepare(
-			`SELECT id, started_at, trigger, updated, failed, requests, report_json FROM quote_runs ORDER BY started_at DESC LIMIT 10`,
-		)
-		.all<{
-			id: string;
-			started_at: string;
-			trigger: string;
-			updated: number;
-			failed: number;
-			requests: number;
-			report_json: string | null;
-		}>();
+	const cache = (cacheResult?.results ?? []) as Array<{
+		key: string;
+		source: string;
+		symbol: string;
+		price: number;
+		currency: string;
+		fetched_at: string;
+	}>;
+	const runs = (runsResult?.results ?? []) as Array<{
+		id: string;
+		started_at: string;
+		trigger: string;
+		updated: number;
+		failed: number;
+		requests: number;
+		report_json: string | null;
+	}>;
 
 	const KIND_LABEL: Record<string, string> = { crypto: "加密", stock: "股票", fx: "汇率" };
 	const health = parseHealth(settingsMap.provider_health ?? null);
@@ -473,8 +491,8 @@ export async function getQuoteStatus(env: { DB: D1Database; SESSION_SECRET: stri
 				};
 			})(),
 		})),
-		cache: cache.results ?? [],
-		recentRuns: (runs.results ?? []).map((run) => ({
+		cache: cache,
+		recentRuns: runs.map((run) => ({
 			id: run.id,
 			started_at: run.started_at,
 			trigger: run.trigger,

@@ -127,6 +127,25 @@ sessions(id PK, created_at, expires_at, last_seen, ua, ip)
 | D1 存储 | 5GB/账号，单库 500MB | 快照一年约 1–2MB |
 | 静态资源 | 20,000 文件 | 首包 91KB gzip + 按需分包 |
 
+### 最贵的操作不是业务逻辑，而是“每条 D1 语句”
+
+实测（真实 workerd，方法见 `tests/api/query-budget.test.ts`）：
+
+- 单条 D1 语句的固定开销约 **0.3ms**（本地 workerd）；线上用 `npm run watch:cpu` 观察到的量级约 **2ms/条**
+- **一次 `db.batch` 里的多条语句只算一次往返**，实测比串行快约 **4 倍**
+
+所以热路径一律“一次 batch 读齐”：
+
+- 每个请求的认证上下文 = **1 次 batch**（session + auth 行；`requireInitialized` / `requireAuth` /
+  需要认证行的路由都直接复用上下文，不再查库）
+- `/api/portfolio`：设置 + 持仓 + 汇率一次 batch
+- `/api/portfolio/history`：设置 + 当前汇率 + 每日冻结汇率一次 batch，再取快照
+- `/api/settings/overview`：8 个 COUNT 合成一条 SQL（子查询）
+- 行情刷新：设置一次读完，收尾 3 次写合成 1 次 batch
+
+`tests/api/query-budget.test.ts` 把每条路由的“语句数 + 往返数”固定成上限：
+不小心加回一次串行查询，CI 会直接报出是哪条 SQL。
+
 > 2026-09 起 D1 免费额度超额会**直接报错**（不再只是告警），所以上述护栏是硬要求，不是优化项。
 
 ## 6. 关键实现细节

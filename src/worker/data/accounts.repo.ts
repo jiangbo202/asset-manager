@@ -146,6 +146,12 @@ export interface HoldingFilter {
 }
 
 export async function listHoldings(db: D1Database, filter: HoldingFilter = {}): Promise<HoldingWithAccount[]> {
+	const { results } = await holdingsStatement(db, filter).all<HoldingWithAccount>();
+	return results ?? [];
+}
+
+/** 持仓查询语句（不执行）：便于和设置/汇率一起放进一次 batch */
+export function holdingsStatement(db: D1Database, filter: HoldingFilter = {}): D1PreparedStatement {
 	const where: string[] = [];
 	const params: unknown[] = [];
 	if (!filter.includeArchived) {
@@ -168,7 +174,7 @@ export async function listHoldings(db: D1Database, filter: HoldingFilter = {}): 
 		params.push(filter.currency);
 	}
 	const clause = where.length > 0 ? `WHERE ${where.join(" AND ")}` : "";
-	const { results } = await db
+	return db
 		.prepare(
 			`SELECT h.*, a.name AS account_name, a.kind AS account_kind, a.icon_key AS account_icon_key,
 			        a.archived AS account_archived
@@ -176,9 +182,7 @@ export async function listHoldings(db: D1Database, filter: HoldingFilter = {}): 
 			 ${clause}
 			 ORDER BY a.sort ASC, h.class ASC, h.symbol ASC, h.created_at ASC`,
 		)
-		.bind(...params)
-		.all<HoldingWithAccount>();
-	return results ?? [];
+		.bind(...params);
 }
 
 export async function getHolding(db: D1Database, id: string): Promise<HoldingRow | null> {

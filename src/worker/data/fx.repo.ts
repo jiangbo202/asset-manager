@@ -20,10 +20,13 @@ export interface FxRate {
 }
 
 export async function listFxRates(db: D1Database): Promise<FxRate[]> {
-	const { results } = await db
-		.prepare(`SELECT base, quote, rate, updated_at, source FROM fx_rates ORDER BY base, quote`)
-		.all<FxRate>();
+	const { results } = await fxRatesStatement(db).all<FxRate>();
 	return results ?? [];
+}
+
+/** 当前汇率查询语句（不执行）：便于和其他查询合并成一次 batch */
+export function fxRatesStatement(db: D1Database): D1PreparedStatement {
+	return db.prepare(`SELECT base, quote, rate, updated_at, source FROM fx_rates ORDER BY base, quote`);
 }
 
 /** 手工维护（设置页调用） */

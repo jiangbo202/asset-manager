@@ -11,9 +11,19 @@ export const SETTING_SETUP_DONE = "setup_done_at";
 export const BUILT_IN_CURRENCIES = ["USD", "HKD", "CNY"] as const;
 
 export async function getSettings(db: D1Database): Promise<Record<string, string>> {
-	const { results } = await db.prepare(`SELECT key, value FROM settings`).all<{ key: string; value: string }>();
+	const { results } = await settingsStatement(db).all<{ key: string; value: string }>();
+	return toSettingsMap(results);
+}
+
+/** 读取全部设置的语句（不执行）：需要和别的查询合并成一次 batch 时用 */
+export function settingsStatement(db: D1Database): D1PreparedStatement {
+	return db.prepare(`SELECT key, value FROM settings`);
+}
+
+/** {key, value} 行 → 普通对象 */
+export function toSettingsMap(rows: Array<{ key: string; value: string }> | undefined): Record<string, string> {
 	const out: Record<string, string> = {};
-	for (const row of results ?? []) out[row.key] = row.value;
+	for (const row of rows ?? []) out[row.key] = row.value;
 	return out;
 }
 

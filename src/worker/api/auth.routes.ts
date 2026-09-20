@@ -2,7 +2,7 @@ import { Hono } from "hono";
 import type { AppEnv } from "../types";
 import { ApiError, badRequest, conflict, ok, unauthorized } from "../core/errors";
 import { writeAudit } from "../core/audit";
-import { getSetting, setSetting, SETTING_DISPLAY_CURRENCY } from "../data/settings.repo";
+import { getSetting, getSettings, setSetting, SETTING_DISPLAY_CURRENCY } from "../data/settings.repo";
 import { SCHEMA_VERSION } from "../../shared/version";
 import { normalizeTimeZone } from "../../shared/time";
 import { getAuth, insertAuthIfAbsent, isInitialized, touchLastLogin, updateCredential } from "../data/auth.repo";
@@ -72,23 +72,23 @@ async function resetFailures(db: D1Database): Promise<void> {
 }
 
 auth.get("/me", async (c) => {
-	const initialized = await isInitialized(c.env.DB);
+	// 初始化状态与会话都已在上下文里（app.ts 用一次 batch 读出），这里不再查库
+	const initialized = Boolean(c.get("auth"));
 	const session = c.get("session");
 	let mustChange = false;
 	let lastLoginAt: string | null = null;
 	if (initialized && session) {
-		const row = await getAuth(c.env.DB);
-		mustChange = row?.must_change === 1;
-		lastLoginAt = row?.last_login_at ?? null;
+		// 只在已登录时回传这两个字段（未登录不应该看到上次登录时间）
+		mustChange = c.get("auth")?.must_change === 1;
+		lastLoginAt = c.get("auth")?.last_login_at ?? null;
 	}
 
-	// 结构版本检查：库落后于代码时，第一屏就告诉用户怎么升级（而不是等他点进功能页报错）
-	const schemaRaw = await getSetting(c.env.DB, "schema_version");
-	const schemaVersion = Number.parseInt(schemaRaw ?? "0", 10) || 0;
+	// 结构版本、语言、时区：一次读完（原来是 3 次单独的 getSetting）
+	const settings = await getSettings(c.env.DB);
+	const schemaVersion = Number.parseInt(settings.schema_version ?? "0", 10) || 0;
 	const migrationRequired = schemaVersion < SCHEMA_VERSION;
-	// 语言与时区偏好：前端首屏就能用服务端设置，而不是等进设置页
-	const language = (await getSetting(c.env.DB, "language")) ?? "auto";
-	const timezone = normalizeTimeZone(await getSetting(c.env.DB, "timezone"));
+	const language = settings.language ?? "auto";
+	const timezone = normalizeTimeZone(settings.timezone);
 
 	return ok(c, {
 		initialized,

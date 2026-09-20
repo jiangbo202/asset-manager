@@ -47,23 +47,33 @@ function readCookie(cookieHeader: string | null, name: string): string | null {
 	return null;
 }
 
-export async function readSession(c: Context<AppEnv>): Promise<SessionRow | null> {
+/**
+ * 会话查询语句（不执行）。
+ * 存在意义：app.ts 要把它与 auth 行的查询合并成一次 `db.batch`，
+ * 每个请求少跑 2 次往返（实测每条 D1 语句约 310µs 本地开销，线上更高）。
+ */
+export async function sessionLookupStatement(c: Context<AppEnv>): Promise<D1PreparedStatement | null> {
 	const token = readCookie(c.req.header("cookie") ?? null, COOKIE_NAME);
 	if (!token) return null;
 
 	const hash = await tokenHash(token);
-	const row = await c.env.DB.prepare(
-		`SELECT id, created_at, expires_at, last_seen, ua, ip FROM sessions WHERE id = ?`,
-	)
-		.bind(hash)
-		.first<SessionRow>();
+	return c.env.DB.prepare(`SELECT id, created_at, expires_at, last_seen, ua, ip FROM sessions WHERE id = ?`).bind(hash);
+}
 
+/** 校验查出来的会话行：过期就删掉并当作未登录 */
+export async function acceptSessionRow(c: Context<AppEnv>, row: SessionRow | null): Promise<SessionRow | null> {
 	if (!row) return null;
 	if (row.expires_at < nowIso()) {
-		await c.env.DB.prepare(`DELETE FROM sessions WHERE id = ?`).bind(hash).run();
+		await c.env.DB.prepare(`DELETE FROM sessions WHERE id = ?`).bind(row.id).run();
 		return null;
 	}
 	return row;
+}
+
+export async function readSession(c: Context<AppEnv>): Promise<SessionRow | null> {
+	const statement = await sessionLookupStatement(c);
+	if (!statement) return null;
+	return acceptSessionRow(c, await statement.first<SessionRow>());
 }
 
 export async function touchSession(c: Context<AppEnv>, sessionId: string): Promise<void> {

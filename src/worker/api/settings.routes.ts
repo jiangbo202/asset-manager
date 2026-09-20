@@ -9,6 +9,8 @@ import {
 	SETTING_DISPLAY_CURRENCY,
 	SETTING_TIMEZONE,
 	setSetting,
+	settingsStatement,
+	toSettingsMap,
 } from "../data/settings.repo";
 import { deleteFxRate, listFxHistory, listFxRates, upsertFxRate } from "../data/fx.repo";
 import { encryptSecret, decryptSecret } from "../core/secrets";
@@ -217,29 +219,36 @@ settings.delete("/fx", async (c) => {
 /** 数据概览：判断是否接近免费额度（PRD FR-7.6） */
 settings.get("/overview", async (c) => {
 	const db = c.env.DB;
-	const [accounts, holdings, audit, priceRows, qtyRows, sessions, snapshots, quotesCached] = await Promise.all([
-		db.prepare(`SELECT COUNT(*) AS total FROM accounts`).first<{ total: number }>(),
-		db.prepare(`SELECT COUNT(*) AS total FROM holdings`).first<{ total: number }>(),
-		db.prepare(`SELECT COUNT(*) AS total FROM audit_log`).first<{ total: number }>(),
-		db.prepare(`SELECT COUNT(*) AS total FROM price_history`).first<{ total: number }>(),
-		db.prepare(`SELECT COUNT(*) AS total FROM qty_history`).first<{ total: number }>(),
-		db.prepare(`SELECT COUNT(*) AS total FROM sessions`).first<{ total: number }>(),
-		db.prepare(`SELECT COUNT(*) AS total FROM snapshots`).first<{ total: number }>(),
-		db.prepare(`SELECT COUNT(*) AS total FROM quote_cache`).first<{ total: number }>(),
+	// 8 个 COUNT 合成一条语句（8 个子查询），再与设置读取一起走一次 batch：
+	// 原来是 8 次串行 COUNT + 1 次设置读取 = 9 条语句、9 次往返
+	const [countsResult, settingsResult] = await db.batch([
+		db.prepare(
+			`SELECT
+				(SELECT COUNT(*) FROM accounts) AS accounts,
+				(SELECT COUNT(*) FROM holdings) AS holdings,
+				(SELECT COUNT(*) FROM audit_log) AS audit_log,
+				(SELECT COUNT(*) FROM price_history) AS price_history,
+				(SELECT COUNT(*) FROM qty_history) AS qty_history,
+				(SELECT COUNT(*) FROM sessions) AS sessions,
+				(SELECT COUNT(*) FROM snapshots) AS snapshots,
+				(SELECT COUNT(*) FROM quote_cache) AS quote_cache`,
+		),
+		settingsStatement(db),
 	]);
-	const values = await getSettings(c.env.DB);
+	const counts = countsResult?.results?.[0] as Record<string, number> | undefined;
+	const settingsMap = toSettingsMap(settingsResult?.results as Array<{ key: string; value: string }> | undefined);
 	return ok(c, {
 		rows: {
-			accounts: accounts?.total ?? 0,
-			holdings: holdings?.total ?? 0,
-			auditLog: audit?.total ?? 0,
-			priceHistory: priceRows?.total ?? 0,
-			qtyHistory: qtyRows?.total ?? 0,
-			sessions: sessions?.total ?? 0,
-			snapshots: snapshots?.total ?? 0,
-			quoteCache: quotesCached?.total ?? 0,
+			accounts: counts?.accounts ?? 0,
+			holdings: counts?.holdings ?? 0,
+			auditLog: counts?.audit_log ?? 0,
+			priceHistory: counts?.price_history ?? 0,
+			qtyHistory: counts?.qty_history ?? 0,
+			sessions: counts?.sessions ?? 0,
+			snapshots: counts?.snapshots ?? 0,
+			quoteCache: counts?.quote_cache ?? 0,
 		},
-		settings: values,
+		settings: settingsMap,
 		limits: {
 			d1RowsReadPerDay: 5_000_000,
 			d1RowsWrittenPerDay: 100_000,

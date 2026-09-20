@@ -71,6 +71,12 @@ export interface AppEnv {
 	Bindings: Env;
 	Variables: {
 		session: SessionRow | null;
+		/**
+		 * auth 行（单用户凭据）。由 app.ts 的上下文中间件与会话一起读出（1 次 batch），
+		 * 所以 requireInitialized / requireAuth / 路由不用再查一次：
+		 * auth 行存在 = 已初始化。
+		 */
+		auth: AuthRow | null;
 		/** 请求语言（由 Accept-Language 判定），用于把提示文案本地化 */
 		lang: "zh" | "en";
 	};
