@@ -47,22 +47,47 @@ export async function upsertFxRate(db: D1Database, base: string, quote: string, 
 
 /** 自动抓取：不覆盖手工维护的记录 */
 export async function upsertAutoFxRate(db: D1Database, base: string, quote: string, rate: number): Promise<boolean> {
-	const now = nowIso();
-	const result = await db
+	const at = nowIso();
+	const result = await autoFxRateStatement(db, base, quote, rate, at).run();
+	if ((result.meta.changes ?? 0) === 0) return false;
+
+	await fxHistoryStatement(db, base, quote, rate, at).run();
+	return true;
+}
+
+/**
+ * 自动汇率的 upsert 语句（不执行）。
+ * `WHERE fx_rates.source = 'auto'` 保证不覆盖手工维护的汇率。
+ * 拆成语句是为了能和行情写入放进同一个 batch：
+ * 原来每个币种都是两次串行往返，币种一多就吃掉免费版的 CPU 预算。
+ */
+export function autoFxRateStatement(
+	db: D1Database,
+	base: string,
+	quote: string,
+	rate: number,
+	at: string = nowIso(),
+): D1PreparedStatement {
+	return db
 		.prepare(
 			`INSERT INTO fx_rates (base, quote, rate, updated_at, source) VALUES (?, ?, ?, ?, 'auto')
 			 ON CONFLICT (base, quote) DO UPDATE SET rate = excluded.rate, updated_at = excluded.updated_at
 			 WHERE fx_rates.source = 'auto'`,
 		)
-		.bind(base, quote, rate, now)
-		.run();
-	if ((result.meta.changes ?? 0) === 0) return false;
+		.bind(base, quote, rate, at);
+}
 
-	await db
+/** 汇率变动历史语句（不执行） */
+export function fxHistoryStatement(
+	db: D1Database,
+	base: string,
+	quote: string,
+	rate: number,
+	at: string = nowIso(),
+): D1PreparedStatement {
+	return db
 		.prepare(`INSERT INTO fx_rate_history (id, base, quote, rate, changed_at) VALUES (?, ?, ?, ?, ?)`)
-		.bind(newId(), base, quote, rate, now)
-		.run();
-	return true;
+		.bind(newId(), base, quote, rate, at);
 }
 
 export async function deleteFxRate(db: D1Database, base: string, quote: string): Promise<boolean> {

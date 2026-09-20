@@ -31,7 +31,9 @@ import { bootstrap, call, clearAll } from "../helpers";
  *
  * 改造前的"往返"= 认证 3 次 + 路由自己每次一条语句一次往返。
  */
-const BUDGET: Record<string, { statements: number; roundTrips: number }> = {
+const BUDGET: Record<string, { statements: number; roundTrips: number; method?: string }> = {
+	// 拍快照（Cron 的第二阶段就是这个）：认证上下文 + 读设置/持仓/汇率 + 写快照与每日汇率 + 审计
+	"/api/portfolio/snapshots": { statements: 7, roundTrips: 4, method: "POST" },
 	"/api/auth/me": { statements: 3, roundTrips: 2 },
 	"/api/accounts": { statements: 3, roundTrips: 2 },
 	"/api/holdings": { statements: 3, roundTrips: 2 },
@@ -93,11 +95,11 @@ function countingDb(db: D1Database, log: Counted): D1Database {
 	}) as D1Database;
 }
 
-async function countRequest(path: string, cookie: string): Promise<Counted> {
+async function countRequest(path: string, cookie: string, method = "GET"): Promise<Counted> {
 	const log: Counted = { statements: [], batches: 0, batchedStatements: 0 };
 	const instrumented = { ...env, DB: countingDb(env.DB, log) } as Env;
 	await app.fetch(
-		new Request(`https://example.com${path}`, { headers: { Cookie: cookie } }),
+		new Request(`https://example.com${path}`, { method, headers: { Cookie: cookie } }),
 		instrumented,
 		{} as ExecutionContext,
 	);
@@ -136,7 +138,7 @@ describe("D1 语句预算", () => {
 
 	for (const [path, budget] of Object.entries(BUDGET)) {
 		it(`${path}`, async () => {
-			const { statements, batches, batchedStatements } = await countRequest(path, cookie);
+			const { statements, batches, batchedStatements } = await countRequest(path, cookie, budget.method);
 			const total = statements.length + batchedStatements;
 			const roundTrips = batches + statements.length;
 			const detail = `${path}：语句 ${total} 条（预算 ${budget.statements}）/ 往返 ${roundTrips} 次（预算 ${budget.roundTrips}）\n  ${statements.join("\n  ")}`;

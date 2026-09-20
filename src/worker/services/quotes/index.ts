@@ -10,7 +10,7 @@ import {
 	timeZoneOf,
 } from "../../data/settings.repo";
 import { listHoldings, type HoldingWithAccount } from "../../data/accounts.repo";
-import { listFxRates, upsertAutoFxRate } from "../../data/fx.repo";
+import { autoFxRateStatement, fxHistoryStatement, listFxRates, type FxRate } from "../../data/fx.repo";
 import { applyHealth, cooldownOf, parseHealth, type ProviderHealth } from "./health";
 import type { Translator } from "../../../shared/i18n";
 import { translator as sharedTranslator } from "../../core/i18n";
@@ -55,11 +55,17 @@ export interface RefreshReport {
 	finishedAt: string;
 }
 
-/** 收集需要报价的持仓与汇率（holdings 可由调用方传入，避免重复查库） */
+/** 收集需要报价的持仓与汇率 */
 export async function collectTargets(
 	db: D1Database,
 	options: { displayCurrency: string; holdings?: HoldingWithAccount[] },
-): Promise<{ holdingTargets: QuoteTarget[]; fxTargets: QuoteTarget[]; displayCurrency: string }> {
+): Promise<{
+	holdingTargets: QuoteTarget[];
+	fxTargets: QuoteTarget[];
+	/** 库里已有的汇率（刷新前），用于判断币种汇率是否真的变了 */
+	fxRates: FxRate[];
+	displayCurrency: string;
+}> {
 	const holdings = options.holdings ?? (await listHoldings(db, {}));
 	const holdingTargets: QuoteTarget[] = [];
 	for (const holding of holdings) {
@@ -102,7 +108,7 @@ export async function collectTargets(
 		});
 	}
 
-	return { holdingTargets, fxTargets, displayCurrency: options.displayCurrency };
+	return { holdingTargets, fxTargets, fxRates: existing, displayCurrency: options.displayCurrency };
 }
 
 /** 从已读到的原始值构造数据源配置（避免为两个 key 多跑两次查询） */
@@ -188,7 +194,7 @@ export async function refreshQuotes(
 	};
 
 	const holdings = await listHoldings(db, {});
-	const { holdingTargets, fxTargets } = await collectTargets(db, { displayCurrency, holdings });
+	const { holdingTargets, fxTargets, fxRates: knownFxRates } = await collectTargets(db, { displayCurrency, holdings });
 
 	// 最久没更新的排前面：既让有限的预算花在陈旧数据上，也让"分批"在多次运行之间公平轮转
 	// （本次被留下的，下次就是最旧的，自然优先）
@@ -312,11 +318,17 @@ export async function refreshQuotes(
 	const statements: D1PreparedStatement[] = [];
 	const effectiveDate = dateIn(timeZone);
 	const finishedAtProbe = nowIso();
+	const knownFx = new Map(knownFxRates.map((rate) => [`${rate.base}:${rate.quote}`, rate.rate]));
 	for (const quote of quotes) {
 		if (quote.key.startsWith("fx:")) {
 			const [base, target] = quote.key.slice(3).split(":");
 			if (base && target) {
-				await upsertAutoFxRate(db, base, target, quote.price);
+				// 汇率写入也放进同一个 batch（原来是每个币种两次串行往返）
+				statements.push(autoFxRateStatement(db, base, target, quote.price, finishedAtProbe));
+				// 只有汇率真的变了才记历史（原来是每次刷新都插一行）
+				if (knownFx.get(`${base}:${target}`) !== quote.price) {
+					statements.push(fxHistoryStatement(db, base, target, quote.price, finishedAtProbe));
+				}
 				report.fxUpdated += 1;
 			}
 			continue;

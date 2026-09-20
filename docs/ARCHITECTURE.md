@@ -118,7 +118,7 @@ sessions(id PK, created_at, expires_at, last_seen, ua, ip)
 | 资源 | 免费额度 | 本项目的用法与对策 |
 |---|---|---|
 | Workers 请求 | 100,000/天 | 单用户实际 < 1,000/天；仪表盘合并为一个聚合接口 |
-| **Workers CPU** | **10ms/请求，10ms/Cron** | ① 认证的 PBKDF2 放浏览器，Worker 只做一次 SHA-256（≈0.1ms）② 聚合在 SQL 里做，不在 JS 里遍历行 ③ 走势点服务端降采样到 ≤400 点 ④ 页面代码分包，减小解析量 ⑤ 定时任务分批刷新持仓（`CRON_MAX_HOLDINGS`，按最久未更新轮转），不让 CPU 随持仓数量无限增长 ⑥ 热路径少跑数据库往返：配置一次 `getSettings()` 读完、连着几次写合并成一次 `db.batch`（每条 D1 语句的准备/解析都占 CPU） |
+| **Workers CPU** | **10ms/请求，10ms/Cron** | ① 认证的 PBKDF2 放浏览器，Worker 只做一次 SHA-256（≈0.1ms）② 聚合在 SQL 里做，不在 JS 里遍历行 ③ 走势点服务端降采样到 ≤400 点 ④ 页面代码分包，减小解析量 ⑤ 定时任务**一次调用只干一件重活**（配置的小时刷行情、之后拍快照），并且持仓分批刷新（`CRON_MAX_HOLDINGS = 6`，按最久未更新轮转） ⑥ 热路径少跑数据库往返：配置一次 `getSettings()` 读完、连着几次写合并成一次 `db.batch`（每条 D1 语句的准备/解析都占 CPU） |
 | Subrequests | 50/次调用 | 优先用批量接口（CoinGecko/Binance/腾讯）；Yahoo/自定义按标的单请求，用 6 并发 + 单次刷新请求预算上限 |
 | 同时出站连接 | 6 | `mapLimit(items, 6, fn)` |
 | Cron | 5 个/账号 | 只用 1 个（每小时）；非目标小时只读两次配置就返回；错过的当天小时会重试（补拍） |

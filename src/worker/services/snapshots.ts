@@ -1,8 +1,15 @@
 import { newId, nowIso } from "../core/utils";
 import { dateIn } from "../../shared/time";
-import { listHoldings } from "../data/accounts.repo";
-import { buildFxLookup, listFxRates, type FxRate } from "../data/fx.repo";
-import { getDisplayCurrency, getTimeZone } from "../data/settings.repo";
+import { holdingsStatement, type HoldingWithAccount } from "../data/accounts.repo";
+import { buildFxLookup, fxRatesStatement, listFxRates, type FxRate } from "../data/fx.repo";
+import {
+	displayCurrencyOf,
+	getDisplayCurrency,
+	getTimeZone,
+	settingsStatement,
+	timeZoneOf,
+	toSettingsMap,
+} from "../data/settings.repo";
 import { buildPortfolio } from "./portfolio";
 
 /**
@@ -52,10 +59,18 @@ export async function takeSnapshot(
 	db: D1Database,
 	options: { date?: string; force?: boolean } = {},
 ): Promise<TakeSnapshotResult> {
-	const displayCurrency = await getDisplayCurrency(db);
-	const date = options.date ?? dateIn(await getTimeZone(db));
-	const holdings = await listHoldings(db, {});
-	const fxRates = await listFxRates(db);
+	// 设置（显示币种/时区）、持仓、汇率、当日快照是否存在：一次 batch 读完（4 条语句 1 次往返）
+	// 这条路径同时被手动「立即拍快照」和 Cron 的第二阶段调用，两边都是 10ms CPU 预算
+	const [settingsResult, holdingsResult, fxResult] = await db.batch([
+		settingsStatement(db),
+		holdingsStatement(db, {}),
+		fxRatesStatement(db),
+	]);
+	const settings = toSettingsMap(settingsResult?.results as Array<{ key: string; value: string }> | undefined);
+	const displayCurrency = displayCurrencyOf(settings);
+	const date = options.date ?? dateIn(timeZoneOf(settings));
+	const holdings = (holdingsResult?.results ?? []) as HoldingWithAccount[];
+	const fxRates = (fxResult?.results ?? []) as FxRate[];
 	const portfolio = buildPortfolio(holdings, displayCurrency, fxRates);
 
 	const byCurrency: Record<string, number> = {};
@@ -90,33 +105,47 @@ export async function takeSnapshot(
 		created_at: nowIso(),
 	};
 
-	const existing = await db.prepare(`SELECT date FROM snapshots WHERE date = ?`).bind(date).first<{ date: string }>();
+	// 用 SQL 自己表达"已存在就不动"，省掉一次"先查再写"的往返：
+	//  force     → ON CONFLICT DO UPDATE（重拍）
+	//  非 force → ON CONFLICT DO NOTHING（Cron 的幂等保护：同一天不重复拍）
+	const snapshotStatement = options.force
+		? db
+				.prepare(
+					`INSERT INTO snapshots (date, base_currency, total, by_currency_json, by_class_json, by_account_json, detail_json, created_at)
+					 VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+					 ON CONFLICT(date) DO UPDATE SET base_currency = excluded.base_currency, total = excluded.total,
+					   by_currency_json = excluded.by_currency_json, by_class_json = excluded.by_class_json,
+					   by_account_json = excluded.by_account_json, detail_json = excluded.detail_json,
+					   created_at = excluded.created_at`,
+				)
+				.bind(
+					record.date,
+					record.base_currency,
+					record.total,
+					record.by_currency_json,
+					record.by_class_json,
+					record.by_account_json,
+					record.detail_json,
+					record.created_at,
+				)
+		: db
+				.prepare(
+					`INSERT INTO snapshots (date, base_currency, total, by_currency_json, by_class_json, by_account_json, detail_json, created_at)
+					 VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+					 ON CONFLICT(date) DO NOTHING`,
+				)
+				.bind(
+					record.date,
+					record.base_currency,
+					record.total,
+					record.by_currency_json,
+					record.by_class_json,
+					record.by_account_json,
+					record.detail_json,
+					record.created_at,
+				);
 
-	if (existing && !options.force) {
-		return { date, total: record.total, currency: displayCurrency, created: false, holdings: detail.length };
-	}
-
-	const statements: D1PreparedStatement[] = [
-		db
-			.prepare(
-				`INSERT INTO snapshots (date, base_currency, total, by_currency_json, by_class_json, by_account_json, detail_json, created_at)
-				 VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-				 ON CONFLICT(date) DO UPDATE SET base_currency = excluded.base_currency, total = excluded.total,
-				   by_currency_json = excluded.by_currency_json, by_class_json = excluded.by_class_json,
-				   by_account_json = excluded.by_account_json, detail_json = excluded.detail_json,
-				   created_at = excluded.created_at`,
-			)
-			.bind(
-				record.date,
-				record.base_currency,
-				record.total,
-				record.by_currency_json,
-				record.by_class_json,
-				record.by_account_json,
-				record.detail_json,
-				record.created_at,
-			),
-	];
+	const statements: D1PreparedStatement[] = [snapshotStatement];
 
 	// 把"当天生效的汇率"冻结下来（v0.11）：以后改汇率不会再平移历史曲线
 	for (const rate of fxRates) {
@@ -131,9 +160,11 @@ export async function takeSnapshot(
 		);
 	}
 
-	await db.batch(statements);
+	const results = await db.batch(statements);
+	// DO NOTHING 命中冲突时 changes = 0，等价于"当天已有快照，没动它"
+	const created = ((results[0]?.meta as { changes?: number } | undefined)?.changes ?? 1) > 0;
 
-	return { date, total: record.total, currency: displayCurrency, created: true, holdings: detail.length };
+	return { date, total: record.total, currency: displayCurrency, created, holdings: detail.length };
 }
 
 export interface TrendPoint {
