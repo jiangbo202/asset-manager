@@ -2,7 +2,7 @@ import { newId, nowIso } from "../../core/utils";
 import { dateIn } from "../../../shared/time";
 import { decryptSecret } from "../../core/secrets";
 import { getSetting, getTimeZone, setSetting, SETTING_DISPLAY_CURRENCY } from "../../data/settings.repo";
-import { listHoldings } from "../../data/accounts.repo";
+import { listHoldings, type HoldingWithAccount } from "../../data/accounts.repo";
 import { listFxRates, upsertAutoFxRate } from "../../data/fx.repo";
 import { applyHealth, cooldownOf, parseHealth, type ProviderHealth } from "./health";
 import type { Translator } from "../../../shared/i18n";
@@ -40,18 +40,20 @@ export interface RefreshReport {
 	sources: Record<string, number>;
 	failed: Array<{ symbol: string; reason: string }>;
 	skipped: string[];
+	/** 分批刷新时留到下一次的标的（定时任务会分批；手动刷新不带上限，所以是空的） */
+	deferred: string[];
 	/** 因为限流/连续失败被暂时跳过的数据源 */
 	coolingDown: Array<{ provider: string; minutesLeft: number; reason: string }>;
 	startedAt: string;
 	finishedAt: string;
 }
 
-/** 收集需要报价的持仓与汇率 */
+/** 收集需要报价的持仓与汇率（holdings 可由调用方传入，避免重复查库） */
 export async function collectTargets(
 	db: D1Database,
-	options: { displayCurrency: string },
+	options: { displayCurrency: string; holdings?: HoldingWithAccount[] },
 ): Promise<{ holdingTargets: QuoteTarget[]; fxTargets: QuoteTarget[]; displayCurrency: string }> {
-	const holdings = await listHoldings(db, {});
+	const holdings = options.holdings ?? (await listHoldings(db, {}));
 	const holdingTargets: QuoteTarget[] = [];
 	for (const holding of holdings) {
 		if (holding.class === "cash") continue;
@@ -122,7 +124,17 @@ export function apiKeysOf(settings: ProviderSettings): Partial<Record<ProviderId
 
 export async function refreshQuotes(
 	env: { DB: D1Database; SESSION_SECRET: string },
-	options: { trigger: "cron" | "manual"; fetcher?: typeof fetch; t?: Translator } = { trigger: "manual" },
+	options: {
+		trigger: "cron" | "manual";
+		fetcher?: typeof fetch;
+		t?: Translator;
+		/**
+		 * 单次最多刷新多少个持仓（不传 = 不限）。
+		 * 定时任务传它来做分批：CPU 开销大致随标的数量线性增长，
+		 * 而免费版每次调用只有 10ms，所以不能让一次运行去处理无限多的持仓。
+		 */
+		maxHoldings?: number;
+	} = { trigger: "manual" },
 ): Promise<RefreshReport> {
 	const t = options.t ?? sharedTranslator("zh");
 	const startedAt = nowIso();
@@ -136,6 +148,7 @@ export async function refreshQuotes(
 		sources: {},
 		failed: [],
 		skipped: [],
+		deferred: [],
 		coolingDown: [],
 		startedAt,
 		finishedAt: startedAt,
@@ -158,16 +171,22 @@ export async function refreshQuotes(
 		t,
 	};
 
-	const { holdingTargets, fxTargets } = await collectTargets(db, { displayCurrency });
+	const holdings = await listHoldings(db, {});
+	const { holdingTargets, fxTargets } = await collectTargets(db, { displayCurrency, holdings });
 
-	// 预算不够时优先刷新最久没更新的标的
-	const allTargets = [...holdingTargets, ...fxTargets];
-	const holdingsById = new Map((await listHoldings(db, {})).map((item) => [item.id, item]));
-	allTargets.sort((a, b) => {
-		const left = holdingsById.get(a.key)?.price_updated_at ?? "";
-		const right = holdingsById.get(b.key)?.price_updated_at ?? "";
-		return left.localeCompare(right);
-	});
+	// 最久没更新的排前面：既让有限的预算花在陈旧数据上，也让"分批"在多次运行之间公平轮转
+	// （本次被留下的，下次就是最旧的，自然优先）
+	const holdingsById = new Map(holdings.map((item) => [item.id, item]));
+	const staleness = (key: string) => holdingsById.get(key)?.price_updated_at ?? "";
+	const orderedHoldings = [...holdingTargets].sort((a, b) => staleness(a.key).localeCompare(staleness(b.key)));
+
+	// 分批：超出上限的留到下一次运行。汇率不参与分批——折算总额依赖它，且币种数量天然有限。
+	const refreshedHoldings =
+		options.maxHoldings === undefined
+			? orderedHoldings
+			: orderedHoldings.slice(0, Math.max(0, options.maxHoldings));
+	report.deferred = orderedHoldings.slice(refreshedHoldings.length).map((target) => target.symbol);
+	const allTargets = [...refreshedHoldings, ...fxTargets];
 
 	const resolvedKeys = new Set<string>();
 	const quotes: Quote[] = [];
@@ -366,8 +385,28 @@ export interface QuoteStatus {
 		lastSuccessAt: string | null;
 	}>;
 	cache: Array<{ key: string; source: string; symbol: string; price: number; currency: string; fetched_at: string }>;
-	recentRuns: Array<{ id: string; started_at: string; trigger: string; updated: number; failed: number; requests: number }>;
+	recentRuns: Array<{
+		id: string;
+		started_at: string;
+		trigger: string;
+		updated: number;
+		failed: number;
+		requests: number;
+		/** 这次运行里因为分批而留到下一次的标的数量 */
+		deferred: number;
+	}>;
 	custom: ProviderSettings["custom"];
+}
+
+/** 旧数据（分批功能之前）没有 deferred 字段，按 0 处理 */
+function countDeferred(reportJson: string | null): number {
+	if (!reportJson) return 0;
+	try {
+		const parsed = JSON.parse(reportJson) as { deferred?: unknown };
+		return Array.isArray(parsed.deferred) ? parsed.deferred.length : 0;
+	} catch {
+		return 0;
+	}
 }
 
 export async function getQuoteStatus(env: { DB: D1Database; SESSION_SECRET: string }): Promise<QuoteStatus> {
@@ -379,9 +418,17 @@ export async function getQuoteStatus(env: { DB: D1Database; SESSION_SECRET: stri
 		.all<{ key: string; source: string; symbol: string; price: number; currency: string; fetched_at: string }>();
 	const runs = await db
 		.prepare(
-			`SELECT id, started_at, trigger, updated, failed, requests FROM quote_runs ORDER BY started_at DESC LIMIT 10`,
+			`SELECT id, started_at, trigger, updated, failed, requests, report_json FROM quote_runs ORDER BY started_at DESC LIMIT 10`,
 		)
-		.all<{ id: string; started_at: string; trigger: string; updated: number; failed: number; requests: number }>();
+		.all<{
+			id: string;
+			started_at: string;
+			trigger: string;
+			updated: number;
+			failed: number;
+			requests: number;
+			report_json: string | null;
+		}>();
 
 	const KIND_LABEL: Record<string, string> = { crypto: "加密", stock: "股票", fx: "汇率" };
 	const health = parseHealth(await getSetting(db, "provider_health"));
@@ -411,7 +458,15 @@ export async function getQuoteStatus(env: { DB: D1Database; SESSION_SECRET: stri
 			})(),
 		})),
 		cache: cache.results ?? [],
-		recentRuns: runs.results ?? [],
+		recentRuns: (runs.results ?? []).map((run) => ({
+			id: run.id,
+			started_at: run.started_at,
+			trigger: run.trigger,
+			updated: run.updated,
+			failed: run.failed,
+			requests: run.requests,
+			deferred: countDeferred(run.report_json),
+		})),
 		custom: settings.custom ?? null,
 	};
 }

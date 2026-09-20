@@ -81,7 +81,7 @@ npm run setup:d1          # 只创建/复用 D1 并写入 database_id
 npm run build             # 只构建
 npm run db:migrate:remote # 只应用迁移
 npm run deploy            # 迁移 + 部署
-npm run setup:secrets     # 重新生成 SETUP_TOKEN / SESSION_SECRET
+npm run setup:secrets     # 写入 SETUP_TOKEN / SESSION_SECRET（已存在则不动；轮换加 -- --rotate）
 ```
 
 ### 路径 C：本地预览（不部署，验证行为）
@@ -111,6 +111,11 @@ npm run build && npm run preview     # 用构建产物在 workerd 里跑，接�
 ### `scripts/setup-secrets.cjs`
 
 生成 32 字节随机值并 `wrangler secret bulk` 写入，然后**在终端打印一次** `SETUP_TOKEN`。
+
+它是**幂等**的：先用 `wrangler secret list` 读一下已有的 Secret，已存在的不再覆盖，所以重复部署不会
+把 `SESSION_SECRET` 换掉（换掉会让所有登录失效、已保存的行情 API Key 解不开）。需要轮换时显式执行
+`npm run setup:secrets -- --rotate`。
+
 在 public 仓库的 CI 里不要运行它（日志公开）；那种场景请改用用户自备的 Secret。
 
 ### 配置文件
@@ -162,7 +167,7 @@ Zero Trust（免费版 ≤50 用户）→ Access → Applications → 添加自�
 | `未登录 Cloudflare`（setup-d1 报错） | 同上；脚本会直接告诉你该做什么 |
 | 页面提示「数据库需要升级」 | 数据库结构落后于代码。重跑 `npm run deploy:safe`，或单独 `npm run db:migrate:remote` |
 | `no such table: xxx` | 同上一行；若迁移记录已存在但表确实丢了（例如手工删过表），需要手工重建或从备份恢复 |
-| 初始化时 `setup token 不正确` | 用的是终端最后一次打印的 token；丢失则重新 `npm run setup:secrets` 并删掉 `auth` 行 |
+| 初始化时 `setup token 不正确` | 用的是终端最后一次打印的 token；丢失则删掉 `auth` 行 + `npm run setup:secrets -- --rotate` |
 | 提示 `SETUP_TOKEN 还是示例里的占位值` | 你在一键部署向导里沿用了默认值。用 `openssl rand -hex 32` 生成新值更新 Secret 后重试（无需改代码） |
 | 部署成功但页面 404 | 确认 `wrangler deploy` 读到的是构建产物配置（输出里会写 `Using redirected Wrangler configuration`） |
 | 行情一直失败 | 看设置页「最近运行」的失败原因；免费接口偶发限流属正常，系统会自动换源并冷却 |

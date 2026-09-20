@@ -73,7 +73,7 @@ Cloudflare 会：把仓库复制到你自己的账号 → 自动创建 D1 并绑
 
 ```bash
 npm run setup:d1          # 只创建/复用 D1 并写入 database_id
-npm run setup:secrets     # 重新生成 SETUP_TOKEN / SESSION_SECRET
+npm run setup:secrets     # 写入 SETUP_TOKEN / SESSION_SECRET（已存在则不动；轮换加 -- --rotate）
 npm run db:migrate:remote # 只应用数据库迁移
 npm run deploy            # 迁移 + 部署（不含 D1 创建与 secret）
 npm run verify            # 本地全套检查：lint + test + build + 首包体积
@@ -224,10 +224,14 @@ BTC   + 加密  → CoinGecko bitcoin / Binance BTCUSDT / Yahoo BTC-USD
 
 **忘记密码怎么办？**
 Dashboard → Workers & Pages → D1 → `asset-manager-db` → Console 执行 `DELETE FROM auth;`，
-然后重跑 `npm run setup:secrets`（或重新部署）拿到新的 `SETUP_TOKEN`，刷新网页重新初始化。账户与持仓数据不受影响。
+然后 `npm run setup:secrets -- --rotate` 拿到新的 `SETUP_TOKEN`，刷新网页重新初始化。账户与持仓数据不受影响。
+
+> `setup:secrets` 默认是幂等的（不覆盖已存在的 Secret），因为 `SESSION_SECRET` 用来加密库里的行情 API Key；
+> 轮换它会让所有登录失效、已保存的 Key 需要重填。所以轮换必须显式加 `-- --rotate`。
 
 **忘记 `SETUP_TOKEN` 了？**
-同上：删掉 `auth` 行 + 重新生成 token。token 只在生成时打印一次。
+同上：删掉 `auth` 行，再用 `npm run setup:secrets -- --rotate` 生成新的 token。token 只在生成时打印一次。
+（日常重新部署不需要这一步：Secrets 已存在时会保持不变。）
 
 **升级后提示「数据库需要升级」？**
 数据库结构落后于代码。按页面提示执行 `npm run db:migrate:local`（本地）或 `npm run db:migrate:remote`（线上，或直接重跑 `npm run deploy:safe`）。

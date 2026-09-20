@@ -154,6 +154,9 @@ export function MarketDataSection({ settings, onSaved }: { settings: SettingsDto
 		});
 	};
 
+	// 最近一次运行里因为分批而留到下一次的标的（只有定时任务会分批）
+	const deferredCount = status.data?.recentRuns?.[0]?.deferred ?? 0;
+
 	return (
 		<div className="section">
 			<div className="section-head">
@@ -432,6 +435,11 @@ export function MarketDataSection({ settings, onSaved }: { settings: SettingsDto
 									))}
 								</tbody>
 							</table>
+						</div>
+					)}
+					{deferredCount > 0 && (
+						<div className="muted small" style={{ marginTop: 8 }}>
+							{t("market.deferredHint", { count: deferredCount })}
 						</div>
 					)}
 				</div>

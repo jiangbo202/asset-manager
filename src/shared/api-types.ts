@@ -197,6 +197,8 @@ export interface QuoteStatusDto {
 		updated: number;
 		failed: number;
 		requests: number;
+		/** 这次运行里因为分批而留到下一次的标的数量 */
+		deferred: number;
 	}>;
 	custom: CustomProviderDto | null;
 }
@@ -209,6 +211,8 @@ export interface RefreshReportDto {
 	sources: Record<string, number>;
 	failed: Array<{ symbol: string; reason: string }>;
 	skipped: string[];
+	/** 分批刷新时留到下一次的标的（定时任务会分批；手动刷新不带上限） */
+	deferred: string[];
 	coolingDown: Array<{ provider: string; minutesLeft: number; reason: string }>;
 	startedAt: string;
 	finishedAt: string;

@@ -245,6 +245,78 @@ describe("v0.10 行情刷新 / 快照 / 走势", () => {
 		expect(second.reason).toContain("已有快照");
 	});
 
+	it("Cron：错过配置时间后当天会自动补拍，而不是只能等第二天", async () => {
+		await seed();
+		const now = new Date();
+		const at = (hour: number) =>
+			new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), hour, 0, 0));
+
+		// 默认快照小时是 22（UTC）：21 点还没到 → 不执行
+		expect((await handleCron(env, at(21))).ran).toBe(false);
+
+		// 23 点：已经过了配置时间、当天却还没有快照 → 说明到点那次没跑成，现在补拍
+		const catchUp = await handleCron(env, at(23));
+		expect(catchUp.ran).toBe(true);
+		expect(catchUp.reason).toContain("补");
+		expect(catchUp.snapshot?.date).toBe(now.toISOString().slice(0, 10));
+
+		// 同一天再跑：已有快照 → 跳过（补拍不会重复拍）
+		const again = await handleCron(env, at(23));
+		expect(again.ran).toBe(false);
+		expect(again.reason).toContain("已有快照");
+
+		// 第二天正常到点 → 正常拍（reason 不带"补"）
+		const nextDay = await handleCron(env, new Date(at(22).getTime() + 24 * 3600 * 1000));
+		expect(nextDay.ran).toBe(true);
+		expect(nextDay.reason).toContain("已生成当日快照");
+	});
+
+	it("刷新：分批上限——最旧的优先，超出的留到下一次，下次自然轮到它", async () => {
+		const { btcId, aaplId } = await seed();
+
+		// 把 AAPL 标成"刚更新过"，于是它应该在分批时被留到下一次（BTC 更旧）
+		await env.DB.prepare(`UPDATE holdings SET price_updated_at = ? WHERE id = ?`)
+			.bind(new Date().toISOString(), aaplId)
+			.run();
+
+		const report = await refreshQuotes(env, { trigger: "cron", fetcher: providerStubs, maxHoldings: 1 });
+		expect(report.updated).toBe(1);
+		expect(report.deferred).toEqual(["AAPL"]);
+
+		const prices = new Map(
+			(await env.DB.prepare(`SELECT id, price FROM holdings`).all<{ id: string; price: number }>()).results?.map((row) => [
+				row.id,
+				row.price,
+			]),
+		);
+		expect(prices.get(btcId)).toBe(80000); // 本轮刷到的
+		expect(prices.get(aaplId)).toBe(100); // 留到下一次，价格没被动
+
+		// 下一次运行：上一轮被留下的现在最旧 → 轮到它
+		// （用显式的一小时前而不是"刚刚"，避免毫秒级时间戳打平导致测试不稳）
+		const hourAgo = () => new Date(Date.now() - 3600_000).toISOString();
+		await env.DB.prepare(`UPDATE holdings SET price_updated_at = ? WHERE id = ?`).bind(hourAgo(), aaplId).run();
+		const second = await refreshQuotes(env, { trigger: "cron", fetcher: providerStubs, maxHoldings: 1 });
+		expect(second.deferred).toEqual(["BTC"]);
+		expect(second.updated).toBe(1);
+		const aapl = await env.DB.prepare(`SELECT price FROM holdings WHERE id = ?`)
+			.bind(aaplId)
+			.first<{ price: number }>();
+		expect(aapl?.price).toBe(210);
+
+		// 再一轮：这次轮到另一个被留下 —— 说明分批是公平轮转，而不是永远饿死同一批
+		await env.DB.prepare(`UPDATE holdings SET price_updated_at = ? WHERE id = ?`).bind(hourAgo(), btcId).run();
+		const third = await refreshQuotes(env, { trigger: "cron", fetcher: providerStubs, maxHoldings: 1 });
+		expect(third.deferred).toEqual(["AAPL"]);
+		expect(third.updated).toBe(1);
+
+		// 手动刷新不带上限：一次把所有持仓都刷掉
+		await env.DB.prepare(`UPDATE holdings SET price_updated_at = NULL`).run();
+		const manual = await refreshQuotes(env, { trigger: "manual", fetcher: providerStubs });
+		expect(manual.deferred).toEqual([]);
+		expect(manual.updated).toBe(2);
+	});
+
 	it("设置页：API Key 加密存库、不回传明文、provider_config 里不出现 Key", async () => {
 		await call("/api/settings", {
 			method: "PUT",
