@@ -1,7 +1,7 @@
 import { newId, nowIso } from "../../core/utils";
 import { dateIn } from "../../../shared/time";
 import { decryptSecret } from "../../core/secrets";
-import { getSetting, getTimeZone, setSetting, SETTING_DISPLAY_CURRENCY } from "../../data/settings.repo";
+import { getSettings, settingStatement, displayCurrencyOf, timeZoneOf } from "../../data/settings.repo";
 import { listHoldings, type HoldingWithAccount } from "../../data/accounts.repo";
 import { listFxRates, upsertAutoFxRate } from "../../data/fx.repo";
 import { applyHealth, cooldownOf, parseHealth, type ProviderHealth } from "./health";
@@ -98,14 +98,17 @@ export async function collectTargets(
 	return { holdingTargets, fxTargets, displayCurrency: options.displayCurrency };
 }
 
-async function loadProviderSettings(db: D1Database, sessionSecret: string): Promise<ProviderSettings> {
-	const raw = await getSetting(db, "provider_config");
-	const settings = parseProviderSettings(raw);
+/** 从已读到的原始值构造数据源配置（避免为两个 key 多跑两次查询） */
+async function providerSettingsFrom(
+	configRaw: string | null,
+	keysRaw: string | null,
+	sessionSecret: string,
+): Promise<ProviderSettings> {
+	const settings = parseProviderSettings(configRaw);
 
 	// API Key 是用 SESSION_SECRET 加密存库的（可以随时换 SESSION_SECRET，代价是要重填 Key）
-	const encryptedKeys = await getSetting(db, "provider_keys");
-	if (encryptedKeys) {
-		const plain = await decryptSecret(encryptedKeys, sessionSecret);
+	if (keysRaw) {
+		const plain = await decryptSecret(keysRaw, sessionSecret);
 		if (plain) {
 			try {
 				const parsed = JSON.parse(plain) as Record<string, string>;
@@ -139,7 +142,9 @@ export async function refreshQuotes(
 	const t = options.t ?? sharedTranslator("zh");
 	const startedAt = nowIso();
 	const db = env.DB;
-	const enabled = (await getSetting(db, "market_data_enabled")) !== "0";
+	// 一次读出全部设置：早先这里是 4–6 次单独的 getSetting()，每次都是一次数据库往返
+	const settingsMap = await getSettings(db);
+	const enabled = settingsMap.market_data_enabled !== "0";
 	const report: RefreshReport = {
 		trigger: options.trigger,
 		updated: 0,
@@ -160,10 +165,14 @@ export async function refreshQuotes(
 		return report;
 	}
 
-	const displayCurrency = (await getSetting(db, SETTING_DISPLAY_CURRENCY)) ?? "USD";
-	const timeZone = await getTimeZone(db);
-	const settings = await loadProviderSettings(db, env.SESSION_SECRET);
-	let health: ProviderHealth = parseHealth(await getSetting(db, "provider_health"));
+	const displayCurrency = displayCurrencyOf(settingsMap);
+	const timeZone = timeZoneOf(settingsMap);
+	const settings = await providerSettingsFrom(
+		settingsMap.provider_config ?? null,
+		settingsMap.provider_keys ?? null,
+		env.SESSION_SECRET,
+	);
+	let health: ProviderHealth = parseHealth(settingsMap.provider_health ?? null);
 	// 注意：Workers 里 fetch 必须绑定到全局作用域调用，直接当方法传递会报 "Illegal invocation"
 	const ctx: FetchContext = {
 		fetcher: options.fetcher ?? ((input, init) => fetch(input, init)),
@@ -342,24 +351,26 @@ export async function refreshQuotes(
 	}
 
 	report.finishedAt = nowIso();
-	await setSetting(db, "market_data_last_run", report.finishedAt);
-	await setSetting(db, "provider_health", JSON.stringify(health));
-	await db
-		.prepare(
-			`INSERT INTO quote_runs (id, started_at, finished_at, trigger, updated, failed, requests, report_json)
-			 VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-		)
-		.bind(
-			newId(),
-			report.startedAt,
-			report.finishedAt,
-			report.trigger,
-			report.updated,
-			report.failed.length,
-			report.requests,
-			JSON.stringify(report),
-		)
-		.run();
+	// 三次写合并成一次 batch：少两次数据库往返
+	await db.batch([
+		settingStatement(db, "market_data_last_run", report.finishedAt),
+		settingStatement(db, "provider_health", JSON.stringify(health)),
+		db
+			.prepare(
+				`INSERT INTO quote_runs (id, started_at, finished_at, trigger, updated, failed, requests, report_json)
+				 VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+			)
+			.bind(
+				newId(),
+				report.startedAt,
+				report.finishedAt,
+				report.trigger,
+				report.updated,
+				report.failed.length,
+				report.requests,
+				JSON.stringify(report),
+			),
+	]);
 
 	return report;
 }
@@ -411,7 +422,12 @@ function countDeferred(reportJson: string | null): number {
 
 export async function getQuoteStatus(env: { DB: D1Database; SESSION_SECRET: string }): Promise<QuoteStatus> {
 	const db = env.DB;
-	const settings = await loadProviderSettings(db, env.SESSION_SECRET);
+	const settingsMap = await getSettings(db);
+	const settings = await providerSettingsFrom(
+		settingsMap.provider_config ?? null,
+		settingsMap.provider_keys ?? null,
+		env.SESSION_SECRET,
+	);
 	const keys = apiKeysOf(settings);
 	const cache = await db
 		.prepare(`SELECT key, source, symbol, price, currency, fetched_at FROM quote_cache ORDER BY fetched_at DESC LIMIT 100`)
@@ -431,11 +447,11 @@ export async function getQuoteStatus(env: { DB: D1Database; SESSION_SECRET: stri
 		}>();
 
 	const KIND_LABEL: Record<string, string> = { crypto: "加密", stock: "股票", fx: "汇率" };
-	const health = parseHealth(await getSetting(db, "provider_health"));
+	const health = parseHealth(settingsMap.provider_health ?? null);
 
 	return {
-		enabled: (await getSetting(db, "market_data_enabled")) !== "0",
-		lastRunAt: await getSetting(db, "market_data_last_run"),
+		enabled: settingsMap.market_data_enabled !== "0",
+		lastRunAt: settingsMap.market_data_last_run ?? null,
 		providers: [...PROVIDER_MAP.values()].map((meta) => ({
 			id: meta.id,
 			label: meta.label,

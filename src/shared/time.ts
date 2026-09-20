@@ -135,6 +135,31 @@ export function zonedDayRange(date: string, timeZone: string): { fromIso: string
 	return { fromIso: new Date(start).toISOString(), toIso: new Date(end).toISOString() };
 }
 
+/**
+ * 某时区的某一天、某个整点 → UTC 时刻。
+ * 做法：先按 UTC 猜一个时刻，再用该时刻的偏移修正（跨夏令时迭代两次即可收敛）。
+ */
+function zonedHourToInstant(date: string, hour: number, timeZone: string): Date {
+	const guess = new Date(`${date}T${String(hour).padStart(2, "0")}:00:00.000Z`);
+	let instant = guess;
+	for (let round = 0; round < 2; round += 1) {
+		instant = new Date(guess.getTime() - offsetMinutes(timeZone, instant) * 60_000);
+	}
+	return instant;
+}
+
+/**
+ * 下一次定时任务会干活的时间：用户时区里配置的那个整点（已过则算明天）。
+ * 设置页用它回答"改了快照时间什么时候生效"——定时任务每小时醒一次，每小时重新读设置。
+ */
+export function nextSnapshotInstant(timeZone: string, hour: number, at: Date = new Date()): Date {
+	const zone = normalizeTimeZone(timeZone);
+	const today = zonedHourToInstant(dateIn(zone, at), hour, zone);
+	// 用 >=：刚好在整点那一刻时，定时任务就是现在该跑（闸门是 localHour >= snapshotHour）
+	if (today.getTime() >= at.getTime()) return today;
+	return zonedHourToInstant(dateIn(zone, new Date(at.getTime() + 24 * 3600_000)), hour, zone);
+}
+
 /** 按指定时区格式化日期时间（用于界面展示） */
 export function formatDateTime(
 	iso: string | null | undefined,

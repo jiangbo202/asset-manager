@@ -337,7 +337,8 @@ const en: Dict = {
 	"market.saved": "Saved",
 	"market.switches": "Switches & schedule",
 	"market.enable": "Enable quote updates and daily snapshots",
-	"market.snapshotHint": "The Cron trigger runs hourly but only acts during this hour: refresh quotes, then take the snapshot. Default 22:00 UTC ≈ after the US close. If the run at that hour does not complete (for example by exceeding the free CPU limit), it is retried in the following hours of the same day. Last run: {{time}}",
+	"market.unsaved": "Unsaved changes",
+	"market.unsavedHint": "The changes above are not saved yet — click “Save settings” below to store them. The Cron trigger only reads settings once an hour, so they take effect at the next matching hour.",
 	"market.deferredHint": "Batched refresh: {{count}} symbol(s) were deferred to the next scheduled run. Use “Refresh now” to fetch everything immediately.",
 	"market.never": "never",
 	"market.testTitle": "Test a provider",
@@ -595,7 +596,7 @@ const en: Dict = {
 	"field.timezone": "Time zone",
 	"error.invalidTimezone": "Invalid time zone: {{value}} (use an IANA name such as Asia/Shanghai)",
 	"market.snapshotHourTz": "Daily snapshot hour ({{timezone}} time, 0–23)",
-	"market.snapshotHintTz": "The Cron trigger runs hourly but only acts during this hour in the configured time zone: refresh quotes, then take the snapshot. Default 22:00 ≈ after the US close. Last run: {{time}}",
+	"market.snapshotHintTz": "The Cron trigger runs hourly and re-reads settings each time. It acts only once that hour has arrived or passed and the day has no snapshot yet (refresh quotes, then take the snapshot). If the run at that hour does not complete (for example by exceeding the free CPU limit), it is retried in the following hours of the same day. Last quote refresh: {{last}}; next scheduled run: {{next}}",
 	"http.apiNotFound": "API endpoint not found",
 };
 

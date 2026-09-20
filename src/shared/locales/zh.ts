@@ -337,7 +337,8 @@ const zh: Dict = {
 	"market.saved": "已保存",
 	"market.switches": "开关与时间",
 	"market.enable": "启用行情自动更新与每日快照",
-	"market.snapshotHint": "Worker 的 Cron 每小时跑一次，只在这个小时里真正干活：先刷新行情、再拍快照。默认 22 点（UTC）≈ 美股收盘后。若到点那次没跑成（例如超出免费版 CPU 限额），当天后续小时会自动补拍。上次运行：{{time}}",
+	"market.unsaved": "有改动未保存",
+	"market.unsavedHint": "上面的改动还没保存 —— 点下方的「保存设置」才写入。保存后要等下一个整点，定时任务读取设置时才可能生效。",
 	"market.deferredHint": "分批刷新：这次有 {{count}} 个标的留到下一次定时运行（点「立即刷新行情」可立刻全量刷新）",
 	"market.never": "尚未运行",
 	"market.testTitle": "测试数据源",
@@ -595,7 +596,7 @@ const zh: Dict = {
 	"field.timezone": "时区",
 	"error.invalidTimezone": "时区名称无效：{{value}}（请使用 IANA 名称，如 Asia/Shanghai）",
 	"market.snapshotHourTz": "每日快照时间（{{timezone}} 小时，0–23）",
-	"market.snapshotHintTz": "Worker 的 Cron 每小时跑一次，只在该时区这个小时里真正干活：先刷新行情、再拍快照。默认 22 点 ≈ 美股收盘后。上次运行：{{time}}",
+	"market.snapshotHintTz": "Worker 的 Cron 每小时跑一次，每次重新读取设置：已到或已过该小时、且当天还没拍快照时才干活（先刷新行情、再拍快照）。到点那次没跑成（例如超出免费版 CPU 限额）当天后续小时会自动补拍。上次行情刷新：{{last}}；下次定时运行：{{next}}",
 	"http.apiNotFound": "接口不存在",
 };
 

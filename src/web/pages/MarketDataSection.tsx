@@ -3,6 +3,7 @@ import { api, type QuoteStatusDto, type RefreshReportDto, type SettingsDto } fro
 import { useAsync, useSubmit } from "../lib/useAsync";
 import { useT, useTimeZone } from "../lib/i18n";
 import { dateTime } from "../lib/format";
+import { nextSnapshotInstant } from "../../shared/time";
 
 /**
  * 行情与快照设置（v0.10）
@@ -56,6 +57,35 @@ export function MarketDataSection({ settings, onSaved }: { settings: SettingsDto
 	}, [settings]);
 
 	const keysSet = new Set(settings?.providerKeysSet ?? []);
+
+	/**
+	 * "有没有未保存的改动"：以加载进来的设置为基线做比较。
+	 * 快照时间输入框在最上面、保存按钮在最下面，很容易让人以为改完就生效。
+	 */
+	const baseline = settings
+		? JSON.stringify({
+				marketEnabled: settings.values.market_data_enabled !== "0",
+				snapshotHour: settings.values.snapshot_hour_utc ?? "22",
+				enabled: settings.providerConfig?.enabled ?? {},
+				custom: {
+					urlTemplate: settings.providerConfig?.custom?.urlTemplate ?? "",
+					pricePath: settings.providerConfig?.custom?.pricePath ?? "",
+					currencyPath: settings.providerConfig?.custom?.currencyPath ?? "",
+					headers: settings.providerConfig?.custom?.headers ?? "",
+					key: "",
+				},
+			})
+		: null;
+	const dirty =
+		baseline !== null &&
+		(JSON.stringify({ marketEnabled, snapshotHour, enabled, custom }) !== baseline || Object.keys(keys).length > 0);
+
+	// 下一次定时任务会干活的时间（按已保存的设置算，而不是输入框里未保存的值）
+	const savedHour = Number.parseInt(settings?.values.snapshot_hour_utc ?? "", 10);
+	const nextRun =
+		Number.isInteger(savedHour) && savedHour >= 0 && savedHour <= 23
+			? nextSnapshotInstant(timeZone, savedHour)
+			: null;
 
 	/**
 	 * 数据源列表有两个来源：
@@ -196,10 +226,15 @@ export function MarketDataSection({ settings, onSaved }: { settings: SettingsDto
 							onChange={(e) => setSnapshotHour(e.target.value)}
 						/>
 					</label>
+					{dirty && (
+						<p className="small" style={{ marginBottom: 0, color: "var(--warn)" }}>
+							{t("market.unsavedHint")}
+						</p>
+					)}
 					<p className="small muted" style={{ marginBottom: 0 }}>
 						{t("market.snapshotHintTz", {
-							timezone: timeZone,
-							time: status.data?.lastRunAt ? dateTime(status.data.lastRunAt, timeZone) : t("market.never"),
+							last: status.data?.lastRunAt ? dateTime(status.data.lastRunAt, timeZone) : t("market.never"),
+							next: nextRun ? dateTime(nextRun.toISOString(), timeZone) : t("market.never"),
 						})}
 					</p>
 				</div>
@@ -375,6 +410,11 @@ export function MarketDataSection({ settings, onSaved }: { settings: SettingsDto
 				<button className="primary" onClick={saveAll} disabled={save.pending}>
 					{save.pending ? t("common.saving") : t("market.saveSettings")}
 				</button>
+				{dirty && (
+					<span className="small" style={{ marginLeft: 8, color: "var(--warn)" }}>
+						{t("market.unsaved")}
+					</span>
+				)}
 				{!custom.urlTemplate && (
 					<p className="small muted" style={{ marginBottom: 0 }}>
 						{t("market.customEmptyHint")}
@@ -481,6 +521,11 @@ export function MarketDataSection({ settings, onSaved }: { settings: SettingsDto
 				<button className="primary" onClick={saveAll} disabled={save.pending}>
 					{save.pending ? t("common.saving") : t("market.saveSettings")}
 				</button>
+				{dirty && (
+					<span className="small" style={{ marginLeft: 8, color: "var(--warn)" }}>
+						{t("market.unsaved")}
+					</span>
+				)}
 			</div>
 		</div>
 	);

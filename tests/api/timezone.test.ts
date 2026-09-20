@@ -4,6 +4,7 @@ import {
 	dateIn,
 	hourIn,
 	isValidTimeZone,
+	nextSnapshotInstant,
 	normalizeTimeZone,
 	offsetLabel,
 	offsetMinutes,
@@ -136,6 +137,33 @@ describe("时区设置与业务口径", () => {
 		const utcDate = dateIn("UTC");
 		const nextUtcDate = new Date(Date.parse(`${utcDate}T00:00:00.000Z`) + 86_400_000).toISOString().slice(0, 10);
 		expect([utcDate, nextUtcDate]).toContain(expected);
+	});
+
+	it("nextSnapshotInstant：算出下一次定时任务干活的时间", () => {
+		// 同一天还没到点 → 就是今天那个整点
+		expect(nextSnapshotInstant("UTC", 22, at("2026-09-21T10:00:00.000Z")).toISOString()).toBe("2026-09-21T22:00:00.000Z");
+		// 恰好到点 → 算今天（闸门是 >=，不能推到明天）
+		expect(nextSnapshotInstant("UTC", 22, at("2026-09-21T22:00:00.000Z")).toISOString()).toBe("2026-09-21T22:00:00.000Z");
+		// 已过点 → 明天
+		expect(nextSnapshotInstant("UTC", 22, at("2026-09-21T22:30:00.000Z")).toISOString()).toBe("2026-09-22T22:00:00.000Z");
+
+		// 上海：UTC 00:00 = 当地 08:00，当天 22:00 对应 14:00Z
+		expect(nextSnapshotInstant("Asia/Shanghai", 22, at("2026-09-21T00:00:00.000Z")).toISOString()).toBe(
+			"2026-09-21T14:00:00.000Z",
+		);
+		// 上海：15:00Z = 当地 23:00，已过 22 点 → 明天 22:00 当地 = 次日 14:00Z
+		expect(nextSnapshotInstant("Asia/Shanghai", 22, at("2026-09-21T15:00:00.000Z")).toISOString()).toBe(
+			"2026-09-22T14:00:00.000Z",
+		);
+
+		// 夏令时：纽约 2026-03-08 当天切换到 EDT，当地 22:00 = 次日 02:00Z
+		expect(nextSnapshotInstant("America/New_York", 22, at("2026-03-08T12:00:00.000Z")).toISOString()).toBe(
+			"2026-03-09T02:00:00.000Z",
+		);
+		// 切换前一天还是 EST，当地 22:00 = 次日 03:00Z
+		expect(nextSnapshotInstant("America/New_York", 22, at("2026-03-07T12:00:00.000Z")).toISOString()).toBe(
+			"2026-03-08T03:00:00.000Z",
+		);
 	});
 
 	it("Cron 的小时闸门按配置时区判断", async () => {
