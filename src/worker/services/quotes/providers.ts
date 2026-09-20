@@ -1,5 +1,6 @@
 import { isRecord } from "../../core/utils";
-import { makeTranslator, type Translator } from "../../../shared/i18n";
+import type { Translator } from "../../../shared/i18n";
+import { translator as sharedTranslator } from "../../core/i18n";
 
 /**
  * 行情数据源适配器（v0.10）
@@ -160,7 +161,7 @@ export interface FetchContext {
 }
 
 /** 取当前上下文的翻译函数（测试里可以不传） */
-export const tr = (ctx: FetchContext): Translator => ctx.t ?? makeTranslator("zh");
+export const tr = (ctx: FetchContext): Translator => ctx.t ?? sharedTranslator("zh");
 
 export interface AdapterResult {
 	quotes: Quote[];

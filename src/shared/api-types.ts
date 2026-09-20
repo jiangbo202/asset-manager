@@ -275,6 +275,8 @@ export interface AuthMeDto {
 	migrationRequired: boolean;
 	/** 服务端保存的语言偏好：auto / zh / en */
 	language: string;
+	/** 服务端保存的时区（IANA 名称） */
+	timezone: string;
 }
 
 export interface OverviewDto {

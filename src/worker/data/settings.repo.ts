@@ -1,8 +1,10 @@
 /** 配置读写（settings 表：key/value 纯文本） */
+import { normalizeTimeZone } from "../../shared/time";
 
 export const SETTING_DISPLAY_CURRENCY = "display_currency";
 export const SETTING_SNAPSHOT_HOUR = "snapshot_hour_utc";
 export const SETTING_MARKET_DATA = "market_data_enabled";
+export const SETTING_TIMEZONE = "timezone";
 export const SETTING_SETUP_DONE = "setup_done_at";
 
 /** 内置币种（PRD D13：内置三种，用户可自行添加其他） */
@@ -25,6 +27,12 @@ export async function setSetting(db: D1Database, key: string, value: string): Pr
 		.prepare(`INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT (key) DO UPDATE SET value = excluded.value`)
 		.bind(key, value)
 		.run();
+}
+
+/** 用户配置的时区（IANA 名称）；非法或缺失时回退 UTC */
+export async function getTimeZone(db: D1Database): Promise<string> {
+	const raw = await getSetting(db, SETTING_TIMEZONE);
+	return normalizeTimeZone(raw);
 }
 
 /** 每日快照的 UTC 小时；缺失或非法时回退到 22 点 */

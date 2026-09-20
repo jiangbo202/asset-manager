@@ -72,13 +72,21 @@ function Shell({ onAuthChanged }: { onAuthChanged: () => void }) {
 function Gate() {
 	const me = useAsync<AuthMeDto>(() => api.auth.me(), []);
 	const t = useT();
-	const { applySetting } = useI18n();
+	const { applySetting, applyTimeZone, ready } = useI18n();
 
-	// 服务端保存的语言偏好：进入页面即生效（localStorage 里也存一份，下次开屏不等网络）
+	// 服务端保存的语言与时区偏好：进入页面即生效（localStorage 里也存语言，下次开屏不等网络）
 	const serverLanguage = me.data?.language;
 	useEffect(() => {
 		if (serverLanguage) applySetting(serverLanguage as LanguageSetting);
 	}, [serverLanguage, applySetting]);
+
+	const serverTimeZone = me.data?.timezone;
+	useEffect(() => {
+		if (serverTimeZone) applyTimeZone(serverTimeZone);
+	}, [serverTimeZone, applyTimeZone]);
+
+	// 非默认语言的字典还在加载：等它就绪再渲染，避免先闪一下中文
+	if (!ready) return <div className="center-screen muted">…</div>;
 
 	const refresh = useCallback(() => {
 		me.reload();

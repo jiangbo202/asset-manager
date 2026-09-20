@@ -1,8 +1,9 @@
 import { useState } from "react";
 import { api, type AuditItemDto } from "../lib/api";
 import { useAsync } from "../lib/useAsync";
-import { useT } from "../lib/i18n";
+import { useT, useTimeZone } from "../lib/i18n";
 import { dateTime } from "../lib/format";
+import { zonedDayRange } from "../../shared/time";
 import type { Translator } from "../../shared/i18n";
 
 const ENTITY_KEYS = ["account", "holding", "settings", "fx", "auth", "backup", "quotes", "snapshot"] as const;
@@ -21,6 +22,7 @@ const renderValue = (value: unknown): string => {
 
 function AuditRow({ item }: { item: AuditItemDto }) {
 	const t = useT();
+	const timeZone = useTimeZone();
 	return (
 		<details className="audit">
 			<summary>
@@ -29,7 +31,7 @@ function AuditRow({ item }: { item: AuditItemDto }) {
 				<span className="muted small">{item.note ?? item.entityId ?? ""}</span>
 				<span className="spacer" style={{ flex: 1 }} />
 				<span className="muted small">
-					{item.source} · {dateTime(item.ts)}
+					{item.source} · {dateTime(item.ts, timeZone)}
 				</span>
 			</summary>
 			<div className="body">
@@ -54,15 +56,16 @@ function AuditRow({ item }: { item: AuditItemDto }) {
 
 export function HistoryPage() {
 	const t = useT();
+	const timeZone = useTimeZone();
 	const [entity, setEntity] = useState("");
 	const [action, setAction] = useState("");
 	const [from, setFrom] = useState("");
 	const [to, setTo] = useState("");
 	const [page, setPage] = useState(1);
 
-	// 日期选择器给的是本地日期，这里换算成 UTC 边界（审计时间戳存 UTC）
-	const fromIso = from ? new Date(`${from}T00:00:00`).toISOString() : undefined;
-	const toIso = to ? new Date(`${to}T23:59:59.999`).toISOString() : undefined;
+	// 日期选择器给的是"配置时区里的那一天"，换算成 UTC 边界去查（审计时间戳存 UTC）
+	const fromIso = from ? zonedDayRange(from, timeZone).fromIso : undefined;
+	const toIso = to ? zonedDayRange(to, timeZone).toIso : undefined;
 
 	const history = useAsync(
 		() =>

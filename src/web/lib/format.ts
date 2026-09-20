@@ -1,5 +1,6 @@
 import type { Translator } from "../../shared/i18n";
 import { currencySymbol } from "../../shared/labels";
+import { formatDate, formatDateTime, normalizeTimeZone } from "../../shared/time";
 
 /** 数字格式跟随界面语言（浏览器自带的 locale 映射） */
 function locale(): string {
@@ -44,18 +45,14 @@ export function trendClass(value: number | null | undefined): string {
 	return value > 0 ? "positive" : "negative";
 }
 
-export function dateTime(iso: string | null | undefined): string {
-	if (!iso) return "—";
-	const date = new Date(iso);
-	if (Number.isNaN(date.getTime())) return "—";
-	return date.toLocaleString(locale(), { hour12: false });
+/** 按配置时区格式化时间（不是浏览器的本地时区） */
+export function dateTime(iso: string | null | undefined, timeZone: string): string {
+	return formatDateTime(iso, normalizeTimeZone(timeZone), locale());
 }
 
-export function dateOnly(iso: string | null | undefined): string {
-	if (!iso) return "—";
-	const date = new Date(iso);
-	if (Number.isNaN(date.getTime())) return "—";
-	return date.toLocaleDateString(locale());
+/** 按配置时区格式化日期 */
+export function dateOnly(iso: string | null | undefined, timeZone: string): string {
+	return formatDate(iso, normalizeTimeZone(timeZone), locale());
 }
 
 /** 相对时间：用于"价格最后更新" */

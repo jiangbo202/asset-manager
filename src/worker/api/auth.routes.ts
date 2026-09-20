@@ -4,6 +4,7 @@ import { ApiError, badRequest, conflict, ok, unauthorized } from "../core/errors
 import { writeAudit } from "../core/audit";
 import { getSetting, setSetting, SETTING_DISPLAY_CURRENCY } from "../data/settings.repo";
 import { SCHEMA_VERSION } from "../../shared/version";
+import { normalizeTimeZone } from "../../shared/time";
 import { getAuth, insertAuthIfAbsent, isInitialized, touchLastLogin, updateCredential } from "../data/auth.repo";
 import {
 	computeVerifier,
@@ -84,8 +85,9 @@ auth.get("/me", async (c) => {
 	const schemaRaw = await getSetting(c.env.DB, "schema_version");
 	const schemaVersion = Number.parseInt(schemaRaw ?? "0", 10) || 0;
 	const migrationRequired = schemaVersion < SCHEMA_VERSION;
-	// 语言偏好：前端首屏就能用服务端设置，而不是等进设置页
+	// 语言与时区偏好：前端首屏就能用服务端设置，而不是等进设置页
 	const language = (await getSetting(c.env.DB, "language")) ?? "auto";
+	const timezone = normalizeTimeZone(await getSetting(c.env.DB, "timezone"));
 
 	return ok(c, {
 		initialized,
@@ -97,6 +99,7 @@ auth.get("/me", async (c) => {
 		expectedSchemaVersion: SCHEMA_VERSION,
 		migrationRequired,
 		language,
+		timezone,
 	});
 });
 

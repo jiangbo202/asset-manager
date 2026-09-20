@@ -7,10 +7,12 @@ import {
 	BUILT_IN_CURRENCIES,
 	getSettings,
 	SETTING_DISPLAY_CURRENCY,
+	SETTING_TIMEZONE,
 	setSetting,
 } from "../data/settings.repo";
 import { deleteFxRate, listFxHistory, listFxRates, upsertFxRate } from "../data/fx.repo";
 import { encryptSecret, decryptSecret } from "../core/secrets";
+import { isValidTimeZone } from "../../shared/time";
 import { parseProviderSettings, PROVIDERS, PROVIDER_MAP, type ProviderId } from "../services/quotes/providers";
 import { isRecord } from "../core/utils";
 import { asRecord, requireCurrency, requireNumber, requireString } from "./validate";
@@ -70,6 +72,13 @@ settings.put("/", async (c) => {
 			throw badRequest(t("error.field_enum", { label: t("field.language"), allowed: "auto / zh / en" }));
 		}
 		await setSetting(c.env.DB, "language", value);
+	}
+	if (payload.timezone !== undefined) {
+		const value = requireString(payload, "timezone", { labelKey: "field.timezone", max: 64 }, t);
+		if (!isValidTimeZone(value)) {
+			throw badRequest(t("error.invalidTimezone", { value }));
+		}
+		await setSetting(c.env.DB, SETTING_TIMEZONE, value);
 	}
 	if (payload.marketDataEnabled !== undefined) {
 		await setSetting(c.env.DB, "market_data_enabled", payload.marketDataEnabled ? "1" : "0");

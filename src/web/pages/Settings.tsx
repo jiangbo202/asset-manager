@@ -1,16 +1,18 @@
 import { useState } from "react";
 import { api, type ImportPreview, type ImportResult, type SettingsDto } from "../lib/api";
 import { useAsync, useSubmit } from "../lib/useAsync";
-import { useT, useI18n } from "../lib/i18n";
+import { useT, useI18n, useTimeZone } from "../lib/i18n";
 import { dateTime } from "../lib/format";
 import { decryptBackup, deriveCredential, encryptBackup, isEncryptedBackup, ITERATIONS, randomSaltHex } from "../lib/crypto";
 import { downloadText, humanSize } from "../lib/download";
 import { MarketDataSection } from "./MarketDataSection";
 import { LANGUAGES, LANGUAGE_LABELS, type LanguageSetting } from "../../shared/i18n";
+import { COMMON_TIMEZONES, isValidTimeZone, offsetLabel } from "../../shared/time";
 
 export function SettingsPage({ onChanged }: { onChanged?: () => void }) {
 	const t = useT();
 	const i18n = useI18n();
+	const timeZone = useTimeZone();
 	const settings = useAsync<SettingsDto>(() => api.settings.get(), []);
 	const overview = useAsync(() => api.settings.overview(), []);
 	const [base, setBase] = useState("USD");
@@ -21,6 +23,8 @@ export function SettingsPage({ onChanged }: { onChanged?: () => void }) {
 	const pwd = useSubmit();
 	const language = useSubmit();
 
+	const [timeZoneInput, setTimeZoneInput] = useState("");
+	const timezoneSave = useSubmit();
 	const [oldPassword, setOldPassword] = useState("");
 	const [newPassword, setNewPassword] = useState("");
 
@@ -43,6 +47,10 @@ export function SettingsPage({ onChanged }: { onChanged?: () => void }) {
 	const backupImport = useSubmit();
 
 	const values = settings.data?.values ?? {};
+	const savedTimeZone = values.timezone ?? "UTC";
+	// 输入框未编辑时跟随服务端值
+	const timeZoneValue = timeZoneInput === "" ? savedTimeZone : timeZoneInput;
+	const timeZoneValid = isValidTimeZone(timeZoneValue);
 	const displayCurrency = values.display_currency ?? "USD";
 	const rowEntries = Object.entries(overview.data?.rows ?? {});
 	const limits = overview.data?.limits ?? {};
@@ -52,6 +60,15 @@ export function SettingsPage({ onChanged }: { onChanged?: () => void }) {
 			await api.settings.update({ displayCurrency: currency });
 			settings.reload();
 			onChanged?.();
+		});
+	};
+
+	const changeTimeZone = async () => {
+		await timezoneSave.run(async () => {
+			await api.settings.update({ timezone: timeZoneValue });
+			i18n.applyTimeZone(timeZoneValue);
+			setTimeZoneInput("");
+			settings.reload();
 		});
 	};
 
@@ -195,6 +212,55 @@ export function SettingsPage({ onChanged }: { onChanged?: () => void }) {
 				</div>
 
 				<div className="card panel">
+					<h3 style={{ marginTop: 0, fontSize: 14 }}>{t("settings.timezone")}</h3>
+					<p className="small muted">{t("settings.timezoneHint")}</p>
+					{timezoneSave.error && <div className="alert error">{timezoneSave.error}</div>}
+					<select
+						value={COMMON_TIMEZONES.includes(timeZoneValue as (typeof COMMON_TIMEZONES)[number]) ? timeZoneValue : ""}
+						onChange={(e) => setTimeZoneInput(e.target.value)}
+					>
+						{COMMON_TIMEZONES.map((zone) => (
+							<option key={zone} value={zone}>
+								{zone} ({offsetLabel(zone)})
+							</option>
+						))}
+						<option value="">{t("settings.timezoneCustom")}</option>
+					</select>
+					{(!COMMON_TIMEZONES.includes(timeZoneValue as (typeof COMMON_TIMEZONES)[number]) || !timeZoneValid) && (
+						<label className="field" style={{ marginTop: 8 }}>
+							<span>{t("settings.timezoneCustom")}</span>
+							<input
+								value={timeZoneValue}
+								onChange={(e) => setTimeZoneInput(e.target.value)}
+								placeholder="Asia/Shanghai"
+								list="tz-list"
+							/>
+							<datalist id="tz-list">
+								{COMMON_TIMEZONES.map((zone) => (
+									<option key={zone} value={zone} />
+								))}
+							</datalist>
+						</label>
+					)}
+					{!timeZoneValid && <div className="alert error">{t("settings.timezoneInvalid")}</div>}
+					{timeZoneValid && (
+						<p className="small muted">
+							{t("settings.timezoneNow", {
+								offset: offsetLabel(timeZoneValue),
+								time: dateTime(new Date().toISOString(), timeZoneValue),
+							})}
+						</p>
+					)}
+					<button
+						className="primary"
+						onClick={changeTimeZone}
+						disabled={timezoneSave.pending || !timeZoneValid || timeZoneValue === savedTimeZone}
+					>
+						{timezoneSave.pending ? t("common.saving") : t("common.save")}
+					</button>
+				</div>
+
+				<div className="card panel">
 					<h3 style={{ marginTop: 0, fontSize: 14 }}>{t("settings.language")}</h3>
 					<p className="small muted">{t("settings.languageHint")}</p>
 					{language.error && <div className="alert error">{language.error}</div>}
@@ -261,7 +327,7 @@ export function SettingsPage({ onChanged }: { onChanged?: () => void }) {
 											<td className="left muted small">
 												{item.source === "auto" ? t("settings.fxSourceAuto") : t("settings.fxSourceManual")}
 											</td>
-											<td className="left muted hide-sm">{dateTime(item.updated_at)}</td>
+											<td className="left muted hide-sm">{dateTime(item.updated_at, timeZone)}</td>
 											<td>
 												<button className="ghost danger" onClick={() => removeFx(item.base, item.quote)}>
 													{t("common.delete")}
@@ -492,7 +558,7 @@ export function SettingsPage({ onChanged }: { onChanged?: () => void }) {
 							{t("settings.logoutAll")}
 						</button>
 						<p className="small muted" style={{ marginBottom: 0, marginTop: 10 }}>
-							{t("settings.setupAt", { time: dateTime(values.setup_done_at ?? null) })}
+							{t("settings.setupAt", { time: dateTime(values.setup_done_at ?? null, timeZone) })}
 						</p>
 					</div>
 				</div>

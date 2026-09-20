@@ -1,5 +1,10 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { allKeys, resolveLanguage, translate } from "../../src/shared/i18n";
+import { allKeys, createTranslator, resolveLanguage } from "../../src/shared/i18n";
+import en from "../../src/shared/locales/en";
+import zh from "../../src/shared/locales/zh";
+
+const translate = createTranslator;
+const dicts = { zh, en };
 import { bootstrap, call, clearAll } from "../helpers";
 
 interface Envelope<T> {
@@ -21,8 +26,11 @@ async function callWithLang<T>(
 
 describe("i18n 基础设施", () => {
 	it("两种语言的 key 完全对齐（漏翻会立刻被这条测试抓出来）", () => {
-		const missing = allKeys().filter((item) => !item.zh || !item.en);
-		expect(missing, `缺失的翻译：${missing.map((item) => `${item.key}(zh=${item.zh},en=${item.en})`).join(", ")}`).toEqual([]);
+		const missing = allKeys(zh, en).filter((item) => item.present.some((value) => !value));
+		expect(
+			missing,
+			`缺失的翻译：${missing.map((item) => `${item.key}(zh=${item.present[0]},en=${item.present[1]})`).join(", ")}`,
+		).toEqual([]);
 	});
 
 	it("resolveLanguage：显式设置优先，auto 跟随 Accept-Language", () => {
@@ -37,11 +45,11 @@ describe("i18n 基础设施", () => {
 	});
 
 	it("translate：插值 + 缺失 key 回退", () => {
-		expect(translate("zh", "error.field_required", { label: "名称" })).toBe("名称不能为空");
-		expect(translate("en", "error.field_required", { label: "Name" })).toBe("Name is required");
-		expect(translate("en", "does.not.exist")).toBe("does.not.exist");
+		expect(translate("zh", dicts)("error.field_required", { label: "名称" })).toBe("名称不能为空");
+		expect(translate("en", dicts)("error.field_required", { label: "Name" })).toBe("Name is required");
+		expect(translate("en", dicts)("does.not.exist")).toBe("does.not.exist");
 		// 缺少插值参数时保留占位符，便于发现
-		expect(translate("en", "error.field_required")).toContain("{{label}}");
+		expect(translate("en", dicts)("error.field_required")).toContain("{{label}}");
 	});
 });
 

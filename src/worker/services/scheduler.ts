@@ -1,5 +1,6 @@
 import type { Env } from "../types";
-import { getSetting, getSnapshotHour } from "../data/settings.repo";
+import { getSetting, getSnapshotHour, getTimeZone } from "../data/settings.repo";
+import { dateIn, hourIn } from "../../shared/time";
 import { refreshQuotes } from "./quotes";
 import { takeSnapshot } from "./snapshots";
 
@@ -23,12 +24,18 @@ export interface CronResult {
 
 export async function handleCron(env: Env, now = new Date()): Promise<CronResult> {
 	const snapshotHour = await getSnapshotHour(env.DB);
+	const timeZone = await getTimeZone(env.DB);
+	const localHour = hourIn(timeZone, now);
 
-	if (now.getUTCHours() !== snapshotHour) {
-		return { ran: false, reason: `当前 UTC ${now.getUTCHours()} 点，快照时间配置为 ${snapshotHour} 点` };
+	if (localHour !== snapshotHour) {
+		return {
+			ran: false,
+			reason: `当前 ${timeZone} 时间 ${localHour} 点，快照时间配置为 ${snapshotHour} 点`,
+		};
 	}
 
-	const today = now.toISOString().slice(0, 10);
+	// "今天"按用户时区的日历日计算（快照日期、去重判断都用它）
+	const today = dateIn(timeZone, now);
 	const latest = await env.DB.prepare(`SELECT date FROM snapshots ORDER BY date DESC LIMIT 1`).first<{
 		date: string;
 	}>();

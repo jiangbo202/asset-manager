@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { api, type QuoteStatusDto, type RefreshReportDto, type SettingsDto } from "../lib/api";
 import { useAsync, useSubmit } from "../lib/useAsync";
-import { useT } from "../lib/i18n";
+import { useT, useTimeZone } from "../lib/i18n";
 import { dateTime } from "../lib/format";
 
 /**
@@ -15,6 +15,7 @@ import { dateTime } from "../lib/format";
  */
 export function MarketDataSection({ settings, onSaved }: { settings: SettingsDto | null; onSaved?: () => void }) {
 	const t = useT();
+	const timeZone = useTimeZone();
 	const status = useAsync<QuoteStatusDto>(() => api.quotes.status(), []);
 	const save = useSubmit();
 	const action = useSubmit();
@@ -183,7 +184,7 @@ export function MarketDataSection({ settings, onSaved }: { settings: SettingsDto
 						{t("market.enable")}
 					</label>
 					<label className="field">
-						<span>{t("market.snapshotHour")}</span>
+						<span>{t("market.snapshotHourTz", { timezone: timeZone })}</span>
 						<input
 							type="number"
 							min={0}
@@ -193,8 +194,9 @@ export function MarketDataSection({ settings, onSaved }: { settings: SettingsDto
 						/>
 					</label>
 					<p className="small muted" style={{ marginBottom: 0 }}>
-						{t("market.snapshotHint", {
-							time: status.data?.lastRunAt ? dateTime(status.data.lastRunAt) : t("market.never"),
+						{t("market.snapshotHintTz", {
+							timezone: timeZone,
+							time: status.data?.lastRunAt ? dateTime(status.data.lastRunAt, timeZone) : t("market.never"),
 						})}
 					</p>
 				</div>
@@ -419,7 +421,7 @@ export function MarketDataSection({ settings, onSaved }: { settings: SettingsDto
 								<tbody>
 									{(status.data?.recentRuns ?? []).map((run) => (
 										<tr key={run.id}>
-											<td className="left">{dateTime(run.started_at)}</td>
+											<td className="left">{dateTime(run.started_at, timeZone)}</td>
 											<td className="left">
 												{run.trigger === "cron" ? t("market.triggerCron") : t("market.triggerManual")}
 											</td>
@@ -457,7 +459,7 @@ export function MarketDataSection({ settings, onSaved }: { settings: SettingsDto
 											<td>
 												{row.price} {row.currency}
 											</td>
-											<td className="left hide-sm muted">{dateTime(row.fetched_at)}</td>
+											<td className="left hide-sm muted">{dateTime(row.fetched_at, timeZone)}</td>
 										</tr>
 									))}
 								</tbody>

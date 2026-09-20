@@ -1,4 +1,4 @@
-import { newId, nowIso, todayUtc } from "../core/utils";
+import { newId, nowIso } from "../core/utils";
 
 /**
  * price_history / qty_history
@@ -13,7 +13,7 @@ export async function recordPrice(
 	db: D1Database,
 	holdingId: string,
 	price: number,
-	effectiveDate = todayUtc(),
+	effectiveDate: string,
 	source: HistorySource = "manual",
 ): Promise<void> {
 	await db
@@ -29,7 +29,7 @@ export async function recordQty(
 	db: D1Database,
 	holdingId: string,
 	qty: number,
-	effectiveDate = todayUtc(),
+	effectiveDate: string,
 	source: HistorySource = "manual",
 ): Promise<void> {
 	await db

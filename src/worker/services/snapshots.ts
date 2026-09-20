@@ -1,7 +1,8 @@
-import { newId, nowIso, todayUtc } from "../core/utils";
+import { newId, nowIso } from "../core/utils";
+import { dateIn } from "../../shared/time";
 import { listHoldings } from "../data/accounts.repo";
 import { buildFxLookup, listFxRates } from "../data/fx.repo";
-import { getDisplayCurrency } from "../data/settings.repo";
+import { getDisplayCurrency, getTimeZone } from "../data/settings.repo";
 import { buildPortfolio } from "./portfolio";
 
 /**
@@ -51,8 +52,8 @@ export async function takeSnapshot(
 	db: D1Database,
 	options: { date?: string; force?: boolean } = {},
 ): Promise<TakeSnapshotResult> {
-	const date = options.date ?? todayUtc();
 	const displayCurrency = await getDisplayCurrency(db);
+	const date = options.date ?? dateIn(await getTimeZone(db));
 	const holdings = await listHoldings(db, {});
 	const fxRates = await listFxRates(db);
 	const portfolio = buildPortfolio(holdings, displayCurrency, fxRates);
@@ -182,7 +183,7 @@ async function loadDailyRates(db: D1Database): Promise<Map<string, Map<string, n
 	return byDate;
 }
 
-export function rangeToFromDate(range: TrendRange, today = todayUtc()): string | null {
+export function rangeToFromDate(range: TrendRange, today: string): string | null {
 	if (range === "ALL") return null;
 	const days = RANGE_DAYS[range] ?? 92;
 	const date = new Date(`${today}T00:00:00.000Z`);
@@ -202,6 +203,7 @@ export async function buildTrendSeries(
 	options: { range: TrendRange; displayCurrency?: string; filters?: TrendFilters },
 ): Promise<TrendSeries> {
 	const filters = options.filters ?? {};
+	const timeZone = await getTimeZone(db);
 	const displayCurrency = options.displayCurrency ?? (await getDisplayCurrency(db));
 	const fxRates = await listFxRates(db);
 	const lookup = buildFxLookup(fxRates);
@@ -231,7 +233,7 @@ export async function buildTrendSeries(
 	let frozenHits = 0;
 	let currentHits = 0;
 
-	const from = rangeToFromDate(options.range);
+	const from = rangeToFromDate(options.range, dateIn(timeZone));
 	const { results } = from
 		? await db
 				.prepare(`SELECT * FROM snapshots WHERE date >= ? ORDER BY date ASC`)

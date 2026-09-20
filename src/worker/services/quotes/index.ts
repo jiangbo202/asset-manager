@@ -1,10 +1,12 @@
-import { newId, nowIso, todayUtc } from "../../core/utils";
+import { newId, nowIso } from "../../core/utils";
+import { dateIn } from "../../../shared/time";
 import { decryptSecret } from "../../core/secrets";
-import { getSetting, setSetting, SETTING_DISPLAY_CURRENCY } from "../../data/settings.repo";
+import { getSetting, getTimeZone, setSetting, SETTING_DISPLAY_CURRENCY } from "../../data/settings.repo";
 import { listHoldings } from "../../data/accounts.repo";
 import { listFxRates, upsertAutoFxRate } from "../../data/fx.repo";
 import { applyHealth, cooldownOf, parseHealth, type ProviderHealth } from "./health";
-import { makeTranslator, type Translator } from "../../../shared/i18n";
+import type { Translator } from "../../../shared/i18n";
+import { translator as sharedTranslator } from "../../core/i18n";
 import {
 	DEFAULT_PRIORITY,
 	planProviders,
@@ -122,7 +124,7 @@ export async function refreshQuotes(
 	env: { DB: D1Database; SESSION_SECRET: string },
 	options: { trigger: "cron" | "manual"; fetcher?: typeof fetch; t?: Translator } = { trigger: "manual" },
 ): Promise<RefreshReport> {
-	const t = options.t ?? makeTranslator("zh");
+	const t = options.t ?? sharedTranslator("zh");
 	const startedAt = nowIso();
 	const db = env.DB;
 	const enabled = (await getSetting(db, "market_data_enabled")) !== "0";
@@ -146,6 +148,7 @@ export async function refreshQuotes(
 	}
 
 	const displayCurrency = (await getSetting(db, SETTING_DISPLAY_CURRENCY)) ?? "USD";
+	const timeZone = await getTimeZone(db);
 	const settings = await loadProviderSettings(db, env.SESSION_SECRET);
 	let health: ProviderHealth = parseHealth(await getSetting(db, "provider_health"));
 	// 注意：Workers 里 fetch 必须绑定到全局作用域调用，直接当方法传递会报 "Illegal invocation"
@@ -272,6 +275,7 @@ export async function refreshQuotes(
 
 	// 写入：持仓价格 + 价格历史 + 缓存
 	const statements: D1PreparedStatement[] = [];
+	const effectiveDate = dateIn(timeZone);
 	const finishedAtProbe = nowIso();
 	for (const quote of quotes) {
 		if (quote.key.startsWith("fx:")) {
@@ -294,7 +298,7 @@ export async function refreshQuotes(
 					`INSERT INTO price_history (id, holding_id, effective_date, price, source, created_at)
 					 VALUES (?, ?, ?, ?, 'api', ?)`,
 				)
-				.bind(newId(), quote.key, todayUtc(), quote.price, finishedAtProbe),
+				.bind(newId(), quote.key, effectiveDate, quote.price, finishedAtProbe),
 		);
 		report.updated += 1;
 	}

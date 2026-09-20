@@ -11,7 +11,6 @@ import {
 	buildTrendSeries,
 	deleteSnapshot,
 	listSnapshots,
-	rangeToFromDate,
 	takeSnapshot,
 	type TrendRange,
 } from "../services/snapshots";
@@ -58,7 +57,7 @@ portfolio.get("/history", async (c) => {
 			markets: parseMarkets(c.req.query("market")),
 		},
 	});
-	return ok(c, { ...series, range, from: rangeToFromDate(range) });
+	return ok(c, { ...series, range });
 });
 
 /** 快照列表（设置页用于排查"哪几天没拍"） */

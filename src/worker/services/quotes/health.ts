@@ -1,5 +1,6 @@
 import { isRecord } from "../../core/utils";
-import { makeTranslator, type Translator } from "../../../shared/i18n";
+import type { Translator } from "../../../shared/i18n";
+import { translator as sharedTranslator } from "../../core/i18n";
 
 /**
  * 数据源健康度与限流冷却
@@ -84,7 +85,7 @@ export function applyHealth(
 	providerId: string,
 	result: { ok: boolean; status?: number; error?: string },
 	now = new Date(),
-	t: Translator = makeTranslator("zh"),
+	t: Translator = sharedTranslator("zh"),
 ): ProviderHealth {
 	const current = health[providerId] ?? { failures: 0 };
 	const next: ProviderHealth = { ...health };

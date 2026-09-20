@@ -13,7 +13,9 @@ import {
 	updateHolding,
 } from "../data/accounts.repo";
 import { recordPrice, recordQty } from "../data/history.repo";
-import { newId, nowIso, todayUtc } from "../core/utils";
+import { newId, nowIso } from "../core/utils";
+import { dateIn } from "../../shared/time";
+import { getTimeZone } from "../data/settings.repo";
 import {
 	asRecord,
 	optionalNumber,
@@ -79,8 +81,9 @@ holdings.post("/", async (c) => {
 
 	const created = await createHolding(c.env.DB, input);
 	if (!isCash) {
-		await recordPrice(c.env.DB, created.id, input.price, todayUtc(), "manual");
-		await recordQty(c.env.DB, created.id, input.qty, todayUtc(), "manual");
+		const effectiveDate = dateIn(await getTimeZone(c.env.DB));
+		await recordPrice(c.env.DB, created.id, input.price, effectiveDate, "manual");
+		await recordQty(c.env.DB, created.id, input.qty, effectiveDate, "manual");
 	}
 	await writeAudit(c.env.DB, { entity: "holding", entityId: created.id, action: "create", after: created });
 	return ok(c, created, 201);
@@ -120,7 +123,8 @@ holdings.patch("/:id", async (c) => {
 
 	const nextClass = (patch.class as string | undefined) ?? before.class;
 	const effectiveDate =
-		optionalString(payload, "effectiveDate", { labelKey: "field.effectiveDate", max: 10 }, t) ?? todayUtc();
+		optionalString(payload, "effectiveDate", { labelKey: "field.effectiveDate", max: 10 }, t) ??
+		dateIn(await getTimeZone(c.env.DB));
 	if (!/^\d{4}-\d{2}-\d{2}$/.test(effectiveDate)) throw badRequest(t("error.dateFormat"));
 
 	const priceChanged = typeof patch.price === "number" && patch.price !== before.price;
@@ -161,6 +165,7 @@ holdings.post("/bulk-price", async (c) => {
 	const statements: D1PreparedStatement[] = [];
 	const touched: Array<{ id: string; price: number; before: number }> = [];
 	const now = nowIso();
+	const effectiveDate = dateIn(await getTimeZone(c.env.DB));
 
 	for (const raw of rawItems) {
 		const item = asRecord(raw, t);
@@ -181,7 +186,7 @@ holdings.post("/bulk-price", async (c) => {
 		statements.push(
 			c.env.DB.prepare(
 				`INSERT INTO price_history (id, holding_id, effective_date, price, source, created_at) VALUES (?, ?, ?, ?, 'manual', ?)`,
-			).bind(newId(), id, todayUtc(), price, now),
+			).bind(newId(), id, effectiveDate, price, now),
 		);
 		touched.push({ id, price, before: holding.price });
 	}
