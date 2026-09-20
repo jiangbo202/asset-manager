@@ -14,6 +14,7 @@ import {
 	trendClass,
 } from "../lib/format";
 import { BrandIcon } from "../lib/icons";
+import { buildTreemapItems } from "../lib/treemap";
 import { useT } from "../lib/i18n";
 import { MarketFilter, parseMarketParam } from "../components/MarketFilter";
 import { useRouter } from "../lib/router";
@@ -88,6 +89,11 @@ export function DashboardPage() {
 	);
 
 	const data = portfolio.data;
+	// 显示币种：在 early return 之前就声明好。
+	// 组件里几个 useMemo（环形图、treemap）都会用到它，而 memo 里的回调只有在有数据时
+	// 才会执行 —— 如果声明放在下面的 `if (!data) return <Skeleton />` 之后，
+	// 就会变成"能编译、平时不报错、某些分支一开就崩"的 TDZ 错误。
+	const currency = data?.displayCurrency ?? "USD";
 	const hasFilter = Boolean(assetClass || markets.length > 0 || accountId || currencyFilter);
 
 	/** 手动刷新行情（走 Worker 的 /api/quotes/refresh，日常由每天的快照任务完成） */
@@ -144,99 +150,23 @@ export function DashboardPage() {
 		// t 变化时需要重算标签
 	}, [data, dimension, t]);
 
-	const treemapItems = useMemo(() => {
-		if (!data) return [];
-
-		// 分开模式（默认）：外层是账户，内层是标的，标签带上账户名——
-		// 同一个标的在多个券商时，光靠颜色分不清哪一个属于谁。
-		// 合并模式：一个标的 = 一块（跨账户金额相加），账户明细放进悬停提示。
-		if (mergeSymbols) {
-			const bySymbol = new Map<
-				string,
-				{ label: string; value: number; parts: Array<{ accountName: string; value: number }> }
-			>();
-			let grandTotal = 0;
-			for (const holding of data.holdings) {
-				if (holding.marketValueDisplay === null) continue;
-				if (zoom && holding.accountId !== zoom) continue;
-				const label = holding.symbol ?? holding.name;
-				const entry = bySymbol.get(label) ?? { label, value: 0, parts: [] };
-				entry.value += holding.marketValueDisplay;
-				entry.parts.push({ accountName: holding.accountName, value: holding.marketValueDisplay });
-				bySymbol.set(label, entry);
-				grandTotal += holding.marketValueDisplay;
-			}
-
-			const percent = (value: number) => (grandTotal > 0 ? ((value / grandTotal) * 100).toFixed(1) : "0.0");
-			return [...bySymbol.values()]
-				.map((entry) => ({
-					key: `symbol:${entry.label}`,
-					name: entry.label,
-					value: Number(entry.value.toFixed(2)),
-					children: [
+	const treemapItems = useMemo(
+		// 注意：memo 里只能用"早于本 memo 声明"的变量。currency 已提到组件顶部，
+		// 但仍用 data?.xxx 形式取值，避免再出现"某些分支一执行就 TDZ"的错误。
+		() =>
+			data
+				? buildTreemapItems(
 						{
-							key: `merged:${entry.label}`,
-							name: entry.label,
-							value: Number(entry.value.toFixed(2)),
-							// 多行提示：总额 + 每个账户各多少（原生 title 支持 \n 换行）
-							title: [
-								t("dashboard.treemapTotalLine", {
-									name: entry.label,
-									value: money(entry.value, currency),
-									percent: percent(entry.value),
-								}),
-								...entry.parts
-									.sort((a, b) => b.value - a.value)
-									.map((part) =>
-										t("dashboard.treemapAccountLine", {
-											name: part.accountName,
-											value: money(part.value, currency),
-											percent: percent(part.value),
-										}),
-									),
-							].join("\n"),
+							holdings: data.holdings,
+							currency: data.displayCurrency,
+							mergeSymbols,
+							zoom,
 						},
-					],
-				}))
-				.sort((a, b) => b.value - a.value);
-		}
-
-		const groups = new Map<
-			string,
-			{
-				key: string;
-				name: string;
-				value: number;
-				children: Array<{ key: string; name: string; title: string; value: number }>;
-			}
-		>();
-		for (const holding of data.holdings) {
-			if (holding.marketValueDisplay === null) continue;
-			if (zoom && holding.accountId !== zoom) continue;
-			const group =
-				groups.get(holding.accountId) ??
-				{ key: holding.accountId, name: holding.accountName, value: 0, children: [] };
-			// 标签带上账户名，区分不同券商的同一标的；
-			// 但现金这类本身就是"账户名+现金"的持仓（如"嘉信现金"）不再叠一次前缀
-			const label = holding.symbol ?? holding.name;
-			const needsPrefix = Boolean(holding.symbol) && !label.startsWith(holding.accountName);
-			group.children.push({
-				key: holding.id,
-				name: needsPrefix ? `${holding.accountName} ${label}` : label,
-				title: `${holding.accountName} · ${label}`,
-				value: Number(holding.marketValueDisplay.toFixed(2)),
-			});
-			group.value += holding.marketValueDisplay;
-			groups.set(holding.accountId, group);
-		}
-		return [...groups.values()]
-			.map((group) => ({
-				...group,
-				value: Number(group.value.toFixed(2)),
-				children: group.children.sort((a, b) => b.value - a.value),
-			}))
-			.sort((a, b) => b.value - a.value);
-	}, [data, zoom, mergeSymbols]);
+						t,
+					)
+				: [],
+		[data, zoom, mergeSymbols, t],
+	);
 
 	const rows = useMemo(() => {
 		if (!data) return [];
@@ -277,7 +207,6 @@ export function DashboardPage() {
 
 	if (!data) return <Skeleton />;
 
-	const currency = data.displayCurrency;
 	const accountOptions = accounts.data?.items ?? [];
 	// 下钻时显示的是账户名（不能从 treemapItems 取：合并模式下外层是标的）
 	const zoomName = accounts.data?.items.find((item) => item.id === zoom)?.name ?? "";
