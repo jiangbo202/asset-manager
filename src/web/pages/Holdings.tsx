@@ -6,6 +6,7 @@ import { useT } from "../lib/i18n";
 import { money, number, relativeDays, stalenessClass } from "../lib/format";
 import {
 	ASSET_CLASSES,
+	normalizeHkSymbol,
 	classLabel,
 	marketLabel,
 	matchesMarketFilter,
@@ -458,6 +459,12 @@ export function HoldingsPage() {
 										value={form.symbol}
 										onChange={(e) => setForm({ ...form, symbol: e.target.value })}
 										onBlur={() => {
+											// 港股统一显示成港交所的 5 位（输入 3121 → 03121），
+											// 免得 4 位/5 位混着看，也免得存进库里两种写法并存
+											if (form.market === "hk" && form.symbol.trim()) {
+												const normalized = normalizeHkSymbol(form.symbol);
+												if (normalized !== form.symbol) setForm({ ...form, symbol: normalized });
+											}
 											if (form.symbol.trim() && !form.name.trim()) void runLookup({ fillPrice: false });
 										}}
 										placeholder={t("holdings.symbolPlaceholder")}

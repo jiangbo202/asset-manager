@@ -198,7 +198,7 @@ Worker:
 providers.ts   适配器 + 代码映射（纯函数，易测）
   ├─ 输入归一化：QuoteTarget{ kind, symbol, currency, market, sourceOverride, symbolOverride }
   ├─ 每个适配器返回统一 Quote{ key, price, currency, source, symbol, name? }
-  └─ 代码映射规则：700+hk→0700.HK、03121+hk→3121.HK（Yahoo 4 位）/ hk03121（腾讯 5 位）、
+  └─ 代码映射规则：库里统一存港交所 5 位（03121），请求时 03121+hk→3121.HK（Yahoo 4 位）/ hk03121（腾讯 5 位）、
      600519+cn→600519.SS / BTC→bitcoin 或 BTCUSDT
 index.ts       编排
   ├─ 收集目标：非现金、未归档、有代码的持仓；以及组合里出现但缺汇率的币种对

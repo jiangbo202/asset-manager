@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { tOf } from "../core/i18n";
 import type { AppEnv } from "../types";
-import { ASSET_CLASSES, MARKETS } from "../../shared/labels";
+import { ASSET_CLASSES, MARKETS, normalizeHkSymbol } from "../../shared/labels";
 import type { Translator } from "../../shared/i18n";
 import { badRequest, notFound, ok } from "../core/errors";
 import { writeAudit } from "../core/audit";
@@ -83,8 +83,10 @@ holdings.post("/", async (c) => {
 		throw badRequest(t("error.field_enum", { label: t("field.market"), allowed: MARKETS.join(" / ") }));
 	}
 
-	const symbol = isCash ? null : optionalString(payload, "symbol", { labelKey: "field.symbol", max: 32 }, t);
+	let symbol = isCash ? null : optionalString(payload, "symbol", { labelKey: "field.symbol", max: 32 }, t);
 	if (!isCash && market) assertMarketSymbolShape(market, symbol, t);
+	// 港股统一存成港交所的 5 位写法（3121 → 03121、0700.HK → 00700）
+	if (!isCash && market === "hk" && symbol) symbol = normalizeHkSymbol(symbol);
 
 	const input = {
 		account_id: accountId,
@@ -136,7 +138,13 @@ holdings.patch("/:id", async (c) => {
 		const nextClass = (patch.class as string | undefined) ?? before.class;
 		const nextMarket = (patch.market as string | null | undefined) ?? before.market;
 		const nextSymbol = (patch.symbol as string | null | undefined) ?? before.symbol;
-		if (nextClass !== "cash") assertMarketSymbolShape(nextMarket ?? "", nextSymbol, t);
+		if (nextClass !== "cash") {
+			assertMarketSymbolShape(nextMarket ?? "", nextSymbol, t);
+			if (nextMarket === "hk" && nextSymbol) {
+				const normalized = normalizeHkSymbol(nextSymbol);
+				if (normalized !== nextSymbol) patch.symbol = normalized;
+			}
+		}
 	}
 	if (payload.qty !== undefined) patch.qty = requireNumber(payload, "qty", { labelKey: "field.qty", min: -1e15, max: 1e15 }, t);
 	if (payload.price !== undefined) patch.price = requireNumber(payload, "price", { labelKey: "field.price", min: 0, max: 1e15 }, t);

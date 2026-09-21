@@ -29,6 +29,19 @@ export function matchesMarketFilter(
 	return markets.includes("crypto") && holding.class === "crypto";
 }
 
+/**
+ * 港股代码统一为港交所的 5 位写法（含前导零）。
+ *
+ * `700` / `0700` / `3121` → `00700` / `00700` / `03121`，带 `.HK` 后缀的先剥掉后缀。
+ * 港交所公布的一律是 5 位，券商对账单、港股通、腾讯行情也都是 5 位；
+ * 4 位是 Yahoo 的内部格式，只在请求它时临时转换（worker 的 hkYahooCode）。
+ * 已经是 5 位（含 8 开头的人民币柜台 80737）或非纯数字的，保持原样。
+ */
+export function normalizeHkSymbol(value: string): string {
+	const bare = (value ?? "").trim().replace(/\.HK$/i, "");
+	return /^\d{1,4}$/.test(bare) ? bare.padStart(5, "0") : bare;
+}
+
 /** 资产类别标签：class.stock / class.etf … */
 export function classLabel(t: Translator, value: string): string {
 	return t(`class.${value}`);

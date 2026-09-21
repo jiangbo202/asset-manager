@@ -2,7 +2,7 @@
 export const APP_VERSION = "0.13.0";
 
 /** 数据库结构版本（与 migrations 目录里的最新迁移对应；用于检测"库落后于代码"） */
-export const SCHEMA_VERSION = 4;
+export const SCHEMA_VERSION = 5;
 
 /** 备份文件格式版本；schema 不兼容变更时 +1 */
 export const BACKUP_SCHEMA_VERSION = 1;

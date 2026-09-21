@@ -315,8 +315,9 @@ Quotes refresh once a day, at the hour configured under Settings → Quotes & sn
 time zone). Press “Refresh quotes” to update immediately.
 
 **How should I write HK / A-share codes?**
-Four or five digits both work (`0700`, `00700`, `03121`), with or without the `.HK` suffix. They are converted to
-whatever the provider expects: Yahoo wants the 4-digit `3121.HK`, Tencent the 5-digit `hk03121`.
+Any of `700`, `0700`, `3121`, `03121`, with or without the `.HK` suffix — on save they are normalised to the
+HKEX 5-digit form (`00700`, `03121`), the same way your broker statement writes them. At request time they are
+converted to what each provider expects: Yahoo wants the 4-digit `3121.HK`, Tencent the 5-digit `hk03121`.
 
 **What is the “rate-limit cooldown”?**
 Free APIs rate-limit by IP. When a provider is limited it is paused for 10 minutes (30 minutes after three
