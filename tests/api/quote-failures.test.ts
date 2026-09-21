@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { peggedRate } from "../../src/shared/pegged";
 import { buildFxLookup } from "../../src/worker/data/fx.repo";
 import { refreshQuotes } from "../../src/worker/services/quotes";
+import { lookupSymbol } from "../../src/worker/services/quotes/lookup";
 import { bootstrap, call, clearAll } from "../helpers";
 import { fakeFetch } from "../services/providers.test";
 
@@ -101,6 +102,86 @@ describe("行情失败归因与稳定币折算", () => {
 		const failure = report.failed.find((item) => item.symbol === "MSTR");
 		expect(failure?.reason).toContain("MSTR.HK");
 		expect(failure?.market).toBe("hk");
+	});
+
+	it("港股 5 位代码（03121 南方KOSPI）请求的是 3121.HK，并且能取到价格", async () => {
+		const accountId = await accountOf();
+		const holdingId = await addHolding(accountId, {
+			class: "stock",
+			market: "hk",
+			symbol: "03121",
+			name: "南方KOSPI",
+			qty: 1000,
+		});
+
+		const urls: string[] = [];
+		const fetcher = (async (input: RequestInfo | URL) => {
+			const url = String(input);
+			urls.push(url);
+			if (url.includes("3121.HK")) {
+				return new Response(JSON.stringify({ chart: { result: [{ meta: { currency: "USD", regularMarketPrice: 6.73 } }] } }), {
+					status: 200,
+					headers: { "content-type": "application/json" },
+				});
+			}
+			return new Response("no handler", { status: 404 });
+		}) as unknown as typeof fetch;
+
+		const report = await refreshQuotes(env, { trigger: "manual", fetcher });
+		expect(report.failed).toEqual([]);
+		// 关键：发出去的是 Yahoo 认的 4 位形式，而不是原样的 03121.HK
+		expect(urls.some((url) => url.includes("3121.HK"))).toBe(true);
+		expect(urls.some((url) => url.includes("03121.HK"))).toBe(false);
+
+		const holdings = await call<Envelope<{ items: Array<{ id: string; price: number }> }>>("/api/holdings", { cookie });
+		expect(holdings.body.data.items.find((item) => item.id === holdingId)?.price).toBe(6.73);
+	});
+
+	it("代码查询（查名称）也按 Yahoo 的 4 位形式去问，港股才能带出价格", async () => {
+		const urls: string[] = [];
+		const fetcher = (async (input: RequestInfo | URL) => {
+			const url = String(input);
+			urls.push(url);
+			if (url.includes("v1/finance/search")) {
+				return new Response(
+					JSON.stringify({
+						quotes: [{ symbol: "3121.HK", quoteType: "ETF", shortname: "CSOP KOSPI", exchDisp: "HKSE" }],
+					}),
+					{ status: 200, headers: { "content-type": "application/json" } },
+				);
+			}
+			if (url.includes("3121.HK")) {
+				return new Response(JSON.stringify({ chart: { result: [{ meta: { currency: "HKD", regularMarketPrice: 6.73 } }] } }), {
+					status: 200,
+					headers: { "content-type": "application/json" },
+				});
+			}
+			return new Response("no handler", { status: 404 });
+		}) as unknown as typeof fetch;
+
+		const result = await lookupSymbol(env, { symbol: "03121", market: "hk", fetcher, force: true });
+		expect(urls.some((url) => url.includes("3121.HK"))).toBe(true);
+		expect(urls.some((url) => url.includes("03121.HK"))).toBe(false);
+		const candidate = result.candidates.find((item) => item.symbol === "3121.HK");
+		expect(candidate?.price).toBe(6.73);
+	});
+
+	it("带 .HK 后缀的港股代码（代码查询存下来的那种）两家数据源都能认", async () => {
+		const accountId = await accountOf();
+		await addHolding(accountId, { class: "stock", market: "hk", symbol: "03121.HK", name: "南方KOSPI" });
+
+		const urls: string[] = [];
+		// Yahoo 故意全 404，看腾讯兜底请求的是什么代码
+		const fetcher = (async (input: RequestInfo | URL) => {
+			urls.push(String(input));
+			return new Response("no handler", { status: 404 });
+		}) as unknown as typeof fetch;
+
+		await refreshQuotes(env, { trigger: "manual", fetcher });
+		expect(urls.some((url) => url.includes("query1.finance.yahoo.com") && url.includes("3121.HK"))).toBe(true);
+		// 原来会拼成 hk03121.HK（腾讯返回 v_pv_none_match），正确写法是 hk03121
+		expect(urls.some((url) => url.includes("hk03121"))).toBe(true);
+		expect(urls.some((url) => url.includes("hk03121.HK"))).toBe(false);
 	});
 
 	it("多家数据源都失败时，每家怎么说都列出来", async () => {

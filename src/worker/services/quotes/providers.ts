@@ -349,31 +349,55 @@ export function binanceSymbol(target: QuoteTarget): string | null {
 	return base.includes("USDT") ? base : `${base}USDT`;
 }
 
+/**
+ * 港交所代码是 5 位（00700 腾讯 / 03121 南方KOSPI），而 Yahoo 用的是
+ * **去掉一个前导零的 4 位**形式（0700.HK / 3121.HK）。
+ *
+ * 踩过的坑：原来只做 padStart(4)，5 位代码会原样拼成 "03121.HK"，Yahoo 一律 404，
+ * 于是"数据源里没有这只港股"——其实有，只是要 3121.HK。
+ * 注意 8 开头的 5 位代码（人民币柜台，如 80737）Yahoo 也是 5 位，不能去零。
+ */
+export function hkYahooCode(value: string): string {
+	const digits = value.trim().toUpperCase().replace(/\.HK$/, "");
+	const code = /^0\d{4}$/.test(digits) ? digits.slice(1) : digits;
+	return `${code.padStart(4, "0")}.HK`;
+}
+
 export function yahooSymbol(target: QuoteTarget): string | null {
-	if (target.symbolOverride) return target.symbolOverride.trim();
-	const raw = baseSymbol(target);
+	const explicit = target.symbolOverride ? target.symbolOverride.trim() : null;
+	const raw = (explicit ?? baseSymbol(target)).trim();
 	if (!raw) return null;
-	// 已经带交易所后缀 / 币种对的，直接用它
-	if (raw.includes(".") || raw.includes("=") || raw.includes("-")) return raw;
+	if (target.kind === "fx") return raw;
 
 	const market = (target.market ?? "").toLowerCase();
-	if (target.kind === "crypto") return `${raw}-USD`;
-	if (market === "hk") return `${raw.padStart(4, "0")}.HK`;
+	// 代码查询给出的港股代码本身就带 .HK（例如 03121.HK），先按后缀归一化，
+	// 否则会原样发给数据源 —— Yahoo 和腾讯都不认这个写法
+	if (/\.HK$/i.test(raw)) return hkYahooCode(raw);
+	if (/\.(SS|SZ|SH)$/i.test(raw)) return raw.toUpperCase();
+	if (raw.includes("=") || raw.includes("-")) return raw; // 汇率 =X / 加密 -USD
+
+	if (target.kind === "crypto") return `${raw.toUpperCase()}-USD`;
+	if (market === "hk") return hkYahooCode(raw);
 	if (market === "cn") return /^(6|9)/.test(raw) ? `${raw}.SS` : `${raw}.SZ`;
 	return raw;
 }
 
 export function tencentSymbol(target: QuoteTarget): string | null {
 	if (target.kind === "fx" || target.kind === "crypto") return null;
-	const raw = target.symbolOverride
-		? target.symbolOverride.trim().toLowerCase()
-		: (target.symbol ?? "").trim().toUpperCase();
+	const raw = (target.symbolOverride ?? target.symbol ?? "").trim().toUpperCase();
 	if (!raw) return null;
-	if (/^(hk|sh|sz)/i.test(raw)) return raw.toLowerCase();
+	// 已经带交易所前缀的（hk00700 / sh600519）直接用
+	if (/^(hk|sh|sz)\d+/i.test(raw)) return raw.toLowerCase();
+
+	// 或者带后缀的（0700.HK / 600519.SS）：剥掉后缀，按后缀判断市场
+	const isHkSuffix = /\.HK$/i.test(raw);
+	const isCnSuffix = /\.(SS|SZ|SH)$/i.test(raw);
+	const bare = raw.replace(/\.(HK|SS|SZ|SH)$/i, "");
 
 	const market = (target.market ?? "").toLowerCase();
-	if (market === "hk") return `hk${raw.padStart(5, "0")}`;
-	if (market === "cn") return /^(6|9)/.test(raw) ? `sh${raw}` : `sz${raw}`;
+	// 腾讯行情用港交所的 5 位代码：03121 → hk03121
+	if (market === "hk" || isHkSuffix) return `hk${bare.padStart(5, "0")}`;
+	if (market === "cn" || isCnSuffix) return /^(6|9)/.test(bare) ? `sh${bare}` : `sz${bare}`;
 	return null;
 }
 

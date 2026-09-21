@@ -56,6 +56,28 @@ describe("代码映射（纯函数）", () => {
 		expect(yahooSymbol(stock({ symbol: "HKD=X", kind: "fx" }))).toBe("HKD=X");
 	});
 
+	it("Yahoo：港股 5 位代码要去掉一个前导零（03121 → 3121.HK）", () => {
+		// 实测：03121.HK / 00700.HK / 09988.HK 在 Yahoo 全是 404，
+		// 而 3121.HK / 0700.HK / 9988.HK 才有数据（港交所 5 位 → Yahoo 4 位）
+		expect(yahooSymbol(stock({ symbol: "03121", market: "hk" }))).toBe("3121.HK");
+		expect(yahooSymbol(stock({ symbol: "00700", market: "hk" }))).toBe("0700.HK");
+		expect(yahooSymbol(stock({ symbol: "09988", market: "hk" }))).toBe("9988.HK");
+		expect(yahooSymbol(stock({ symbol: "00005", market: "hk" }))).toBe("0005.HK");
+		expect(yahooSymbol(stock({ symbol: "03121.HK", market: "hk" }))).toBe("3121.HK");
+		// 8 开头的 5 位代码（人民币柜台）Yahoo 也是 5 位，不能去零
+		expect(yahooSymbol(stock({ symbol: "80737", market: "hk" }))).toBe("80737.HK");
+	});
+
+	it("腾讯：港股用港交所 5 位代码，带后缀的也要能转", () => {
+		expect(tencentSymbol(stock({ symbol: "03121", market: "hk" }))).toBe("hk03121");
+		expect(tencentSymbol(stock({ symbol: "3121", market: "hk" }))).toBe("hk03121");
+		// 代码查询存下来的 "03121.HK" 原来会拼成 hk03121.HK（腾讯返回 v_pv_none_match）
+		expect(tencentSymbol(stock({ symbol: "03121.HK", market: "hk" }))).toBe("hk03121");
+		expect(tencentSymbol(stock({ symbol: "0700.HK", market: "hk" }))).toBe("hk00700");
+		expect(tencentSymbol(stock({ symbol: "600519.SS", market: "cn" }))).toBe("sh600519");
+		expect(tencentSymbol(stock({ symbol: "000001.SZ", market: "cn" }))).toBe("sz000001");
+	});
+
 	it("Yahoo：用户指定的代码覆盖优先", () => {
 		expect(yahooSymbol(stock({ symbolOverride: "9988.HK", market: "us" }))).toBe("9988.HK");
 	});
