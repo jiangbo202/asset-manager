@@ -319,6 +319,11 @@ Any of `700`, `0700`, `3121`, `03121`, with or without the `.HK` suffix — on s
 HKEX 5-digit form (`00700`, `03121`), the same way your broker statement writes them. At request time they are
 converted to what each provider expects: Yahoo wants the 4-digit `3121.HK`, Tencent the 5-digit `hk03121`.
 
+**What is the “beacon.min.js blocked by CSP” message in the console?**
+That is Cloudflare's own Web Analytics script (`static.cloudflareinsights.com`); our CSP only allows
+`script-src 'self'`, so it is blocked — which is the intended behaviour (this project ships no third-party
+scripts). Turn Web Analytics off for the site in the Cloudflare dashboard if you want the message gone.
+
 **What is the “rate-limit cooldown”?**
 Free APIs rate-limit by IP. When a provider is limited it is paused for 10 minutes (30 minutes after three
 consecutive failures) and other providers are used instead. Cooldown state and the last error are visible in

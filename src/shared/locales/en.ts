@@ -171,6 +171,8 @@ const en: Dict = {
 
 	// ── Holdings ────────────────────────────────────────────
 	"holdings.title": "Holdings",
+	"holdings.editTitle": "Editing: {{name}}",
+	"holdings.createTitle": "New holding",
 	"holdings.create": "New holding",
 	"holdings.account": "Account",
 	"holdings.class": "Class",

@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { api, type AccountDto, type HoldingListDto, type LookupCandidate } from "../lib/api";
 import { useAsync, useSubmit } from "../lib/useAsync";
 import { BrandIcon } from "../lib/icons";
@@ -81,11 +81,30 @@ export function HoldingsPage() {
 		error: string | null;
 		candidates: LookupCandidate[];
 	}>({ loading: false, message: null, error: null, candidates: [] });
+	// 表单在列表上方：列表一长，从下面的行点「编辑」屏幕上什么都没有变化，
+	// 看起来就像"点了没反应"。所以每次打开/切换表单都滚过去并高亮一下。
+	const formRef = useRef<HTMLFormElement | null>(null);
+	const [formAttention, setFormAttention] = useState(0);
+	const focusForm = () => setFormAttention((value) => value + 1);
+
 	const { pending, error, setError, run } = useSubmit();
 	const bulk = useSubmit();
 
+	useEffect(() => {
+		if (formAttention === 0) return;
+		formRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+		const timer = setTimeout(() => setFormAttention(0), 1400);
+		return () => clearTimeout(timer);
+	}, [formAttention]);
+
 	const accountList = accounts.data?.items ?? [];
 	const allItems = holdings.data?.items ?? [];
+
+	const editedName = useMemo(() => {
+		if (!editingId) return "";
+		const item = allItems.find((row) => row.id === editingId);
+		return item ? `${item.name}（${item.account_name}）` : "";
+	}, [editingId, allItems]);
 	const hasFilter = Boolean(filterAccount || filterClass || filterMarkets.length > 0);
 
 	const sortColumns: Array<{ key: SortKey; label: string; className?: string }> = [
@@ -158,9 +177,11 @@ export function HoldingsPage() {
 		const first = accountList[0];
 		setEditingId(null);
 		setForm(emptyForm(first.id, first.currency));
+		focusForm();
 	};
 
 	const startEdit = (holding: HoldingListDto) => {
+		focusForm();
 		setEditingId(holding.id);
 		setForm({
 			accountId: holding.account_id,
@@ -389,7 +410,17 @@ export function HoldingsPage() {
 			{bulk.error && <div className="alert error">{bulk.error}</div>}
 
 			{form && (
-				<form className="card panel" onSubmit={submit} style={{ marginBottom: 16 }}>
+				<form
+					ref={formRef}
+					className={`card panel${formAttention > 0 ? " attention" : ""}`}
+					onSubmit={submit}
+					style={{ marginBottom: 16 }}
+				>
+					<div className="section-head" style={{ marginTop: 0 }}>
+						<h3 style={{ margin: 0, fontSize: 14 }}>
+							{editingId ? t("holdings.editTitle", { name: editedName }) : t("holdings.createTitle")}
+						</h3>
+					</div>
 					<div className="row">
 						<label className="field">
 							<span>{t("holdings.account")}</span>
@@ -650,7 +681,11 @@ export function HoldingsPage() {
 							{items.map((holding) => {
 								const days = daysSince(holding.price_updated_at);
 								return (
-									<tr key={holding.id} style={holding.archived === 1 ? { opacity: 0.55 } : undefined}>
+									<tr
+										key={holding.id}
+										className={editingId === holding.id ? "row-editing" : undefined}
+										style={holding.archived === 1 ? { opacity: 0.55 } : undefined}
+									>
 										<td className="left">
 											{holding.symbol ? <strong>{holding.symbol}</strong> : holding.name}
 											{holding.symbol && <span className="muted small"> {holding.name}</span>}

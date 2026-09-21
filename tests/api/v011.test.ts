@@ -5,8 +5,7 @@ import { lookupSymbol, inferMarket } from "../../src/worker/services/quotes/look
 import { applyHealth, cooldownOf, parseHealth } from "../../src/worker/services/quotes/health";
 import { refreshQuotes } from "../../src/worker/services/quotes";
 import { buildTrendSeries, takeSnapshot } from "../../src/worker/services/snapshots";
-import { bootstrap, call, clearAll } from "../helpers";
-import { fakeFetch } from "../services/providers.test";
+import { bootstrap, call, clearAll, fakeFetch } from "../helpers";
 
 interface Envelope<T> {
 	ok: boolean;

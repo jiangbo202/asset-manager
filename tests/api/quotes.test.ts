@@ -4,8 +4,7 @@ import type { Portfolio } from "../../src/shared/api-types";
 import { refreshQuotes } from "../../src/worker/services/quotes";
 import { handleCron } from "../../src/worker/services/scheduler";
 import { buildTrendSeries, takeSnapshot } from "../../src/worker/services/snapshots";
-import { bootstrap, call, clearAll } from "../helpers";
-import { fakeFetch } from "../services/providers.test";
+import { bootstrap, call, clearAll, fakeFetch } from "../helpers";
 
 interface Envelope<T> {
 	ok: boolean;
@@ -233,21 +232,21 @@ describe("v0.10 行情刷新 / 快照 / 走势", () => {
 		const at = (hour: number) =>
 			new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), hour, 0, 0));
 
-		const wrongHour = await handleCron(env, at(3));
+		const wrongHour = await handleCron(env, at(3), { fetcher: providerStubs });
 		expect(wrongHour.ran).toBe(false);
 
 		// 默认快照小时是 22（UTC）：到点先刷行情，并说明快照留给下一个整点
-		const refreshed = await handleCron(env, at(22));
+		const refreshed = await handleCron(env, at(22), { fetcher: providerStubs });
 		expect(refreshed.ran).toBe(true);
 		expect(refreshed.reason).toContain("快照");
 		expect(refreshed.snapshot).toBeUndefined();
 
 		// 下一个整点：行情当天已刷过 → 拍快照
-		const snapshot = await handleCron(env, at(23));
+		const snapshot = await handleCron(env, at(23), { fetcher: providerStubs });
 		expect(snapshot.ran).toBe(true);
 		expect(snapshot.snapshot?.date).toBe(now.toISOString().slice(0, 10));
 
-		const second = await handleCron(env, at(23));
+		const second = await handleCron(env, at(23), { fetcher: providerStubs });
 		expect(second.ran).toBe(false);
 		expect(second.reason).toContain("已有快照");
 	});
@@ -260,18 +259,18 @@ describe("v0.10 行情刷新 / 快照 / 走势", () => {
 		const today = now.toISOString().slice(0, 10);
 
 		// 默认快照小时是 22（UTC）：21 点还没到 → 不执行
-		expect((await handleCron(env, at(21))).ran).toBe(false);
+		expect((await handleCron(env, at(21), { fetcher: providerStubs })).ran).toBe(false);
 
 		// 23 点：已经过了配置时间、当天还没快照 → 直接补拍
 		// （注意：刷新行情只在配置的那个小时做，所以这时不会再刷一次）
-		const catchUp = await handleCron(env, at(23));
+		const catchUp = await handleCron(env, at(23), { fetcher: providerStubs });
 		expect(catchUp.ran).toBe(true);
 		expect(catchUp.reason).toContain("补");
 		expect(catchUp.snapshot?.date).toBe(today);
 		expect(catchUp.quotes).toBeUndefined();
 
 		// 同一天再跑：已有快照 → 跳过
-		const again = await handleCron(env, at(23));
+		const again = await handleCron(env, at(23), { fetcher: providerStubs });
 		expect(again.ran).toBe(false);
 		expect(again.reason).toContain("已有快照");
 	});

@@ -171,6 +171,8 @@ const zh: Dict = {
 
 	// ── 持仓 ────────────────────────────────────────────────
 	"holdings.title": "持仓",
+	"holdings.editTitle": "编辑：{{name}}",
+	"holdings.createTitle": "新增持仓",
 	"holdings.create": "新建持仓",
 	"holdings.account": "账户",
 	"holdings.class": "类别",

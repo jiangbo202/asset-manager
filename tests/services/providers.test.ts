@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { fakeFetch } from "../helpers";
 import {
 	binanceSymbol,
 	coingeckoId,
@@ -16,23 +17,6 @@ import {
 import { isPlaceholderName } from "../../src/worker/services/quotes/lookup";
 
 /** 用假的 fetch 替身验证适配器的解析逻辑（不打真实网络） */
-export function fakeFetch(
-	handlers: Array<{ match: (url: string) => boolean; json?: unknown; text?: string; status?: number }>,
-): typeof fetch {
-	const impl = async (input: RequestInfo | URL): Promise<Response> => {
-		const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : (input as Request).url;
-		for (const handler of handlers) {
-			if (!handler.match(url)) continue;
-			const body = handler.text ?? JSON.stringify(handler.json ?? {});
-			return new Response(body, {
-				status: handler.status ?? 200,
-				headers: { "content-type": "application/json" },
-			});
-		}
-		return new Response("no handler", { status: 404 });
-	};
-	return impl as unknown as typeof fetch;
-}
 
 const ctx = (handlers: Parameters<typeof fakeFetch>[0]): FetchContext => ({ fetcher: fakeFetch(handlers), apiKeys: {} });
 const settings: ProviderSettings = { enabled: {} };

@@ -4,8 +4,7 @@ import { peggedRate } from "../../src/shared/pegged";
 import { buildFxLookup } from "../../src/worker/data/fx.repo";
 import { refreshQuotes } from "../../src/worker/services/quotes";
 import { isPlaceholderName, lookupSymbol } from "../../src/worker/services/quotes/lookup";
-import { bootstrap, call, clearAll } from "../helpers";
-import { fakeFetch } from "../services/providers.test";
+import { bootstrap, call, clearAll, fakeFetch } from "../helpers";
 
 interface Envelope<T> {
 	ok: boolean;

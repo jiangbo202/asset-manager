@@ -48,7 +48,16 @@ export interface CronResult {
 	snapshot?: { date: string; total: number; currency: string; created: boolean };
 }
 
-export async function handleCron(env: Env, now = new Date()): Promise<CronResult> {
+/**
+ * `fetcher` 只是为了测试可注入：定时任务本身用全局 fetch。
+ * 不注入的话，测试会真的去打 CoinGecko / Yahoo —— 本地几秒起步、
+ * CI 里又因为没网而"快得可疑"，两种环境测的根本不是同一件事。
+ */
+export async function handleCron(
+	env: Env,
+	now = new Date(),
+	options: { fetcher?: typeof fetch } = {},
+): Promise<CronResult> {
 	// 一次读出全部设置（早先是两次 getSetting = 两次往返）
 	const settings = await getSettings(env.DB);
 	const snapshotHour = snapshotHourOf(settings);
@@ -76,7 +85,11 @@ export async function handleCron(env: Env, now = new Date()): Promise<CronResult
 
 	if (enabled && localHour === snapshotHour) {
 		try {
-			const report = await refreshQuotes(env, { trigger: "cron", maxHoldings: CRON_MAX_HOLDINGS });
+			const report = await refreshQuotes(env, {
+				trigger: "cron",
+				maxHoldings: CRON_MAX_HOLDINGS,
+				fetcher: options.fetcher,
+			});
 			quotes = {
 				updated: report.updated,
 				fxUpdated: report.fxUpdated,

@@ -62,6 +62,26 @@ a {
 	padding: 24px;
 }
 
+/* 打开表单时的短暂高亮：表单在列表上方，从下面的行点「编辑」需要一点视觉反馈 */
+@keyframes panel-attention {
+	from {
+		box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 40%, transparent);
+	}
+	to {
+		box-shadow: var(--shadow);
+	}
+}
+
+.panel.attention {
+	animation: panel-attention 1.4s ease-out;
+	/* 顶部导航是 sticky 的（约 56px），滚过去时别被它盖住 */
+	scroll-margin-top: 72px;
+}
+
+tr.row-editing {
+	background: var(--accent-weak);
+}
+
 .card {
 	background: var(--surface);
 	border: 1px solid var(--border);

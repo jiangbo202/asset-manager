@@ -95,3 +95,28 @@ export async function clearAll(): Promise<void> {
 		env.DB.prepare("DELETE FROM settings WHERE key NOT IN ('schema_version')"),
 	]);
 }
+
+/**
+ * 假的数据源响应：按 URL 前缀匹配，没有匹配到的一律 404。
+ *
+ * 放在这里而不是某个 *.test.ts 里：测试文件一旦被 import（例如别处要复用这个桩），
+ * 里面的 describe/it 会**再注册一遍**，同一批用例会被重复执行好几次
+ * （实测：22 个 providers 用例被 4 个文件各跑一次，总数从 161 虚涨到 223）。
+ */
+export function fakeFetch(
+	handlers: Array<{ match: (url: string) => boolean; json?: unknown; text?: string; status?: number }>,
+): typeof fetch {
+	const impl = async (input: RequestInfo | URL): Promise<Response> => {
+		const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : (input as Request).url;
+		for (const handler of handlers) {
+			if (!handler.match(url)) continue;
+			const body = handler.text ?? JSON.stringify(handler.json ?? {});
+			return new Response(body, {
+				status: handler.status ?? 200,
+				headers: { "content-type": "application/json" },
+			});
+		}
+		return new Response("no handler", { status: 404 });
+	};
+	return impl as unknown as typeof fetch;
+}

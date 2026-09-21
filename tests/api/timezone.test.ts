@@ -11,7 +11,10 @@ import {
 	zonedDayRange,
 } from "../../src/shared/time";
 import { handleCron } from "../../src/worker/services/scheduler";
-import { bootstrap, call, clearAll } from "../helpers";
+import { bootstrap, call, clearAll, fakeFetch } from "../helpers";
+
+/** 定时任务里那一步行情刷新不该打真实网络（本地几秒起步、CI 里又没网） */
+const stub = fakeFetch([]);
 
 interface Envelope<T> {
 	ok: boolean;
@@ -99,11 +102,11 @@ describe("时区设置与业务口径", () => {
 		const now = new Date();
 		const utcDate = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 21, 0, 0));
 		expect(hourIn("Asia/Shanghai", utcDate)).toBe(5);
-		expect((await handleCron(env, utcDate)).ran).toBe(true);
+		expect((await handleCron(env, utcDate, { fetcher: stub })).ran).toBe(true);
 
 		const fourAm = new Date(utcDate.getTime() - 3600_000);
 		expect(hourIn("Asia/Shanghai", fourAm)).toBe(4);
-		expect((await handleCron(env, fourAm)).ran).toBe(false);
+		expect((await handleCron(env, fourAm, { fetcher: stub })).ran).toBe(false);
 	});
 
 	it("默认时区是 UTC，并由 /api/auth/me 下发给前端", async () => {
@@ -200,18 +203,18 @@ describe("时区设置与业务口径", () => {
 		// 03:00 UTC = 上海 11:00 → 未到点，跳过，并说明"当前 时区 时间 N 点"
 		const shanghai1100 = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 3, 0, 0));
 
-		const skipped = await handleCron(env, shanghai1100);
+		const skipped = await handleCron(env, shanghai1100, { fetcher: stub });
 		expect(skipped.ran).toBe(false);
 		expect(skipped.reason).toContain("Asia/Shanghai");
 
 		// 到点那次先刷行情（一次调用只干一件重活）
-		const refreshed = await handleCron(env, shanghai2200);
+		const refreshed = await handleCron(env, shanghai2200, { fetcher: stub });
 		expect(refreshed.ran).toBe(true);
 		expect(refreshed.snapshot).toBeUndefined();
 
 		// 下一个整点（上海 23:00）拍快照，日期用上海日历日
 		const shanghai2300 = new Date(shanghai2200.getTime() + 3600_000);
-		const result = await handleCron(env, shanghai2300);
+		const result = await handleCron(env, shanghai2300, { fetcher: stub });
 		expect(result.ran).toBe(true);
 		expect(result.snapshot?.date).toBe(dateIn("Asia/Shanghai", shanghai2300));
 
@@ -219,7 +222,7 @@ describe("时区设置与业务口径", () => {
 		await save({ timezone: "UTC" });
 		await clearAll();
 		await bootstrap();
-		const utcResult = await handleCron(env, shanghai2200);
+		const utcResult = await handleCron(env, shanghai2200, { fetcher: stub });
 		expect(utcResult.ran).toBe(false);
 		expect(utcResult.reason).toContain("UTC");
 	});
