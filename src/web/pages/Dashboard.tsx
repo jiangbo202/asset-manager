@@ -14,7 +14,7 @@ import {
 	trendClass,
 } from "../lib/format";
 import { BrandIcon } from "../lib/icons";
-import { buildTreemapItems } from "../lib/treemap";
+import { buildTreemapItems, pnlSummary } from "../lib/treemap";
 import { useT } from "../lib/i18n";
 import { MarketFilter, parseMarketParam } from "../components/MarketFilter";
 import { useRouter } from "../lib/router";
@@ -210,10 +210,9 @@ export function DashboardPage() {
 	const accountOptions = accounts.data?.items ?? [];
 	// 下钻时显示的是账户名（不能从 treemapItems 取：合并模式下外层是标的）
 	const zoomName = accounts.data?.items.find((item) => item.id === zoom)?.name ?? "";
-	// 多币种汇总必须用折算后的值（costDisplay / pnlDisplay），否则会把不同币种的数字相加
-	const costTotal = data.holdings.reduce((sum, item) => sum + (item.costDisplay ?? 0), 0);
-	const pnlTotal = data.holdings.reduce((sum, item) => sum + (item.pnlDisplay ?? 0), 0);
-	const pnlMissingCount = data.holdings.filter((item) => item.avgCost === null).length;
+	// 多币种汇总必须用折算后的值（costDisplay / pnlDisplay），否则会把不同币种的数字相加。
+	// 口径细节（现金不算"未填成本"等）抽成纯函数，由 tests/web/treemap.test.ts 盯住
+	const { costTotal, pnlTotal, pnlPct, missingCostCount: pnlMissingCount } = pnlSummary(data.holdings);
 
 	return (
 		<>
@@ -260,7 +259,7 @@ export function DashboardPage() {
 					<div className="label">{t("dashboard.pnlTotal")}</div>
 					<div className={`value ${trendClass(pnlTotal)}`}>{signedMoney(pnlTotal, currency)}</div>
 					<div className="hint">
-						{costTotal > 0 ? signedPercent((pnlTotal / costTotal) * 100) : "—"}
+						{pnlPct === null ? "—" : signedPercent(pnlPct)}
 						{pnlMissingCount > 0 && t("dashboard.pnlMissing", { count: pnlMissingCount })}
 					</div>
 				</div>

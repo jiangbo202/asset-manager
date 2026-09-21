@@ -1,5 +1,7 @@
+import { useEffect, useRef, useState } from "react";
 import type { BreakdownItem } from "../../shared/api-types";
 import { money } from "../lib/format";
+import { treemapLabel } from "./treemap";
 import { useT } from "./i18n";
 
 export const PALETTE = [
@@ -215,6 +217,20 @@ export function Treemap({
 	onSelect?: (groupKey: string) => void;
 }) {
 	const t = useT();
+	// 格子尺寸是百分比，要算字号就得知道容器实际有多大（宽度随窗口变化）
+	const containerRef = useRef<HTMLDivElement | null>(null);
+	const [box, setBox] = useState({ width: 640, height });
+	useEffect(() => {
+		const node = containerRef.current;
+		if (!node) return;
+		const update = () => setBox({ width: node.clientWidth, height: node.clientHeight });
+		update();
+		if (typeof ResizeObserver === "undefined") return;
+		const observer = new ResizeObserver(update);
+		observer.observe(node);
+		return () => observer.disconnect();
+	}, [height]);
+
 	const groups = items
 		.filter((item) => item.value > 0)
 		.map((item) => ({ ...item, children: (item.children ?? []).filter((child) => child.value > 0) }))
@@ -255,9 +271,10 @@ export function Treemap({
 
 	return (
 		<div>
-			<div className="treemap" style={{ height }}>
+			<div className="treemap" style={{ height }} ref={containerRef}>
 				{leaves.map((leaf, index) => {
-					const wide = leaf.rect.w > 9 && leaf.rect.h > 9;
+					// 字号随格子大小缩放；小到放不下就不显示（悬停提示里信息是全的）
+					const label = treemapLabel(leaf.rect, box, leaf.name);
 					return (
 						<div
 							key={`${leaf.groupKey}-${leaf.name}-${index}`}
@@ -272,11 +289,12 @@ export function Treemap({
 								width: `${leaf.rect.w}%`,
 								height: `${leaf.rect.h}%`,
 								background: leaf.color,
+								fontSize: `${label.fontSize}px`,
 								cursor: onSelect ? "pointer" : undefined,
 							}}
 							onClick={onSelect ? () => onSelect(leaf.groupKey) : undefined}
 						>
-							{wide ? leaf.name : ""}
+							{label.show ? leaf.name : ""}
 						</div>
 					);
 				})}

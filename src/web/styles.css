@@ -526,7 +526,9 @@ th.sortable {
 	overflow: hidden;
 	border: 1px solid var(--surface);
 	color: #fff;
-	font-size: 11px;
+	font-size: 11px; /* 兜底；实际字号按格子大小由内联样式给 */
+	line-height: 1.25;
+	overflow-wrap: anywhere;
 	padding: 2px;
 	text-align: center;
 	opacity: 0.88;

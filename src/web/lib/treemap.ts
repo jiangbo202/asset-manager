@@ -124,3 +124,76 @@ export function buildTreemapItems(
 		}))
 		.sort((a, b) => b.value - a.value);
 }
+
+/* ── 单元格标签排版 ─────────────────────────────────────────── */
+
+/** 字号下限：再小就没人看得清，不如不显示（悬停提示仍然有） */
+export const TREEMAP_MIN_FONT = 8.5;
+/** 字号上限：格子很大时也不要用大字，避免和页面其它文字脱节 */
+export const TREEMAP_MAX_FONT = 12;
+
+/**
+ * 估算一段文字的宽度（单位 em）：中日韩字符约 1em，其余约 0.56em。
+ * 只用来判断"放不放得下"，不需要精确。
+ */
+export function textWidthEm(text: string): number {
+	let units = 0;
+	for (const char of text) units += /[\u2e80-\u9fff\uf900-\ufaff\uff00-\uffef]/.test(char) ? 1 : 0.56;
+	return units;
+}
+
+/**
+ * 格子里那行标签怎么排：字号随格子大小缩放，放不下就不显示。
+ *
+ * 原因：格子的尺寸是百分比（0–100），字号却是固定的 11px —— 小格子里的
+ * "Neverless MSTR" 会溢出、被 overflow: hidden 裁掉半截。这里按格子实际像素
+ * 大小算字号：高度够就允许折两行，算出来的字小于 TREEMAP_MIN_FONT 就整块不显示标签。
+ */
+export function treemapLabel(
+	rect: { w: number; h: number },
+	container: { width: number; height: number },
+	name: string,
+): { show: boolean; fontSize: number } {
+	const width = (rect.w / 100) * container.width - 6;
+	const height = (rect.h / 100) * container.height - 4;
+	if (width <= 0 || height <= 0) return { show: false, fontSize: TREEMAP_MIN_FONT };
+
+	// 高度够就允许折成两行，否则只排一行
+	const lines = height >= 26 ? 2 : 1;
+	const em = Math.max(textWidthEm(name), 1);
+	const byWidth = width / (em / lines);
+	const byHeight = height / (lines * 1.25);
+	const fontSize = Math.min(TREEMAP_MAX_FONT, byWidth, byHeight);
+	if (fontSize < TREEMAP_MIN_FONT) return { show: false, fontSize: TREEMAP_MIN_FONT };
+	return { show: true, fontSize: Math.round(fontSize * 10) / 10 };
+}
+
+/* ── 组合统计 ───────────────────────────────────────────────── */
+
+export interface PnlSummary {
+	costTotal: number;
+	pnlTotal: number;
+	pnlPct: number | null;
+	/** 没填平均成本的**非现金**持仓条数（现金本来就没有成本，不算"漏填"） */
+	missingCostCount: number;
+}
+
+/**
+ * 浮动盈亏汇总。
+ *
+ * 现金按定义没有平均成本：既不该进"未填成本"的计数（用户看到"2 条未填成本"，
+ * 点进去发现是两笔现金），也不参与盈亏比例 —— 盈亏比例的口径是"已投入成本"。
+ */
+export function pnlSummary(
+	holdings: Array<{ isCash: boolean; avgCost: number | null; costDisplay: number | null; pnlDisplay: number | null }>,
+): PnlSummary {
+	const costTotal = holdings.reduce((sum, item) => sum + (item.costDisplay ?? 0), 0);
+	const pnlTotal = holdings.reduce((sum, item) => sum + (item.pnlDisplay ?? 0), 0);
+	const missingCostCount = holdings.filter((item) => !item.isCash && item.avgCost === null).length;
+	return {
+		costTotal,
+		pnlTotal,
+		pnlPct: costTotal > 0 ? (pnlTotal / costTotal) * 100 : null,
+		missingCostCount,
+	};
+}
