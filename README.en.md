@@ -1,8 +1,12 @@
 # Asset Manager · Personal Portfolio Tracker
 
-Track stocks, crypto and cash in one place, with an automatic net-worth snapshot every day.
-**Everything runs inside Cloudflare's free tier** (Workers + D1 + static assets), your data stays in your own
-account, and there is no telemetry or third-party analytics.
+> **Every account, one page.**
+> Stocks, ETFs, crypto and cash from all your brokers and exchanges, brought into a single view —
+> refresh quotes in one click and your total and unrealised P&L are ready. No logging in to each app.
+
+**Everything runs inside Cloudflare's free tier** (Workers + D1 + static assets): your data lives in your own
+Cloudflare account, there is no server to run, no telemetry and no third-party analytics; a net-worth snapshot
+is taken automatically every day, so the history builds itself.
 
 **English** | [简体中文](README.md)
 

@@ -3,7 +3,7 @@
   "version": "0.13.0",
   "private": true,
   "type": "module",
-  "description": "个人资产管理 — 部署在自己的 Cloudflare 上（Workers + D1）",
+  "description": "散落在各家券商与平台的股票 / ETF / 加密货币 / 现金，一处看清；部署在自己的 Cloudflare 上（Workers + D1）",
   "license": "MIT",
   "cloudflare": {
     "bindings": {
