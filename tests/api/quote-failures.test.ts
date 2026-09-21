@@ -64,6 +64,58 @@ describe("行情失败归因与稳定币折算", () => {
 		expect(reason.toLowerCase()).toMatch(/404|未返回|没有/);
 	});
 
+	it("失败原因带出「哪家数据源」与「真正请求的代码」", async () => {
+		const accountId = await accountOf();
+		// 覆盖代码写错了：请求的是 MSTR.HK，Yahoo 只会 404。
+		// 原来的提示是 "MSTR：HTTP 404"，看起来像"数据源没有 MSTR"（其实有），看不出是我们请求错了。
+		await addHolding(accountId, {
+			class: "stock",
+			market: "us",
+			symbol: "MSTR",
+			name: "MicroStrategy",
+			quoteSymbol: "MSTR.HK",
+		});
+
+		const report = await refreshQuotes(env, { trigger: "manual", fetcher: fakeFetch([]) });
+		const reason = report.failed[0]?.reason ?? "";
+		expect(report.failed[0]?.symbol).toBe("MSTR");
+		expect(reason).toContain("Yahoo");
+		expect(reason).toContain("MSTR.HK");
+		// 同时带上"我们把它当成什么去查的"，用户才知道是哪一项记错了
+		expect(report.failed[0]?.kind).toBe("stock");
+		expect(report.failed[0]?.quoteSymbol).toBe("MSTR.HK");
+	});
+
+	it("历史遗留的「市场记错」数据同样能被诊断出来", async () => {
+		const accountId = await accountOf();
+		// 市场与代码对不上的行现在会在保存时被拦下，但库里可能还留着以前存进去的，
+		// 这些行的失败原因也必须能说清"请求的是 MSTR.HK"
+		await env.DB.prepare(
+			`INSERT INTO holdings (id, account_id, class, market, symbol, name, currency, qty, price, created_at, updated_at)
+			 VALUES ('legacy-1', ?, 'stock', 'hk', 'MSTR', 'MicroStrategy', 'USD', 1, 100, ?, ?)`,
+		)
+			.bind(accountId, new Date().toISOString(), new Date().toISOString())
+			.run();
+
+		const report = await refreshQuotes(env, { trigger: "manual", fetcher: fakeFetch([]) });
+		const failure = report.failed.find((item) => item.symbol === "MSTR");
+		expect(failure?.reason).toContain("MSTR.HK");
+		expect(failure?.market).toBe("hk");
+	});
+
+	it("多家数据源都失败时，每家怎么说都列出来", async () => {
+		const accountId = await accountOf();
+		// 加密类别的美股代码：CoinGecko 没 id、Binance 没这个交易对、Yahoo 请求的是 MSTR-USD
+		await addHolding(accountId, { class: "crypto", market: "crypto", symbol: "MSTR", name: "MicroStrategy" });
+
+		const report = await refreshQuotes(env, { trigger: "manual", fetcher: fakeFetch([]) });
+		const reason = report.failed[0]?.reason ?? "";
+		expect(reason).toContain("CoinGecko");
+		expect(reason).toContain("Yahoo");
+		expect(reason).toContain("MSTR-USD");
+		expect(reason.split("；").length).toBeGreaterThanOrEqual(2);
+	});
+
 	it("状态接口带出失败明细，界面才能显示「哪个代码、为什么」", async () => {
 		const accountId = await accountOf();
 		await addHolding(accountId, { class: "crypto", market: "crypto", symbol: "SPCXB-USD", name: "代币化股票" });
@@ -71,7 +123,11 @@ describe("行情失败归因与稳定币折算", () => {
 		const report = await refreshQuotes(env, { trigger: "manual", fetcher: fakeFetch([]) });
 		expect(report.failed).toHaveLength(1);
 
-		const status = await call<Envelope<{ recentRuns: Array<{ failed: number; failures: Array<{ symbol: string; reason: string }> }> }>>(
+		type RunDto = {
+			failed: number;
+			failures: Array<{ symbol: string; reason: string; kind?: string; market?: string | null }>;
+		};
+		const status = await call<Envelope<{ recentRuns: RunDto[] }>>(
 			"/api/quotes/status",
 			{ cookie },
 		);
@@ -80,6 +136,9 @@ describe("行情失败归因与稳定币折算", () => {
 		expect(latest?.failures).toHaveLength(1);
 		expect(latest?.failures[0]?.symbol).toBe("SPCXB-USD");
 		expect(latest?.failures[0]?.reason).not.toBe("");
+		// 界面要能显示"类别 · 市场"，所以这两个字段也得跟着出来
+		expect(latest?.failures[0]?.kind).toBe("crypto");
+		expect(latest?.failures[0]?.market).toBe("crypto");
 	});
 
 	it("稳定币按 1:1 折算：不再有注定失败的汇率请求，也不再把持仓排除在总额外", async () => {

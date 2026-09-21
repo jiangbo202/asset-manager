@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import { tOf } from "../core/i18n";
 import type { AppEnv } from "../types";
 import { ASSET_CLASSES, MARKETS } from "../../shared/labels";
+import type { Translator } from "../../shared/i18n";
 import { badRequest, notFound, ok } from "../core/errors";
 import { writeAudit } from "../core/audit";
 import {
@@ -28,6 +29,24 @@ import {
 } from "./validate";
 
 const holdings = new Hono<AppEnv>();
+
+/**
+ * 市场与代码是否自相矛盾。
+ *
+ * 踩过的坑：把美股 MSTR 记成港股，于是刷新时请求的是 "MSTR.HK"，Yahoo 一直 404，
+ * 界面上只看到"失败 1"，查了很久。港股 / A 股代码一定是数字（允许 .HK/.SS/.SZ/.SH 后缀），
+ * 所以在保存时就拦下来，比事后从数据源报错里反推省事得多。
+ */
+function assertMarketSymbolShape(market: string, symbol: string | null | undefined, t: Translator): void {
+	// 只有港股 / A 股有"代码必须是数字"这条约束
+	if (market !== "hk" && market !== "cn") return;
+	if (!symbol) return;
+	const bare = symbol.trim().toUpperCase().replace(/\.(HK|SS|SZ|SH)$/, "");
+	if (/^\d+$/.test(bare)) return;
+	throw badRequest(
+		t("error.marketSymbolMismatch", { market: t(`mkt.${market}`), symbol: symbol.trim() }),
+	);
+}
 
 /** 支持 ?market=us,hk 的多选形式（FR-6.3） */
 function parseMarkets(value: string | undefined): string[] | undefined {
@@ -64,11 +83,14 @@ holdings.post("/", async (c) => {
 		throw badRequest(t("error.field_enum", { label: t("field.market"), allowed: MARKETS.join(" / ") }));
 	}
 
+	const symbol = isCash ? null : optionalString(payload, "symbol", { labelKey: "field.symbol", max: 32 }, t);
+	if (!isCash && market) assertMarketSymbolShape(market, symbol, t);
+
 	const input = {
 		account_id: accountId,
 		class: assetClass,
 		market: isCash ? null : market,
-		symbol: isCash ? null : optionalString(payload, "symbol", { labelKey: "field.symbol", max: 32 }, t),
+		symbol,
 		name: requireString(payload, "name", { labelKey: "field.name", max: 80 }, t),
 		currency: requireCurrency(payload, "currency", t),
 		qty: requireNumber(payload, "qty", { labelKey: isCash ? "field.balance" : "field.qty", min: -1e15, max: 1e15 }, t),
@@ -109,6 +131,13 @@ holdings.patch("/:id", async (c) => {
 	if (payload.market !== undefined) patch.market = optionalString(payload, "market", { labelKey: "field.market", max: 16 }, t) ?? null;
 	if (payload.note !== undefined) patch.note = optionalString(payload, "note", { labelKey: "field.note", max: 200 }, t) ?? null;
 	if (payload.archived !== undefined) patch.archived = Boolean(payload.archived);
+	// 类别/市场/代码三者要自洽：改了市场或代码就重新校验一次（未改的一侧用库里的现值）
+	{
+		const nextClass = (patch.class as string | undefined) ?? before.class;
+		const nextMarket = (patch.market as string | null | undefined) ?? before.market;
+		const nextSymbol = (patch.symbol as string | null | undefined) ?? before.symbol;
+		if (nextClass !== "cash") assertMarketSymbolShape(nextMarket ?? "", nextSymbol, t);
+	}
 	if (payload.qty !== undefined) patch.qty = requireNumber(payload, "qty", { labelKey: "field.qty", min: -1e15, max: 1e15 }, t);
 	if (payload.price !== undefined) patch.price = requireNumber(payload, "price", { labelKey: "field.price", min: 0, max: 1e15 }, t);
 	if (payload.avgCost !== undefined) {

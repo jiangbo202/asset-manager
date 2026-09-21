@@ -109,8 +109,10 @@ trademark issues. Accounts without an icon get a colour derived from their name.
 
 - Multi-currency with a switchable display currency — holdings missing an FX rate are clearly marked
   **“not converted”** instead of being silently treated as 1:1; stablecoins (USDT/USDC…) convert at 1:1 USD
-- Quote failures say **which symbol failed and what the last provider said**; repeated failures are flagged
-  as a likely wrong symbol
+- Quote failures say **which provider was asked, with which symbol, and what we treated it as**
+  (class · market · symbol override); repeated failures are flagged as a likely wrong symbol or setting
+- Saving a holding validates that market and symbol agree (HK / A-share codes must be digits), so those
+  mistakes are caught at entry time
 - Chinese and English (the English dictionary loads on demand) and a configurable time zone
 - Responsive: secondary columns drop on narrow screens, forms collapse to one column
 

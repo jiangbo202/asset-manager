@@ -46,7 +46,17 @@ export interface RefreshReport {
 	fxUpdated: number;
 	requests: number;
 	sources: Record<string, number>;
-	failed: Array<{ symbol: string; reason: string }>;
+	/**
+	 * 失败的标的。除了原因，还带上"我们把它当成什么去查的"（类别 / 市场 / 覆盖代码）——
+	 * 最常见的失败原因是这几项记错了（例如美股 MSTR 记成港股 → 请求的是 MSTR.HK）。
+	 */
+	failed: Array<{
+		symbol: string;
+		reason: string;
+		kind?: string;
+		market?: string | null;
+		quoteSymbol?: string | null;
+	}>;
 	skipped: string[];
 	/** 分批刷新时留到下一次的标的（定时任务会分批；手动刷新不带上限，所以是空的） */
 	deferred: string[];
@@ -215,8 +225,8 @@ export async function refreshQuotes(
 
 	const resolvedKeys = new Set<string>();
 	const quotes: Quote[] = [];
-	/** key -> 最近一次失败原因（用户看到的应该是"最后一家怎么说的"） */
-	const errorsByKey = new Map<string, string>();
+	/** key -> 各数据源的失败原因（全部保留：用户要的是"哪个接口没有这个代码"） */
+	const errorsByKey = new Map<string, string[]>();
 
 	// 按类型依次尝试数据源（前一个拿不到的顺延到下一个）
 	const byKind: Record<QuoteKind, QuoteTarget[]> = { crypto: [], stock: [], fx: [] };
@@ -302,14 +312,22 @@ export async function refreshQuotes(
 				report.sources[quote.source] = (report.sources[quote.source] ?? 0) + 1;
 			}
 			// 记住失败原因：可能后面还有别的数据源能救回来，所以先不报给用户
-			for (const error of result.errors) errorsByKey.set(error.symbol, error.message);
+			for (const error of result.errors) {
+				// 带上数据源名与真正请求的代码：否则 "MSTR：HTTP 404" 会让人以为是数据源没有 MSTR，
+				// 而实际上请求的是 "MSTR-USD"（持仓类别记错了）或 "0MSTR.HK"（市场记错了）
+				const where = error.requested ? `${meta.short}（${error.requested}）` : meta.short;
+				errorsByKey.set(error.symbol, [...(errorsByKey.get(error.symbol) ?? []), `${where}：${error.message}`]);
+			}
 		}
 
 		for (const target of remaining) {
 			if (resolvedKeys.has(target.key)) continue;
 			report.failed.push({
 				symbol: target.symbol,
-				reason: errorsByKey.get(target.symbol) ?? t("quote.allFailed"),
+				reason: (errorsByKey.get(target.symbol) ?? []).join("；") || t("quote.allFailed"),
+				kind: target.kind,
+				market: target.market ?? null,
+				quoteSymbol: target.symbolOverride ?? null,
 			});
 		}
 	}
@@ -489,16 +507,27 @@ export interface QuoteStatus {
 /** 旧数据（分批功能之前）没有 deferred 字段，按 0 处理 */
 /** 从 report_json 里取出失败明细（代码 + 原因），供"最近运行"直接显示 */
 const MAX_FAILURE_DETAILS = 5;
-const MAX_REASON_LENGTH = 160;
+const MAX_REASON_LENGTH = 300;
 
-function failuresOf(reportJson: string | null): Array<{ symbol: string; reason: string }> {
+function failuresOf(reportJson: string | null): Array<{
+	symbol: string;
+	reason: string;
+	kind?: string;
+	market?: string | null;
+	quoteSymbol?: string | null;
+}> {
 	if (!reportJson) return [];
 	try {
-		const parsed = JSON.parse(reportJson) as { failed?: Array<{ symbol?: string; reason?: string }> };
+		const parsed = JSON.parse(reportJson) as {
+			failed?: Array<{ symbol?: string; reason?: string; kind?: string; market?: string | null; quoteSymbol?: string | null }>;
+		};
 		if (!Array.isArray(parsed.failed)) return [];
 		return parsed.failed.slice(0, MAX_FAILURE_DETAILS).map((item) => ({
 			symbol: String(item.symbol ?? "?"),
 			reason: String(item.reason ?? "").slice(0, MAX_REASON_LENGTH),
+			...(item.kind ? { kind: item.kind } : {}),
+			market: item.market ?? null,
+			quoteSymbol: item.quoteSymbol ?? null,
 		}));
 	} catch {
 		return [];

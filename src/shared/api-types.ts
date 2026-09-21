@@ -198,8 +198,14 @@ export interface QuoteStatusDto {
 		requests: number;
 		/** 这次运行里因为分批而留到下一次的标的数量 */
 		deferred: number;
-		/** 失败明细（最多 5 条）：哪个代码、最后一家数据源怎么说 */
-		failures: Array<{ symbol: string; reason: string }>;
+		/** 失败明细（最多 5 条）：哪个代码、哪家数据源怎么说、我们把它当成什么去查的 */
+		failures: Array<{
+			symbol: string;
+			reason: string;
+			kind?: string;
+			market?: string | null;
+			quoteSymbol?: string | null;
+		}>;
 	}>;
 	custom: CustomProviderDto | null;
 }
@@ -210,7 +216,13 @@ export interface RefreshReportDto {
 	fxUpdated: number;
 	requests: number;
 	sources: Record<string, number>;
-	failed: Array<{ symbol: string; reason: string }>;
+	failed: Array<{
+		symbol: string;
+		reason: string;
+		kind?: string;
+		market?: string | null;
+		quoteSymbol?: string | null;
+	}>;
 	skipped: string[];
 	/** 分批刷新时留到下一次的标的（定时任务会分批；手动刷新不带上限） */
 	deferred: string[];

@@ -5,6 +5,7 @@ import { useAsync, useSubmit } from "../lib/useAsync";
 import { useT, useTimeZone } from "../lib/i18n";
 import { dateTime } from "../lib/format";
 import { nextSnapshotInstant } from "../../shared/time";
+import { marketLabel } from "../../shared/labels";
 
 /**
  * 行情与快照设置（v0.10）
@@ -502,6 +503,16 @@ export function MarketDataSection({ settings, onSaved }: { settings: SettingsDto
 													<td className="left" />
 													<td className="left" colSpan={4}>
 														<span className="negative">{failure.symbol}</span>
+														<span className="muted">
+															{" · "}
+															{[
+																failure.kind === "fx" ? t("settings.fx") : failure.kind ? t(`class.${failure.kind}`) : null,
+																failure.market ? marketLabel(t, failure.market) : null,
+															]
+																.filter(Boolean)
+																.join(" · ")}
+															{failure.quoteSymbol ? ` · ${t("holdings.quoteSymbolShort")} ${failure.quoteSymbol}` : ""}
+														</span>
 														<span className="muted"> · {failure.reason}</span>
 														{repeatCount(failure.symbol) >= 3 && (
 															<span className="muted">
