@@ -293,7 +293,7 @@ const en: Dict = {
 
 	// ── Settings: FX ────────────────────────────────────────
 	"settings.fx": "Exchange rates (manual)",
-	"settings.fxHint": "Manual rates win and are never overwritten. Fetching happens only on the Cron run or when you press “Refresh quotes”, and only for currencies in your portfolio.",
+	"settings.fxHint": "Manual rates win and are never overwritten. Fetching happens only on the Cron run or when you press “Refresh quotes”, and only for currencies in your portfolio. Stablecoins such as USDT/USDC are converted at 1:1 (no FX provider covers them).",
 	"settings.fxBase": "Base",
 	"settings.fxQuote": "Quote",
 	"settings.fxPair": "1 {{base}} = ? {{quote}}",
@@ -413,6 +413,7 @@ const en: Dict = {
 	"market.coolingAlert": "Temporarily skipped providers: {{list}}",
 	"market.failedAlert": "Last refresh had {{count}} failures: {{list}}",
 	"market.recentRuns": "Recent runs",
+	"market.repeatedFailure": "Failed {{count}} runs in a row (usually a wrong symbol or an unsupported provider)",
 	"market.noRuns": "No runs recorded yet.",
 	"market.colTime": "Time",
 	"market.colTrigger": "Trigger",
@@ -561,6 +562,8 @@ const en: Dict = {
 	"quote.allFailed": "No provider could return a price",
 	"quote.allCooling": "All providers are cooling down after rate limiting (earliest recovery in {{minutes}} minutes)",
 	"quote.budget": "{{provider}}: request budget exhausted, {{rest}} symbols deferred to the next run",
+	"quote.requestFailed": "Request failed",
+	"quote.unknownProvider": "Unknown provider",
 	"quote.rateLimited": "HTTP 429 (rate limited — other providers will be tried automatically)",
 	"quote.forbidden": "HTTP 403 (the upstream refused the request — rate limit or missing key)",
 	"quote.notFound": "HTTP 404 (upstream has no such symbol)",

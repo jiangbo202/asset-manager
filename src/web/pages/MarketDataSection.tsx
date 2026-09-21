@@ -1,3 +1,4 @@
+import { Fragment } from "react";
 import { useEffect, useState } from "react";
 import { api, type QuoteStatusDto, type RefreshReportDto, type SettingsDto } from "../lib/api";
 import { useAsync, useSubmit } from "../lib/useAsync";
@@ -186,6 +187,17 @@ export function MarketDataSection({ settings, onSaved }: { settings: SettingsDto
 
 	// 最近一次运行里因为分批而留到下一次的标的（只有定时任务会分批）
 	const deferredCount = status.data?.recentRuns?.[0]?.deferred ?? 0;
+	const runs = status.data?.recentRuns ?? [];
+	// 同一代码在最近连续几次运行里都失败 —— 常见于"代码写错/数据源不支持"，
+	// 和偶发的网络失败区分开，用户才知道该改代码还是再等等
+	const repeatCount = (symbol: string): number => {
+		let count = 0;
+		for (const run of runs) {
+			if (!run.failures.some((failure) => failure.symbol === symbol)) break;
+			count += 1;
+		}
+		return count;
+	};
 
 	return (
 		<div className="section">
@@ -474,16 +486,33 @@ export function MarketDataSection({ settings, onSaved }: { settings: SettingsDto
 									</tr>
 								</thead>
 								<tbody>
-									{(status.data?.recentRuns ?? []).map((run) => (
-										<tr key={run.id}>
-											<td className="left">{dateTime(run.started_at, timeZone)}</td>
-											<td className="left">
-												{run.trigger === "cron" ? t("market.triggerCron") : t("market.triggerManual")}
-											</td>
-											<td>{run.updated}</td>
-											<td className={run.failed > 0 ? "negative" : ""}>{run.failed}</td>
-											<td className="hide-sm">{run.requests}</td>
-										</tr>
+									{runs.map((run) => (
+										<Fragment key={run.id}>
+											<tr>
+												<td className="left">{dateTime(run.started_at, timeZone)}</td>
+												<td className="left">
+													{run.trigger === "cron" ? t("market.triggerCron") : t("market.triggerManual")}
+												</td>
+												<td>{run.updated}</td>
+												<td className={run.failed > 0 ? "negative" : ""}>{run.failed}</td>
+												<td className="hide-sm">{run.requests}</td>
+											</tr>
+											{run.failures.map((failure) => (
+												<tr key={`${run.id}-${failure.symbol}`} className="detail-row">
+													<td className="left" />
+													<td className="left" colSpan={4}>
+														<span className="negative">{failure.symbol}</span>
+														<span className="muted"> · {failure.reason}</span>
+														{repeatCount(failure.symbol) >= 3 && (
+															<span className="muted">
+																{" · "}
+																{t("market.repeatedFailure", { count: repeatCount(failure.symbol) })}
+															</span>
+														)}
+													</td>
+												</tr>
+											))}
+										</Fragment>
 									))}
 								</tbody>
 							</table>

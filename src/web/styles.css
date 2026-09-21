@@ -430,6 +430,13 @@ th.sortable {
 	color: var(--negative);
 }
 
+/* 「最近运行」里挂在运行记录下面的失败明细行 */
+.detail-row td {
+	font-size: 12px;
+	border-top: none;
+	padding-top: 0;
+}
+
 .empty {
 	padding: 32px;
 	text-align: center;

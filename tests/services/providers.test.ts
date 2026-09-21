@@ -72,6 +72,12 @@ describe("代码映射（纯函数）", () => {
 		expect(binanceSymbol(stock({ symbol: "BTC", kind: "crypto" }))).toBe("BTCUSDT");
 		expect(binanceSymbol(stock({ symbol: "ETHUSDT", kind: "crypto" }))).toBe("ETHUSDT");
 		expect(binanceSymbol(stock({ symbol: "BTC", kind: "crypto", currency: "HKD" }))).toBeNull();
+		// 代码查询给出的加密代码带 -USD 后缀，必须剥掉再拼 USDT（否则是 "BTC-USDUSDT"）
+		expect(binanceSymbol(stock({ symbol: "BTC-USD", kind: "crypto" }))).toBe("BTCUSDT");
+		expect(binanceSymbol(stock({ symbol: "SPCXB-USD", kind: "crypto" }))).toBe("SPCXBUSDT");
+		expect(binanceSymbol(stock({ symbol: "BTC/USDT", kind: "crypto" }))).toBe("BTCUSDT");
+		expect(binanceSymbol(stock({ symbol: "USDT", kind: "crypto" }))).toBeNull();
+		expect(binanceSymbol(stock({ symbol: "USD", kind: "crypto" }))).toBeNull();
 	});
 
 	it("CoinGecko：内置常见币映射，未知币返回 null（提示用户填代码覆盖）", () => {
@@ -148,7 +154,8 @@ describe("适配器解析", () => {
 			["h1", 80000],
 			["h2", 2500],
 		]);
-		expect(result.errors.join(" ")).toContain("NOPE");
+		expect(result.errors.map((item) => item.symbol)).toEqual(["NOPE"]);
+		expect(result.errors[0]?.message).not.toBe("");
 	});
 
 	it("Binance：批量 symbols 参数 + 解析字符串价格", async () => {
@@ -195,7 +202,10 @@ describe("适配器解析", () => {
 			settings,
 		);
 		expect(result.quotes).toHaveLength(1);
-		expect(result.errors.join(" ")).toContain("FAIL");
+		// 失败必须归因到具体代码（之前调用方靠猜字符串，猜错了就退化成"所有数据源都没取到"）
+		expect(result.errors).toHaveLength(1);
+		expect(result.errors[0]?.symbol).toBe("FAIL");
+		expect(result.errors[0]?.message).toContain("500");
 	});
 
 	it("腾讯：解析 ~ 分隔的多标的响应（GBK 但只取数字字段）", async () => {
@@ -249,6 +259,7 @@ describe("适配器解析", () => {
 	it("自定义数据源：未配置时给出明确错误（不抛异常，走 errors 通道）", async () => {
 		const result = await runAdapter("custom", [stock()], ctx([]), { enabled: {} });
 		expect(result.quotes).toHaveLength(0);
-		expect(result.errors.join(" ")).toContain("未配置");
+		expect(result.errors.map((item) => item.message).join(" ")).toContain("未配置");
+		expect(result.errors.map((item) => item.symbol)).toEqual(["AAPL"]);
 	});
 });

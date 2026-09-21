@@ -163,9 +163,24 @@ export interface FetchContext {
 /** 取当前上下文的翻译函数（测试里可以不传） */
 export const tr = (ctx: FetchContext): Translator => ctx.t ?? sharedTranslator("zh");
 
+/**
+ * 单个标的的取价失败原因。
+ *
+ * symbol 必须逐条带上：调用方按 symbol 归因，UI 才能说出"哪个代码失败了、为什么"。
+ * 之前 errors 是裸字符串，调用方用 `error.split("：")[0]` 猜 symbol —— 猜错了
+ * （拿到的是"CoinGecko"这类词），于是所有失败都退化成"所有数据源都没能取到价格"。
+ */
+export interface AdapterError {
+	symbol: string;
+	message: string;
+}
+
+/** 构造一条归因到具体标的的失败原因 */
+const fail = (symbol: string, message: string): AdapterError => ({ symbol, message });
+
 export interface AdapterResult {
 	quotes: Quote[];
-	errors: string[];
+	errors: AdapterError[];
 	/** 整次调用失败时的上游 HTTP 状态（用于限流判定） */
 	status?: number;
 }
@@ -307,7 +322,11 @@ export function binanceSymbol(target: QuoteTarget): string | null {
 	if (!raw) return null;
 	// Binance 的计价币多数是 USDT，近似当美元处理
 	if (target.currency && target.currency !== "USD" && target.currency !== "USDT") return null;
-	return raw.includes("USDT") ? raw : `${raw}USDT`;
+	// 代码查询给出的加密代码是 "BTC-USD" 这种（Yahoo/CoinGecko 习惯），
+	// 直接拼会变成 "BTC-USDUSDT"（不存在的交易对），所以先把计价币后缀去掉
+	const base = raw.replace(/[-/](USDT|USDC|FDUSD|TUSD|BUSD|BTC|ETH|USD)$/, "");
+	if (!base || /^(USD|USDT)$/.test(base)) return null;
+	return base.includes("USDT") ? base : `${base}USDT`;
 }
 
 export function yahooSymbol(target: QuoteTarget): string | null {
@@ -348,12 +367,12 @@ export function frankfurterPair(target: QuoteTarget): { base: string; quote: str
 /* ── 各适配器实现 ─────────────────────────────────────────── */
 
 async function coingeckoQuotes(targets: QuoteTarget[], ctx: FetchContext): Promise<AdapterResult> {
-	const errors: string[] = [];
+	const errors: AdapterError[] = [];
 	const pairs: Array<{ target: QuoteTarget; id: string }> = [];
 	for (const target of targets) {
 		const id = coingeckoId(target);
 		if (id) pairs.push({ target, id });
-		else errors.push(tr(ctx)("quote.noCoingeckoId", { symbol: target.symbol }));
+		else errors.push(fail(target.symbol, tr(ctx)("quote.noCoingeckoId", { symbol: target.symbol })));
 	}
 	if (pairs.length === 0) return { quotes: [], errors };
 
@@ -369,16 +388,19 @@ async function coingeckoQuotes(targets: QuoteTarget[], ctx: FetchContext): Promi
 	for (const pair of pairs) {
 		const entry = data[pair.id];
 		if (!isRecord(entry)) {
-			errors.push(tr(ctx)("quote.coingeckoNoPrice", { symbol: pair.target.symbol }));
+			errors.push(fail(pair.target.symbol, tr(ctx)("quote.coingeckoNoPrice", { symbol: pair.target.symbol })));
 			continue;
 		}
 		const price = num(entry[pair.target.currency.toLowerCase()]) ?? num(entry.usd);
 		if (price === null) {
 			errors.push(
-				tr(ctx)("quote.coingeckoNoQuoteCurrency", {
-					symbol: pair.target.symbol,
-					currency: pair.target.currency,
-				}),
+				fail(
+					pair.target.symbol,
+					tr(ctx)("quote.coingeckoNoQuoteCurrency", {
+						symbol: pair.target.symbol,
+						currency: pair.target.currency,
+					}),
+				),
 			);
 			continue;
 		}
@@ -394,12 +416,12 @@ async function coingeckoQuotes(targets: QuoteTarget[], ctx: FetchContext): Promi
 }
 
 async function binanceQuotes(targets: QuoteTarget[], ctx: FetchContext): Promise<AdapterResult> {
-	const errors: string[] = [];
+	const errors: AdapterError[] = [];
 	const pairs: Array<{ target: QuoteTarget; symbol: string }> = [];
 	for (const target of targets) {
 		const symbol = binanceSymbol(target);
 		if (symbol) pairs.push({ target, symbol });
-		else errors.push(tr(ctx)("quote.binanceUsdOnly", { symbol: target.symbol }));
+		else errors.push(fail(target.symbol, tr(ctx)("quote.binanceUsdOnly", { symbol: target.symbol })));
 	}
 	if (pairs.length === 0) return { quotes: [], errors };
 
@@ -421,7 +443,9 @@ async function binanceQuotes(targets: QuoteTarget[], ctx: FetchContext): Promise
 	for (const pair of pairs) {
 		const price = bySymbol.get(pair.symbol);
 		if (price === undefined) {
-			errors.push(tr(ctx)("quote.binanceNoPair", { symbol: pair.target.symbol, pair: pair.symbol }));
+			errors.push(
+				fail(pair.target.symbol, tr(ctx)("quote.binanceNoPair", { symbol: pair.target.symbol, pair: pair.symbol })),
+			);
 			continue;
 		}
 		quotes.push({
@@ -441,7 +465,7 @@ const YAHOO_HEADERS = {
 };
 
 async function yahooQuotes(targets: QuoteTarget[], ctx: FetchContext): Promise<AdapterResult> {
-	const errors: string[] = [];
+	const errors: AdapterError[] = [];
 	const statuses: Array<{ status?: number }> = [];
 	const results = await mapLimit(targets, CONCURRENCY, async (target) => {
 		const symbol = yahooSymbol(target);
@@ -478,18 +502,21 @@ async function yahooQuotes(targets: QuoteTarget[], ctx: FetchContext): Promise<A
 	const quotes: Quote[] = [];
 	for (const result of results) {
 		if ("quote" in result && result.quote) quotes.push(result.quote);
-		else errors.push(`${result.target.symbol}：${"error" in result ? result.error : "未知错误"}`);
+		else
+			errors.push(
+				fail(result.target.symbol, "error" in result ? result.error : tr(ctx)("quote.requestFailed")),
+			);
 	}
 	return { quotes, errors, status: pickStatus(statuses) };
 }
 
 async function tencentQuotes(targets: QuoteTarget[], ctx: FetchContext): Promise<AdapterResult> {
-	const errors: string[] = [];
+	const errors: AdapterError[] = [];
 	const pairs: Array<{ target: QuoteTarget; symbol: string }> = [];
 	for (const target of targets) {
 		const symbol = tencentSymbol(target);
 		if (symbol) pairs.push({ target, symbol });
-		else errors.push(tr(ctx)("quote.tencentOnlyCn", { symbol: target.symbol }));
+		else errors.push(fail(target.symbol, tr(ctx)("quote.tencentOnlyCn", { symbol: target.symbol })));
 	}
 	if (pairs.length === 0) return { quotes: [], errors };
 
@@ -501,13 +528,15 @@ async function tencentQuotes(targets: QuoteTarget[], ctx: FetchContext): Promise
 	for (const pair of pairs) {
 		const match = text.match(new RegExp(`v_${pair.symbol}="([^"]*)"`, "i"));
 		if (!match) {
-			errors.push(tr(ctx)("quote.tencentNoSymbol", { symbol: pair.target.symbol, ticker: pair.symbol }));
+			errors.push(
+				fail(pair.target.symbol, tr(ctx)("quote.tencentNoSymbol", { symbol: pair.target.symbol, ticker: pair.symbol })),
+			);
 			continue;
 		}
 		const fields = match[1].split("~");
 		const price = num(fields[3]);
 		if (price === null) {
-			errors.push(tr(ctx)("quote.tencentBadField", { symbol: pair.target.symbol }));
+			errors.push(fail(pair.target.symbol, tr(ctx)("quote.tencentBadField", { symbol: pair.target.symbol })));
 			continue;
 		}
 		quotes.push({
@@ -522,12 +551,12 @@ async function tencentQuotes(targets: QuoteTarget[], ctx: FetchContext): Promise
 }
 
 async function frankfurterQuotes(targets: QuoteTarget[], ctx: FetchContext): Promise<AdapterResult> {
-	const errors: string[] = [];
+	const errors: AdapterError[] = [];
 	const byBase = new Map<string, Array<{ target: QuoteTarget; quote: string }>>();
 	for (const target of targets) {
 		const pair = frankfurterPair(target);
 		if (!pair) {
-			errors.push(tr(ctx)("quote.fxFormat", { symbol: target.symbol }));
+			errors.push(fail(target.symbol, tr(ctx)("quote.fxFormat", { symbol: target.symbol })));
 			continue;
 		}
 		byBase.set(pair.base, [...(byBase.get(pair.base) ?? []), { target, quote: pair.quote }]);
@@ -544,7 +573,9 @@ async function frankfurterQuotes(targets: QuoteTarget[], ctx: FetchContext): Pro
 			for (const entry of entries) {
 				const price = num(rates[entry.quote]);
 				if (price === null) {
-					errors.push(tr(ctx)("quote.fxUnsupported", { symbol: entry.target.symbol, provider: "Frankfurter" }));
+					errors.push(
+						fail(entry.target.symbol, tr(ctx)("quote.fxUnsupported", { symbol: entry.target.symbol, provider: "Frankfurter" })),
+					);
 					continue;
 				}
 				quotes.push({
@@ -556,19 +587,21 @@ async function frankfurterQuotes(targets: QuoteTarget[], ctx: FetchContext): Pro
 				});
 			}
 		} catch (error) {
-			errors.push(`汇率 ${base}：${error instanceof Error ? error.message : "请求失败"}`);
+			// 整组失败（网络/限流）要归因到组里每一个货币对，否则用户不知道是哪个币种没汇率
+			const message = error instanceof Error ? error.message : tr(ctx)("quote.requestFailed");
+			for (const entry of entries) errors.push(fail(entry.target.symbol, message));
 		}
 	}
 	return { quotes, errors };
 }
 
 async function erapiQuotes(targets: QuoteTarget[], ctx: FetchContext): Promise<AdapterResult> {
-	const errors: string[] = [];
+	const errors: AdapterError[] = [];
 	const byBase = new Map<string, Array<{ target: QuoteTarget; quote: string }>>();
 	for (const target of targets) {
 		const pair = frankfurterPair(target);
 		if (!pair) {
-			errors.push(tr(ctx)("quote.fxFormat", { symbol: target.symbol }));
+			errors.push(fail(target.symbol, tr(ctx)("quote.fxFormat", { symbol: target.symbol })));
 			continue;
 		}
 		byBase.set(pair.base, [...(byBase.get(pair.base) ?? []), { target, quote: pair.quote }]);
@@ -585,7 +618,9 @@ async function erapiQuotes(targets: QuoteTarget[], ctx: FetchContext): Promise<A
 			for (const entry of entries) {
 				const price = num(rates[entry.quote]);
 				if (price === null) {
-					errors.push(tr(ctx)("quote.fxUnsupported", { symbol: entry.target.symbol, provider: "open.er-api" }));
+					errors.push(
+						fail(entry.target.symbol, tr(ctx)("quote.fxUnsupported", { symbol: entry.target.symbol, provider: "open.er-api" })),
+					);
 					continue;
 				}
 				quotes.push({
@@ -597,7 +632,9 @@ async function erapiQuotes(targets: QuoteTarget[], ctx: FetchContext): Promise<A
 				});
 			}
 		} catch (error) {
-			errors.push(`汇率 ${base}：${error instanceof Error ? error.message : "请求失败"}`);
+			// 整组失败（网络/限流）要归因到组里每一个货币对，否则用户不知道是哪个币种没汇率
+			const message = error instanceof Error ? error.message : tr(ctx)("quote.requestFailed");
+			for (const entry of entries) errors.push(fail(entry.target.symbol, message));
 		}
 	}
 	return { quotes, errors };
@@ -642,7 +679,7 @@ async function customQuotes(
 		}
 	}
 
-	const errors: string[] = [];
+	const errors: AdapterError[] = [];
 	const statuses: Array<{ status?: number }> = [];
 	const results = await mapLimit(targets, CONCURRENCY, async (target) => {
 		const symbol = target.symbolOverride ?? target.symbol;
@@ -673,7 +710,10 @@ async function customQuotes(
 	const quotes: Quote[] = [];
 	for (const result of results) {
 		if ("quote" in result && result.quote) quotes.push(result.quote);
-		else errors.push(`${result.target.symbol}：${"error" in result ? result.error : "未知错误"}`);
+		else
+			errors.push(
+				fail(result.target.symbol, "error" in result ? result.error : tr(ctx)("quote.requestFailed")),
+			);
 	}
 	return { quotes, errors, status: pickStatus(statuses) };
 }
@@ -687,7 +727,7 @@ export async function runAdapter(
 	settings: ProviderSettings,
 ): Promise<AdapterResult> {
 	const meta = PROVIDER_MAP.get(providerId);
-	if (!meta) return { quotes: [], errors: [`未知数据源 ${providerId}`] };
+	if (!meta) return { quotes: [], errors: [fail(providerId, tr(ctx)("quote.unknownProvider"))] };
 	const applicable = targets.filter((target) => meta.kinds.includes(target.kind));
 	if (applicable.length === 0) return { quotes: [], errors: [] };
 
@@ -708,12 +748,14 @@ export async function runAdapter(
 			case "custom":
 				return await customQuotes(applicable, ctx, settings.custom);
 			default:
-				return { quotes: [], errors: [`provider not implemented: ${providerId}`] };
+				return { quotes: [], errors: [fail(providerId, tr(ctx)("quote.unknownProvider"))] };
 		}
 	} catch (error) {
+		// 整个适配器抛异常（网络层/解析层）：归因到本次要取的每一个标的
+		const message = error instanceof Error ? error.message : tr(ctx)("quote.requestFailed");
 		return {
 			quotes: [],
-			errors: [`${meta.label}：${error instanceof Error ? error.message : "请求失败"}`],
+			errors: applicable.map((target) => fail(target.symbol, message)),
 			status: error instanceof UpstreamError ? error.status : undefined,
 		};
 	}

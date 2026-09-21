@@ -95,7 +95,7 @@ quotes.post("/test", async (c) => {
 
 	return ok(c, {
 		quotes: result.quotes,
-		errors: result.errors,
+		errors: result.errors.map((error) => `${error.symbol}：${error.message}`),
 		ok: result.quotes.length > 0,
 	});
 });

@@ -108,7 +108,9 @@ trademark issues. Accounts without an icon get a colour derived from their name.
 **Other**
 
 - Multi-currency with a switchable display currency — holdings missing an FX rate are clearly marked
-  **“not converted”** instead of being silently treated as 1:1
+  **“not converted”** instead of being silently treated as 1:1; stablecoins (USDT/USDC…) convert at 1:1 USD
+- Quote failures say **which symbol failed and what the last provider said**; repeated failures are flagged
+  as a likely wrong symbol
 - Chinese and English (the English dictionary loads on demand) and a configurable time zone
 - Responsive: secondary columns drop on narrow screens, forms collapse to one column
 

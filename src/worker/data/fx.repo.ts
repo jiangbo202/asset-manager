@@ -1,3 +1,4 @@
+import { peggedRate } from "../../shared/pegged";
 import { newId, nowIso } from "../core/utils";
 
 /**
@@ -108,6 +109,7 @@ export type FxLookup = (from: string, to: string) => number | null;
 /**
  * 构造折算函数。支持正向、反向（1/x）；查不到返回 null，
  * 调用方必须把这类金额标为"未折算"而不是当成 1:1（PRD FR-3.4 的口径）。
+ * 唯一的例外是内置的稳定币平价（USDT/USDC ≈ 1 USD）：那是明确的已知汇率，不是"未知按 1:1 猜"。
  */
 export function buildFxLookup(rates: FxRate[]): FxLookup {
 	const direct = new Map<string, number>();
@@ -119,6 +121,7 @@ export function buildFxLookup(rates: FxRate[]): FxLookup {
 		if (forward !== undefined) return forward;
 		const backward = direct.get(`${to}:${from}`);
 		if (backward !== undefined && backward !== 0) return 1 / backward;
-		return null;
+		// 稳定币的平价兜底：USDT/USDC 等没有外汇数据源，按 1:1 折美元（见 shared/pegged.ts）
+		return peggedRate(from, to);
 	};
 }

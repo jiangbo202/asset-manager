@@ -14,6 +14,7 @@ import { autoFxRateStatement, fxHistoryStatement, listFxRates, type FxRate } fro
 import { applyHealth, cooldownOf, parseHealth, type ProviderHealth } from "./health";
 import type { Translator } from "../../../shared/i18n";
 import { translator as sharedTranslator } from "../../core/i18n";
+import { hasPeggedRate } from "../../../shared/pegged";
 import {
 	DEFAULT_PRIORITY,
 	planProviders,
@@ -100,6 +101,8 @@ export async function collectTargets(
 		const reverse = `${options.displayCurrency}:${currency}`;
 		// 手工维护的汇率优先级最高，不覆盖
 		if (manualPairs.has(direct) || manualPairs.has(reverse)) continue;
+		// 稳定币有内置平价（USDT ≈ 1 USD），别去请求注定失败的数据源
+		if (hasPeggedRate(currency, options.displayCurrency)) continue;
 		fxTargets.push({
 			key: `fx:${direct}`,
 			kind: "fx",
@@ -288,7 +291,7 @@ export async function refreshQuotes(
 			health = applyHealth(
 				health,
 				provider,
-				{ ok: result.quotes.length > 0, status: result.status, error: result.errors[0] },
+				{ ok: result.quotes.length > 0, status: result.status, error: result.errors[0]?.message },
 				new Date(),
 				t,
 			);
@@ -299,10 +302,7 @@ export async function refreshQuotes(
 				report.sources[quote.source] = (report.sources[quote.source] ?? 0) + 1;
 			}
 			// 记住失败原因：可能后面还有别的数据源能救回来，所以先不报给用户
-			for (const error of result.errors) {
-				const symbol = error.split("：")[0];
-				if (symbol) errorsByKey.set(symbol, error);
-			}
+			for (const error of result.errors) errorsByKey.set(error.symbol, error.message);
 		}
 
 		for (const target of remaining) {
@@ -443,7 +443,7 @@ export async function lookupFxRate(
 		if (!meta) continue;
 		tried.push(meta.label);
 		const result = await runAdapter(provider, [target], ctx, settings);
-		errors.push(...result.errors);
+		errors.push(...result.errors.map((error) => `${error.symbol}：${error.message}`));
 		const hit = result.quotes[0];
 		if (hit) {
 			return { ok: true, base: pair.base, quote: pair.quote, rate: hit.price, source: hit.source, tried, errors: [] };
@@ -463,7 +463,6 @@ export interface QuoteStatus {
 		needsKey: boolean;
 		note: string;
 		docs?: string;
-		kindLabel: string;
 		priority: number;
 		hasKey: boolean;
 		/** 是否处于限流冷却中 */
@@ -488,6 +487,24 @@ export interface QuoteStatus {
 }
 
 /** 旧数据（分批功能之前）没有 deferred 字段，按 0 处理 */
+/** 从 report_json 里取出失败明细（代码 + 原因），供"最近运行"直接显示 */
+const MAX_FAILURE_DETAILS = 5;
+const MAX_REASON_LENGTH = 160;
+
+function failuresOf(reportJson: string | null): Array<{ symbol: string; reason: string }> {
+	if (!reportJson) return [];
+	try {
+		const parsed = JSON.parse(reportJson) as { failed?: Array<{ symbol?: string; reason?: string }> };
+		if (!Array.isArray(parsed.failed)) return [];
+		return parsed.failed.slice(0, MAX_FAILURE_DETAILS).map((item) => ({
+			symbol: String(item.symbol ?? "?"),
+			reason: String(item.reason ?? "").slice(0, MAX_REASON_LENGTH),
+		}));
+	} catch {
+		return [];
+	}
+}
+
 function countDeferred(reportJson: string | null): number {
 	if (!reportJson) return 0;
 	try {
@@ -535,7 +552,6 @@ export async function getQuoteStatus(env: { DB: D1Database; SESSION_SECRET: stri
 		report_json: string | null;
 	}>;
 
-	const KIND_LABEL: Record<string, string> = { crypto: "加密", stock: "股票", fx: "汇率" };
 	const health = parseHealth(settingsMap.provider_health ?? null);
 
 	return {
@@ -548,7 +564,6 @@ export async function getQuoteStatus(env: { DB: D1Database; SESSION_SECRET: stri
 			needsKey: meta.needsKey,
 			note: meta.note,
 			docs: meta.docs,
-			kindLabel: meta.kinds.map((kind) => KIND_LABEL[kind] ?? kind).join(" / "),
 			priority: DEFAULT_PRIORITY[meta.kinds[0]].indexOf(meta.id) + 1,
 			hasKey: Boolean(keys[meta.id]),
 			...(() => {
@@ -571,6 +586,8 @@ export async function getQuoteStatus(env: { DB: D1Database; SESSION_SECRET: stri
 			failed: run.failed,
 			requests: run.requests,
 			deferred: countDeferred(run.report_json),
+			// 只给个失败数字，用户没法判断"该改代码还是再等等"，所以把原因一并带出来
+			failures: failuresOf(run.report_json),
 		})),
 		custom: settings.custom ?? null,
 	};

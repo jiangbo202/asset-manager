@@ -293,7 +293,7 @@ const zh: Dict = {
 
 	// ── 设置：汇率 ──────────────────────────────────────────
 	"settings.fx": "汇率（手动维护）",
-	"settings.fxHint": "手工汇率优先且不会被覆盖。自动抓取只在定时任务或点「更新行情」时发生，且只抓组合里出现过的币种。",
+	"settings.fxHint": "手工汇率优先且不会被覆盖。自动抓取只在定时任务或点「更新行情」时发生，只抓组合里出现过的币种。USDT/USDC 等稳定币按 1:1 折美元（没有外汇数据源支持它们）。",
 	"settings.fxBase": "基准币种",
 	"settings.fxQuote": "目标币种",
 	"settings.fxPair": "1 {{base}} = ? {{quote}}",
@@ -413,6 +413,7 @@ const zh: Dict = {
 	"market.coolingAlert": "以下数据源被暂时跳过：{{list}}",
 	"market.failedAlert": "上次刷新有 {{count}} 条失败：{{list}}",
 	"market.recentRuns": "最近运行",
+	"market.repeatedFailure": "已连续 {{count}} 次失败（多半是代码或数据源问题）",
 	"market.noRuns": "还没有运行记录。",
 	"market.colTime": "时间",
 	"market.colTrigger": "触发",
@@ -561,6 +562,8 @@ const zh: Dict = {
 	"quote.allFailed": "所有数据源都没能取到价格",
 	"quote.allCooling": "所有数据源都在限流冷却中（最快 {{minutes}} 分钟后恢复）",
 	"quote.budget": "{{provider}}：本次请求预算用尽，剩余 {{rest}} 个标的顺延到下次",
+	"quote.requestFailed": "请求失败",
+	"quote.unknownProvider": "未知数据源",
 	"quote.rateLimited": "HTTP 429（被限流，稍后会自动重试其它数据源）",
 	"quote.forbidden": "HTTP 403（对方拒绝了这次请求，可能是限流或需要 Key）",
 	"quote.notFound": "HTTP 404（对方没有这个代码）",

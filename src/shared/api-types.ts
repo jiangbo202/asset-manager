@@ -156,7 +156,6 @@ export interface ProviderStatusDto {
 	needsKey: boolean;
 	note: string;
 	docs?: string;
-	kindLabel: string;
 	priority: number;
 	hasKey: boolean;
 	coolingDown: boolean;
@@ -199,6 +198,8 @@ export interface QuoteStatusDto {
 		requests: number;
 		/** 这次运行里因为分批而留到下一次的标的数量 */
 		deferred: number;
+		/** 失败明细（最多 5 条）：哪个代码、最后一家数据源怎么说 */
+		failures: Array<{ symbol: string; reason: string }>;
 	}>;
 	custom: CustomProviderDto | null;
 }
