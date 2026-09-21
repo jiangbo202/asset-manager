@@ -37,8 +37,15 @@ const YAHOO_HEADERS = {
 		"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120 Safari/537.36",
 };
 
+/**
+ * 查询缓存键。
+ *
+ * 前缀是缓存版本：解析规则（例如港股 5 位 → Yahoo 4 位、搜索词归一化）变了以后
+ * 必须 +1，否则用户拿到的还是旧规则算出来的结果，一整天都不对。
+ */
+const LOOKUP_CACHE_VERSION = "v2";
 const cacheKey = (symbol: string, market: string | null) =>
-	`${(market ?? "").toLowerCase()}:${symbol.trim().toUpperCase()}`;
+	`${LOOKUP_CACHE_VERSION}:${(market ?? "").toLowerCase()}:${symbol.trim().toUpperCase()}`;
 
 /** 判断市场：优先用户选择，其次从代码后缀推断 */
 export function inferMarket(symbol: string, marketHint?: string | null, classHint?: string | null): string {
@@ -168,6 +175,21 @@ export function matchesMarket(ticker: string, market: string): boolean {
 	return !/\.(HK|SS|SZ|TO|V|L|T|DE|PA|AS|AX|SI|KS|KQ|TW|TWO|BK|MX|SA|JO|IS|ST|CO|HE|LS|VI|IR|F|SW)$/i.test(upper);
 }
 
+/**
+ * 这个"名称"其实只是代码本身吗（占位值）？
+ *
+ * 推导出的候选先占个位，名字暂时填查询词；搜索到同代码的正式名称后要替换掉它。
+ * 判等要覆盖 "03121"、"3121.HK"、"3121" 这几种写法，否则占位名会被当成真名字
+ * 填进表单的「名称」框，而且填过一次之后就不再更新了。
+ */
+export function isPlaceholderName(name: string, query: string, symbol: string): boolean {
+	const value = name.trim().toUpperCase();
+	if (!value) return true;
+	return [query, symbol, symbol.replace(/\.[A-Z]+$/i, "")].some(
+		(candidate) => candidate.trim().toUpperCase() === value,
+	);
+}
+
 /** 股票 / ETF / 基金：先按市场规则推导代码，再用 Yahoo 搜索补充候选与正式名称 */
 async function lookupStock(
 	symbol: string,
@@ -199,10 +221,15 @@ async function lookupStock(
 		});
 	}
 
+	// Yahoo 搜索对港股 5 位代码只会返回别的市场的噪音（q=03121 → 031210.KS / 03121T.TW；
+	// q=00005 → 000050.KS / 000050.SZ），要去零成 4 位才搜得到 3121.HK / 0005.HK。
+	// 所以搜索词用规则推导出的代码（去掉交易所后缀），而不是用户原样输入的那串。
+	const searchTerm = (derived ?? symbol).replace(/\.(HK|SS|SZ|SH)$/i, "");
+
 	try {
 		const search = await fetchJson(
 			fetcher,
-			`https://query1.finance.yahoo.com/v1/finance/search?q=${encodeURIComponent(symbol)}&quotesCount=8&newsCount=0`,
+			`https://query1.finance.yahoo.com/v1/finance/search?q=${encodeURIComponent(searchTerm)}&quotesCount=8&newsCount=0`,
 		);
 		const quotes = isRecordLike(search) && Array.isArray(search.quotes) ? search.quotes : [];
 		for (const raw of quotes) {
@@ -220,8 +247,10 @@ async function lookupStock(
 
 			const existing = bySymbol.get(ticker);
 			if (existing) {
-				// 合并：用搜索到的正式名称替换占位名，并补上交易所
-				if (existing.name === symbol.toUpperCase() && name) existing.name = name;
+				// 合并：用搜索到的正式名称替换占位名，并补上交易所。
+				// 占位名 = 查询词本身或推导出的代码（"03121" / "3121.HK"），
+				// 判等要宽松一点，否则占位名会被当成正式名称留在结果里
+				if (isPlaceholderName(existing.name, symbol, existing.symbol) && name) existing.name = name;
 				if (exchange) existing.exchange = exchange;
 				existing.class = mapQuoteType(quoteType, market);
 				continue;

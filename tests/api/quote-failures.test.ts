@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { peggedRate } from "../../src/shared/pegged";
 import { buildFxLookup } from "../../src/worker/data/fx.repo";
 import { refreshQuotes } from "../../src/worker/services/quotes";
-import { lookupSymbol } from "../../src/worker/services/quotes/lookup";
+import { isPlaceholderName, lookupSymbol } from "../../src/worker/services/quotes/lookup";
 import { bootstrap, call, clearAll } from "../helpers";
 import { fakeFetch } from "../services/providers.test";
 
@@ -162,8 +162,36 @@ describe("行情失败归因与稳定币折算", () => {
 		const result = await lookupSymbol(env, { symbol: "03121", market: "hk", fetcher, force: true });
 		expect(urls.some((url) => url.includes("3121.HK"))).toBe(true);
 		expect(urls.some((url) => url.includes("03121.HK"))).toBe(false);
+		// 搜索也要用去零后的 4 位：q=03121 在 Yahoo 只会搜到 031210.KS / 03121T.TW 之类的噪音，
+		// 搜不到 3121.HK，于是候选里就只剩"名字是代码"的占位项
+		const searchUrl = urls.find((url) => url.includes("v1/finance/search"));
+		expect(searchUrl).toContain("q=3121");
+		expect(searchUrl).not.toContain("q=03121");
+
 		const candidate = result.candidates.find((item) => item.symbol === "3121.HK");
 		expect(candidate?.price).toBe(6.73);
+		// 候选里的名称必须是搜到的正式名称，而不是 "03121" 这种占位值
+		expect(result.candidates[0]?.symbol).toBe("3121.HK");
+		expect(result.candidates[0]?.name).toBe("CSOP KOSPI");
+	});
+
+	it("搜索没结果时不会把代码当成名称塞进候选", async () => {
+		// 真实情况：q=03121 会返回 031210.KS / 03121T.TW，被市场过滤后一个都不剩
+		const fetcher = (async (input: RequestInfo | URL) => {
+			const url = String(input);
+			if (url.includes("v1/finance/search")) {
+				return new Response(JSON.stringify({ quotes: [{ symbol: "031210.KS", quoteType: "EQUITY" }] }), {
+					status: 200,
+					headers: { "content-type": "application/json" },
+				});
+			}
+			return new Response("no handler", { status: 404 });
+		}) as unknown as typeof fetch;
+
+		const result = await lookupSymbol(env, { symbol: "03121", market: "hk", fetcher, force: true });
+		const candidate = result.candidates.find((item) => item.symbol === "3121.HK");
+		// 名称仍是占位值（代码）—— 表单侧靠 isPlaceholderName 判断，不会把它当名字填进去
+		expect(isPlaceholderName(candidate?.name ?? "", "03121", "3121.HK")).toBe(true);
 	});
 
 	it("带 .HK 后缀的港股代码（代码查询存下来的那种）两家数据源都能认", async () => {

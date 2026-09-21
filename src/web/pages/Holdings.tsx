@@ -210,8 +210,16 @@ export function HoldingsPage() {
 
 			const best = result.candidates[0];
 			const patch: Partial<FormState> = {};
-			// 名称只在为空时自动填，避免覆盖用户自己起的名字
-			if (!form.name.trim() && best.name) patch.name = best.name;
+			// "名称"里出现代码本身时，那只是占位值（查询没搜到正式名称），不能当成名字：
+			// 既不要填进表单，也要允许后续查询把它纠正过来
+			const codeLike = (value: string) => {
+				const upper = value.trim().toUpperCase();
+				return [symbol, best.symbol ?? "", (best.symbol ?? "").replace(/\.[A-Z]+$/i, "")].some(
+					(candidate) => candidate.trim() !== "" && candidate.trim().toUpperCase() === upper,
+				);
+			};
+			// 名称只在为空、或当前值只是代码时自动填，避免覆盖用户自己起的名字
+			if (best.name && !codeLike(best.name) && (!form.name.trim() || codeLike(form.name))) patch.name = best.name;
 			if (best.currency) patch.currency = best.currency;
 			if (best.market) patch.market = best.market as Market;
 			if (best.class && best.class !== "crypto" && best.class !== "cash") patch.class = best.class as AssetClass;

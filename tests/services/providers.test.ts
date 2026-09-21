@@ -13,6 +13,7 @@ import {
 	type QuoteTarget,
 	type ProviderSettings,
 } from "../../src/worker/services/quotes/providers";
+import { isPlaceholderName } from "../../src/worker/services/quotes/lookup";
 
 /** 用假的 fetch 替身验证适配器的解析逻辑（不打真实网络） */
 export function fakeFetch(
@@ -76,6 +77,15 @@ describe("代码映射（纯函数）", () => {
 		expect(tencentSymbol(stock({ symbol: "0700.HK", market: "hk" }))).toBe("hk00700");
 		expect(tencentSymbol(stock({ symbol: "600519.SS", market: "cn" }))).toBe("sh600519");
 		expect(tencentSymbol(stock({ symbol: "000001.SZ", market: "cn" }))).toBe("sz000001");
+	});
+
+	it("占位名（名称字段其实是代码）要能识别出来", () => {
+		// 推导出的候选先占位，名字暂时是查询词；搜索到正式名称后要替换
+		expect(isPlaceholderName("03121", "03121", "3121.HK")).toBe(true);
+		expect(isPlaceholderName("3121.HK", "03121", "3121.HK")).toBe(true);
+		expect(isPlaceholderName("3121", "03121", "3121.HK")).toBe(true);
+		expect(isPlaceholderName("", "03121", "3121.HK")).toBe(true);
+		expect(isPlaceholderName("CSOP KOSPI", "03121", "3121.HK")).toBe(false);
 	});
 
 	it("Yahoo：用户指定的代码覆盖优先", () => {
