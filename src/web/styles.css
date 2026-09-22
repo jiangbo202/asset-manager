@@ -138,6 +138,44 @@ tr.row-editing {
 	flex-wrap: wrap;
 }
 
+/* 设置页：Cloudflare 用量（数值 + 进度条） */
+.usage-list {
+	display: flex;
+	flex-direction: column;
+	gap: 12px;
+	margin-bottom: 12px;
+}
+
+.usage-head {
+	display: flex;
+	align-items: baseline;
+	justify-content: space-between;
+	gap: 12px;
+	margin-bottom: 5px;
+}
+
+.usage-bar {
+	height: 6px;
+	border-radius: 999px;
+	background: var(--surface-2);
+	overflow: hidden;
+}
+
+.usage-fill {
+	height: 100%;
+	background: var(--accent);
+	border-radius: 999px;
+	transition: width 0.3s ease;
+}
+
+.usage-fill.warn {
+	background: #d98a00;
+}
+
+.usage-fill.danger {
+	background: #d64545;
+}
+
 /* IP 地址、令牌等用等宽字体，便于逐位核对 */
 .mono {
 	font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;

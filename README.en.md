@@ -342,6 +342,30 @@ allows 10 ms per invocation, so the whole architecture is built around it:
 
 Settings → Data overview shows your real row counts at any time.
 
+### Want the actual numbers? (optional)
+
+**Bottom of Settings → “Cloudflare usage”** — paste a **read-only** API token and you get today's real figures:
+
+```
+Worker requests (today)      512 / 100,000      ▏
+D1 rows read (today)   4,120,000 / 5,000,000   ████████▏
+D1 rows written (today)     96,500 / 100,000   ██████████▏   ← turns red past 90%
+D1 database size (asset-manager-db)   18.4 MB / 500 MB
+```
+
+Create the token at dashboard → **My Profile → API Tokens → Create Token → Custom token**, with **only two read
+permissions**:
+
+| Permission | Used for |
+|---|---|
+| Account → **Account Analytics** → Read | Worker request counts |
+| Account → **D1** → Read | D1 rows read/written and database size |
+
+> Why a token is needed: those limits are tracked **per account**, and a Worker cannot read them itself. The
+> token is read-only, stored encrypted and never returned by the API (audit logs only record `(set)`); leave it
+> empty and the card simply shows “not configured” — nothing else changes. Numbers are cached locally and only
+> refreshed when you press the button.
+
 ### What happens if I go over the limits? Will I be billed?
 
 **The free tier never bills you.** Workers Free has no overage pricing at all — going over produces

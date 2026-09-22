@@ -65,6 +65,16 @@ Worker 只做一次 SHA-256。
 - `last_seen` 每 10 分钟最多写一次（用 `waitUntil` 在响应后写，不增加热路径往返）；
   老会话可能从未更新过，此时它等于登录时间
 
+### Cloudflare 用量用的只读 Token
+
+设置页「Cloudflare 用量」需要一个 Cloudflare API Token（额度按账号统计，Worker 自己读不到）：
+
+- 权限只要两项**只读**：`Account Analytics: Read`、`D1: Read`；不需要写权限，也拿不动别的资源
+- 存储：与行情 API Key 同一套 AES-GCM 加密（`core/secrets.ts`），密钥由 `SESSION_SECRET` 派生
+- 回传：任何接口都不返回原文（`GET /api/settings` 里是 `undefined`，审计日志里只留 `(set)`）
+- 出口：只有「刷新用量」会向 `api.cloudflare.com` 发 3–4 个只读请求；结果缓存进 settings
+- 公开只读分享**不包含**这两个端点（`/api/settings/usage*` 不在白名单里，匿名访问 401）
+
 ## 3. 密钥与敏感数据
 
 | 数据 | 存放位置 | 保护方式 |

@@ -110,6 +110,9 @@ describe("公开只读分享", () => {
 			["GET", "/api/settings/fx"],
 			// 会话列表里有 IP 与真实设备，绝不能公开
 			["GET", "/api/settings/sessions"],
+			// 用量里含账号 ID，同样不公开
+			["GET", "/api/settings/usage"],
+			["POST", "/api/settings/usage/refresh"],
 			["DELETE", `/api/settings/sessions/${"a".repeat(64)}`],
 			["POST", "/api/settings/fx/lookup", { base: "USD", quote: "HKD" }],
 			["GET", "/api/history"],

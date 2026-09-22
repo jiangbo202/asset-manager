@@ -7,6 +7,20 @@ export const SETTING_SNAPSHOT_HOUR = "snapshot_hour_utc";
 export const SETTING_MARKET_DATA = "market_data_enabled";
 export const SETTING_TIMEZONE = "timezone";
 export const SETTING_SETUP_DONE = "setup_done_at";
+/* ── Cloudflare 用量（设置页最底部那张卡）──
+ * 额度是按账号统计的，Worker 自己拿不到，所以需要用户提供一个**只读** API Token：
+ *   cf_api_token      加密存储的 Token（Account Analytics: Read + D1: Read）
+ *   cf_account_id     账号 ID（纯标识，不敏感）
+ *   cf_script_name    Worker 脚本名（默认 asset-manager）
+ *   cf_database_name  D1 库名（默认 asset-manager-db）
+ *   cf_usage          最近一次抓取结果的缓存（JSON），避免每次打开设置页都去打 Cloudflare
+ */
+export const SETTING_CF_API_TOKEN = "cf_api_token";
+export const SETTING_CF_ACCOUNT_ID = "cf_account_id";
+export const SETTING_CF_SCRIPT_NAME = "cf_script_name";
+export const SETTING_CF_DATABASE_NAME = "cf_database_name";
+export const SETTING_CF_USAGE = "cf_usage";
+
 /** 公开只读分享开关（"1" 开启）：开启后未登录也能看总览，见 api/middleware.ts */
 export const SETTING_PUBLIC_VIEW = "public_view";
 /** 公开只读分享的区域（逗号分隔的 PublicSection） */

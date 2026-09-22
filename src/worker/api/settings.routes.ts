@@ -1,3 +1,4 @@
+import type { Context } from "hono";
 import { Hono } from "hono";
 import { tOf } from "../core/i18n";
 import type { AppEnv } from "../types";
@@ -7,6 +8,11 @@ import {
 	BUILT_IN_CURRENCIES,
 	getSettings,
 	SETTING_DISPLAY_CURRENCY,
+	SETTING_CF_ACCOUNT_ID,
+	SETTING_CF_API_TOKEN,
+	SETTING_CF_DATABASE_NAME,
+	SETTING_CF_SCRIPT_NAME,
+	SETTING_CF_USAGE,
 	SETTING_PUBLIC_SECTIONS,
 	SETTING_PUBLIC_VIEW,
 	SETTING_TIMEZONE,
@@ -26,6 +32,7 @@ import {
 import { lookupFxRate } from "../services/quotes";
 import { parseProviderSettings, PROVIDERS, PROVIDER_MAP, type ProviderId } from "../services/quotes/providers";
 import { isRecord } from "../core/utils";
+import { fetchCloudflareUsage, FREE_LIMITS, type CfUsage } from "../services/cloudflare-usage";
 import { clearSessionCookie, currentSessionId, listSessions, revokeSession } from "../core/session";
 import { asRecord, requireCurrency, requireNumber, requireString } from "./validate";
 
@@ -42,6 +49,7 @@ const settings = new Hono<AppEnv>();
 function sanitizeSettingsForAudit(values: Record<string, string>): Record<string, string> {
 	const out: Record<string, string> = { ...values };
 	if (out.provider_keys) out.provider_keys = "(set)";
+	if (out[SETTING_CF_API_TOKEN]) out[SETTING_CF_API_TOKEN] = "(set)";
 
 	if (out.provider_config) {
 		try {
@@ -91,7 +99,7 @@ settings.get("/", async (c) => {
 	}
 
 	return ok(c, {
-		values: { ...values, provider_keys: undefined },
+		values: { ...values, provider_keys: undefined, [SETTING_CF_API_TOKEN]: undefined },
 		fx,
 		builtInCurrencies: [...BUILT_IN_CURRENCIES],
 		currencies: [...currencies].sort(),
@@ -131,6 +139,28 @@ settings.put("/", async (c) => {
 	if (payload.marketDataEnabled !== undefined) {
 		await setSetting(c.env.DB, "market_data_enabled", payload.marketDataEnabled ? "1" : "0");
 	}
+	// Cloudflare 用量：只读 Token（加密存储）+ 账号 / 脚本 / 库名。
+	// 传空字符串表示清除配置（界面上的"清除"按钮）。
+	if (payload.cfApiToken !== undefined) {
+		const value = String(payload.cfApiToken ?? "").trim().slice(0, 200);
+		await setSetting(
+			c.env.DB,
+			SETTING_CF_API_TOKEN,
+			value ? await encryptSecret(value, c.env.SESSION_SECRET) : "",
+		);
+		// 换了 Token 就丢掉旧快照，免得显示上一个账号的数字
+		await setSetting(c.env.DB, SETTING_CF_USAGE, "");
+	}
+	if (payload.cfAccountId !== undefined) {
+		await setSetting(c.env.DB, SETTING_CF_ACCOUNT_ID, String(payload.cfAccountId ?? "").trim().slice(0, 64));
+	}
+	if (payload.cfScriptName !== undefined) {
+		await setSetting(c.env.DB, SETTING_CF_SCRIPT_NAME, String(payload.cfScriptName ?? "").trim().slice(0, 64));
+	}
+	if (payload.cfDatabaseName !== undefined) {
+		await setSetting(c.env.DB, SETTING_CF_DATABASE_NAME, String(payload.cfDatabaseName ?? "").trim().slice(0, 64));
+	}
+
 	// 公开只读分享：只能由已登录的本人开关（本路由整体在 requireAuthOrPublicRead 之后，
 	// 且 PUT 不在白名单里，所以匿名请求到不了这里）
 	if (payload.publicView !== undefined) {
@@ -203,7 +233,8 @@ settings.put("/", async (c) => {
 		before: sanitizeSettingsForAudit(before),
 		after: sanitizeSettingsForAudit(after),
 	});
-	return ok(c, { values: { ...after, provider_keys: undefined } });
+	// Token 与行情 Key 一样只回标记，绝不回传原文
+	return ok(c, { values: { ...after, provider_keys: undefined, [SETTING_CF_API_TOKEN]: undefined } });
 });
 
 /** 汇率：v1 手动维护（PRD FR-7.2） */
@@ -304,6 +335,64 @@ settings.delete("/sessions/:id", async (c) => {
 		note: t("audit.sessionRevoked"),
 	});
 	return ok(c, { revoked: true, current: id === currentId });
+});
+
+/* ── Cloudflare 用量（设置页最底部）──
+ * 额度按账号统计，只有 Cloudflare 侧知道，所以需要用户提供一个只读 Token。
+ * 抓取结果缓存进 settings（cf_usage），GET 只读缓存、POST 才真的去抓 ——
+ * 打开设置页不该每次打三个外部请求。
+ */
+
+/** 把 Token / 账号 / 库名等配置读出来（Token 需要解密） */
+async function readUsageConfig(c: Context<AppEnv>) {
+	const values = await getSettings(c.env.DB);
+	const token = values[SETTING_CF_API_TOKEN]
+		? await decryptSecret(values[SETTING_CF_API_TOKEN], c.env.SESSION_SECRET)
+		: null;
+	let cached: CfUsage | null = null;
+	if (values[SETTING_CF_USAGE]) {
+		try {
+			cached = JSON.parse(values[SETTING_CF_USAGE]) as CfUsage;
+		} catch {
+			cached = null;
+		}
+	}
+	return {
+		token,
+		accountId: values[SETTING_CF_ACCOUNT_ID] ?? "",
+		scriptName: values[SETTING_CF_SCRIPT_NAME] ?? "asset-manager",
+		databaseName: values[SETTING_CF_DATABASE_NAME] ?? "asset-manager-db",
+		cached,
+	};
+}
+
+settings.get("/usage", async (c) => {
+	const config = await readUsageConfig(c);
+	return ok(c, {
+		configured: Boolean(config.token && config.accountId),
+		accountId: config.accountId,
+		scriptName: config.scriptName,
+		databaseName: config.databaseName,
+		tokenSet: Boolean(config.token),
+		snapshot: config.cached,
+		limits: FREE_LIMITS,
+	});
+});
+
+/** 去 Cloudflare 抓一次（手动点"刷新用量"时调用） */
+settings.post("/usage/refresh", async (c) => {
+	const t = tOf(c);
+	const config = await readUsageConfig(c);
+	if (!config.token || !config.accountId) throw badRequest(t("settings.usageNotConfigured"));
+
+	const snapshot = await fetchCloudflareUsage({
+		token: config.token,
+		accountId: config.accountId,
+		scriptName: config.scriptName,
+		databaseName: config.databaseName,
+	});
+	await setSetting(c.env.DB, SETTING_CF_USAGE, JSON.stringify(snapshot));
+	return ok(c, { snapshot, limits: FREE_LIMITS });
 });
 
 /** 数据概览：判断是否接近免费额度（PRD FR-7.6） */

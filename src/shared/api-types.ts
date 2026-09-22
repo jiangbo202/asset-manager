@@ -319,6 +319,37 @@ export interface AuthMeDto {
 	publicSections: PublicSection[];
 }
 
+/** Cloudflare 用量快照（设置页最底部）：数字来自只读 API，抓取结果会缓存 */
+export interface CfUsageDto {
+	fetchedAt: string;
+	windowStart: string;
+	windowEnd: string;
+	requests: number | null;
+	rowsRead: number | null;
+	rowsWritten: number | null;
+	database: { id: string; name: string; fileSize: number | null } | null;
+}
+
+export interface CfUsageLimitsDto {
+	requestsPerDay: number;
+	rowsReadPerDay: number;
+	rowsWrittenPerDay: number;
+	databaseBytes: number;
+	accountStorageBytes: number;
+}
+
+export interface CfUsageStateDto {
+	/** 是否已配置 Token + 账号 ID（否则界面显示配置表单） */
+	configured: boolean;
+	accountId: string;
+	scriptName: string;
+	databaseName: string;
+	/** Token 是否已保存（**不回传原文**） */
+	tokenSet: boolean;
+	snapshot: CfUsageDto | null;
+	limits: CfUsageLimitsDto;
+}
+
 export interface SessionItemDto {
 	/**
 	 * sha256(会话 token)。**不是** token 本身，所以可以安全地交给前端当作吊销句柄 ——

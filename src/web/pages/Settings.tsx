@@ -1,5 +1,12 @@
 import { useState } from "react";
-import { api, type ImportPreview, type ImportResult, type SessionItemDto, type SettingsDto } from "../lib/api";
+import {
+	api,
+	type CfUsageStateDto,
+	type ImportPreview,
+	type ImportResult,
+	type SessionItemDto,
+	type SettingsDto,
+} from "../lib/api";
 import { useAsync, useSubmit } from "../lib/useAsync";
 import { useT, useI18n, useTimeZone } from "../lib/i18n";
 import { dateTime, relativeTime } from "../lib/format";
@@ -30,6 +37,17 @@ export function SettingsPage({ onChanged }: { onChanged?: () => void }) {
 	const publicView = useSubmit();
 	const publicSections = useSubmit();
 	const [copied, setCopied] = useState(false);
+
+	const usage = useAsync<CfUsageStateDto>(() => api.settings.usage(), []);
+	const usageRefresh = useSubmit();
+	const [usageToken, setUsageToken] = useState("");
+	const [usageAccount, setUsageAccount] = useState("");
+	const [usageScript, setUsageScript] = useState("");
+	const [usageDatabase, setUsageDatabase] = useState("");
+	// 服务端已有值时，输入框留空表示"不修改"（Token 只写不读）
+	const usageAccountValue = usageAccount || usage.data?.accountId || "";
+	const usageScriptValue = usageScript || usage.data?.scriptName || "";
+	const usageDatabaseValue = usageDatabase || usage.data?.databaseName || "";
 
 	const sessions = useAsync<{ items: SessionItemDto[] }>(() => api.auth.sessions(), []);
 	const revokeSession = useSubmit();
@@ -90,6 +108,21 @@ export function SettingsPage({ onChanged }: { onChanged?: () => void }) {
 		await publicView.run(async () => {
 			await api.settings.update({ publicView: next });
 			settings.reload();
+		});
+	};
+
+	const saveUsageConfig = async (patch: Record<string, unknown>) => {
+		await usageRefresh.run(async () => {
+			await api.settings.update(patch);
+			setUsageToken("");
+			usage.reload();
+		});
+	};
+
+	const fetchUsage = async () => {
+		await usageRefresh.run(async () => {
+			await api.settings.refreshUsage();
+			usage.reload();
 		});
 	};
 
@@ -793,9 +826,199 @@ export function SettingsPage({ onChanged }: { onChanged?: () => void }) {
 				</div>
 			</div>
 
+			<div className="section">
+				<div className="section-head">
+					<h2>{t("settings.usage")}</h2>
+					<span className="small muted hide-sm">{t("settings.usageHint")}</span>
+				</div>
+				<div className="card panel">
+					{usage.loading && !usage.data ? (
+						<div className="small muted">{t("common.loading")}</div>
+					) : usage.data?.configured ? (
+						<>
+							{usageRefresh.error && <div className="alert error">{usageRefresh.error}</div>}
+							{usage.data.snapshot ? (
+								<>
+									<div className="usage-list">
+										<UsageRow
+											label={t("settings.usageRequests")}
+											used={usage.data.snapshot.requests}
+											limit={usage.data.limits.requestsPerDay}
+										/>
+										<UsageRow
+											label={t("settings.usageRowsRead")}
+											used={usage.data.snapshot.rowsRead}
+											limit={usage.data.limits.rowsReadPerDay}
+										/>
+										<UsageRow
+											label={t("settings.usageRowsWritten")}
+											used={usage.data.snapshot.rowsWritten}
+											limit={usage.data.limits.rowsWrittenPerDay}
+										/>
+										<UsageRow
+											label={t("settings.usageDbSize", {
+												name: usage.data.snapshot.database?.name ?? "",
+											})}
+											used={usage.data.snapshot.database?.fileSize ?? null}
+											limit={usage.data.limits.databaseBytes}
+											format="size"
+										/>
+									</div>
+									<p className="small muted" style={{ marginBottom: 0 }}>
+										{t("settings.usageUpdatedAt", {
+											time: dateTime(usage.data.snapshot.fetchedAt, timeZone),
+										})}
+										{" · "}
+										{t("settings.usageResetHint")}
+									</p>
+								</>
+							) : (
+								<p className="small muted">{t("settings.usageNoSnapshot")}</p>
+							)}
+							{/* 不用 .row：那条全局样式（.row > * { flex: 1 }）会把按钮拉成整行宽 */}
+							<div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 12 }}>
+								<button className="primary" onClick={() => void fetchUsage()} disabled={usageRefresh.pending}>
+									{usageRefresh.pending ? t("settings.usageRefreshing") : t("settings.usageRefresh")}
+								</button>
+								<button
+									className="ghost"
+									onClick={() => {
+										if (!window.confirm(t("settings.usageClearConfirm"))) return;
+										void saveUsageConfig({ cfApiToken: "", cfAccountId: "" });
+									}}
+									disabled={usageRefresh.pending}
+								>
+									{t("settings.usageClear")}
+								</button>
+							</div>
+							<details style={{ marginTop: 12 }}>
+								<summary className="small muted">{t("settings.usageConfig")}</summary>
+								<div className="grid cols-2" style={{ marginTop: 10 }}>
+									<label className="field">
+										<span>{t("settings.usageToken")}</span>
+										<input
+											type="password"
+											value={usageToken}
+											onChange={(e) => setUsageToken(e.target.value)}
+											placeholder={t("settings.usageTokenKept")}
+											autoComplete="off"
+										/>
+									</label>
+									<label className="field">
+										<span>{t("settings.usageAccount")}</span>
+										<input value={usageAccountValue} onChange={(e) => setUsageAccount(e.target.value)} />
+									</label>
+									<label className="field">
+										<span>{t("settings.usageScript")}</span>
+										<input value={usageScriptValue} onChange={(e) => setUsageScript(e.target.value)} />
+									</label>
+									<label className="field">
+										<span>{t("settings.usageDatabase")}</span>
+										<input value={usageDatabaseValue} onChange={(e) => setUsageDatabase(e.target.value)} />
+									</label>
+								</div>
+								<button
+									onClick={() =>
+										void saveUsageConfig({
+											...(usageToken ? { cfApiToken: usageToken } : {}),
+											cfAccountId: usageAccountValue,
+											cfScriptName: usageScriptValue,
+											cfDatabaseName: usageDatabaseValue,
+										})
+									}
+									disabled={usageRefresh.pending}
+								>
+									{t("common.save")}
+								</button>
+							</details>
+						</>
+					) : (
+						<>
+							<p className="small muted">{t("settings.usageIntro")}</p>
+							<div className="grid cols-2">
+								<label className="field">
+									<span>{t("settings.usageToken")}</span>
+									<input
+										type="password"
+										value={usageToken}
+										onChange={(e) => setUsageToken(e.target.value)}
+										autoComplete="off"
+									/>
+								</label>
+								<label className="field">
+									<span>{t("settings.usageAccount")}</span>
+									<input value={usageAccountValue} onChange={(e) => setUsageAccount(e.target.value)} />
+								</label>
+								<label className="field">
+									<span>{t("settings.usageScript")}</span>
+									<input value={usageScriptValue} onChange={(e) => setUsageScript(e.target.value)} />
+								</label>
+								<label className="field">
+									<span>{t("settings.usageDatabase")}</span>
+									<input value={usageDatabaseValue} onChange={(e) => setUsageDatabase(e.target.value)} />
+								</label>
+							</div>
+							{usageRefresh.error && <div className="alert error">{usageRefresh.error}</div>}
+							<button
+								className="primary"
+								onClick={() =>
+									void saveUsageConfig({
+										...(usageToken ? { cfApiToken: usageToken } : {}),
+										cfAccountId: usageAccountValue,
+										cfScriptName: usageScriptValue,
+										cfDatabaseName: usageDatabaseValue,
+									})
+								}
+								disabled={usageRefresh.pending || !usageToken || !usageAccountValue}
+							>
+								{usageRefresh.pending ? t("common.saving") : t("common.save")}
+							</button>
+							<p className="small muted" style={{ marginBottom: 0, marginTop: 10 }}>
+								{t("settings.usageHowTo")}
+							</p>
+						</>
+					)}
+				</div>
+			</div>
+
 			<p className="small muted" style={{ marginTop: 24 }}>
 				{t("settings.disclaimer")}
 			</p>
 		</>
+	);
+}
+
+/**
+ * 一行用量：标签 + "已用 / 上限" + 进度条。
+ * 数字拿不到时（Token 权限不足、库名写错）显示 —，而不是显示 0 让人误以为没用。
+ */
+function UsageRow({
+	label,
+	used,
+	limit,
+	format = "count",
+}: {
+	label: string;
+	used: number | null;
+	limit: number;
+	format?: "count" | "size";
+}) {
+	const t = useT();
+	const render = (value: number) => (format === "size" ? humanSize(value) : value.toLocaleString());
+	const pct = used === null || limit <= 0 ? null : Math.min(100, (used / limit) * 100);
+	const tone = pct === null ? "" : pct >= 90 ? " danger" : pct >= 70 ? " warn" : "";
+
+	return (
+		<div className="usage-row">
+			<div className="usage-head">
+				<span>{label}</span>
+				<span className="small muted">
+					{used === null ? t("settings.usageUnknown") : `${render(used)} / ${render(limit)}`}
+				</span>
+			</div>
+			<div className="usage-bar">
+				<div className={`usage-fill${tone}`} style={{ width: `${pct ?? 0}%` }} />
+			</div>
+		</div>
 	);
 }

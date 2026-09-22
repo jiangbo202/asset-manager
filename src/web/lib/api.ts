@@ -1,5 +1,8 @@
 import type {
 	AccountDto,
+	CfUsageDto,
+	CfUsageLimitsDto,
+	CfUsageStateDto,
 	AuditItemDto,
 	AuthMeDto,
 	FxLookupDto,
@@ -21,7 +24,7 @@ import type {
 
 /** 统一 API 客户端：自动带 cookie、统一错误信息 */
 /** 页面直接从 lib/api 引类型（历史写法），这里把新类型一并导出 */
-export type { SessionItemDto };
+export type { CfUsageDto, CfUsageLimitsDto, CfUsageStateDto, SessionItemDto };
 
 export class ApiError extends Error {
 	readonly status: number;
@@ -170,6 +173,13 @@ export const api = {
 		deleteFx: (base: string, quote: string) =>
 			request<{ deleted: boolean }>(`/api/settings/fx?base=${base}&quote=${quote}`, { method: "DELETE" }),
 		overview: () => request<OverviewDto>("/api/settings/overview"),
+		/** Cloudflare 用量（设置页最底部）：读缓存 */
+		usage: () => request<CfUsageStateDto>("/api/settings/usage"),
+		/** 去 Cloudflare 抓一次用量（手动点刷新） */
+		refreshUsage: () =>
+			request<{ snapshot: CfUsageDto; limits: CfUsageLimitsDto }>("/api/settings/usage/refresh", {
+				method: "POST",
+			}),
 	},
 
 	history: (query: { entity?: string; action?: string; from?: string; to?: string; page?: number; pageSize?: number } = {}) => {

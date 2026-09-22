@@ -47,6 +47,8 @@ const BUDGET: Record<string, { statements: number; roundTrips: number; method?: 
 	"/api/history": { statements: 4, roundTrips: 3 },
 	// 会话列表：认证上下文 + 一条 SELECT（过期会话在 SQL 里过滤掉）
 	"/api/settings/sessions": { statements: 3, roundTrips: 2 },
+	// 用量：认证上下文 + 读设置（Token / 账号 / 缓存都在这条里），**不打 Cloudflare**
+	"/api/settings/usage": { statements: 3, roundTrips: 2 },
 };
 
 interface Counted {

@@ -108,6 +108,10 @@ git push                   # Workers Builds 自动重新部署
 
 ## 5. 限额监控
 
+**设置页最底部 → 「Cloudflare 用量」**（可选）会直接显示今天的真实数字：Workers 请求、D1 行读/行写、
+D1 库大小，都对着免费额度给出 x/y 与进度条。需要一个只有 `Account Analytics: Read` + `D1: Read`
+的只读 Token（加密存储、不回传），数字缓存本地、点「刷新用量」才去 Cloudflare 取。
+
 设置 → 数据概览会显示各表行数与免费额度对照。经验值：
 
 | 资源 | 典型值 | 免费额度 |
