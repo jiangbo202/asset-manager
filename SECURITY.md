@@ -124,6 +124,24 @@ Permissions-Policy: geolocation=(), microphone=(), camera=()
 已知取舍：免费版没有速率限制，公开链接被反复拉取会消耗 Worker/D1 免费额度
 （单次约 2ms CPU、3 次往返）。不打算公开分享时请把开关关掉。
 
+部署后可以自己验一遍（`BASE` 换成你的地址）：
+
+```bash
+BASE=https://asset-manager.example.workers.dev
+
+# 关着的时候 401；开着的时候 200
+curl -s -o /dev/null -w 'portfolio  %{http_code}\n' "$BASE/api/portfolio"
+
+# 下面这些**永远**应该是 401（与开关无关）
+for p in /api/settings /api/settings/overview /api/history /api/backup /api/holdings /api/quotes/status; do
+  curl -s -o /dev/null -w "$p  %{http_code}\n" "$BASE$p"
+done
+curl -s -o /dev/null -w 'refresh(POST)  %{http_code}\n' -X POST "$BASE/api/quotes/refresh"
+
+# 匿名访客拿不到账户备注（note 应为 null）
+curl -s "$BASE/api/accounts" | head -c 200
+```
+
 ## 7. 隐私
 
 - 不含分析脚本、不含遥测、不引入第三方字体或 CDN
