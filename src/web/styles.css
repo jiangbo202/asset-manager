@@ -138,6 +138,62 @@ tr.row-editing {
 	flex-wrap: wrap;
 }
 
+/* IP 地址、令牌等用等宽字体，便于逐位核对 */
+.mono {
+	font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+	font-size: 0.92em;
+}
+
+/* 设置页：会话列表（设备 / IP / 时间 + 单个踢出） */
+.session-list {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+	margin: 10px 0;
+}
+
+.session-row {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	flex-wrap: wrap;
+	padding: 8px 10px;
+	border: 1px solid var(--border);
+	border-radius: 8px;
+}
+
+.session-row.current {
+	background: var(--accent-weak);
+	border-color: transparent;
+}
+
+.session-main {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	min-width: 0;
+}
+
+.session-device {
+	font-weight: 500;
+}
+
+.session-meta {
+	flex: 1;
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.chip {
+	padding: 1px 8px;
+	border-radius: 999px;
+	background: var(--surface-2);
+	color: var(--muted);
+	font-size: 12px;
+}
+
 /* 设置页：公开只读分享的开关与分享链接 */
 .switch-row {
 	display: flex;

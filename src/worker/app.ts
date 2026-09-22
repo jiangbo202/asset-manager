@@ -1,11 +1,14 @@
 import { Hono } from "hono";
 import type { AppEnv, AuthRow, SessionRow } from "./types";
-import { acceptSessionRow, sessionLookupStatement } from "./core/session";
+import { acceptSessionRow, sessionLookupStatement, touchSession } from "./core/session";
 import { ApiError } from "./core/errors";
 import api from "./api";
 import { detectLang, translator } from "./core/i18n";
 
 const app = new Hono<AppEnv>();
+
+/** 会话活跃时间的写入节流：小于这个间隔的请求不重复写 */
+const SESSION_TOUCH_MS = 10 * 60 * 1000;
 
 /**
  * 请求上下文：所有进入 Worker 的请求都先解析登录态与初始化状态
@@ -32,8 +35,26 @@ app.use("*", async (c, next) => {
 	const sessionRow = sessionIndex >= 0 ? ((results[0]?.results?.[0] as SessionRow | undefined) ?? null) : null;
 	const authRow = (results[sessionIndex + 1]?.results?.[0] as AuthRow | undefined) ?? null;
 
-	c.set("session", await acceptSessionRow(c, sessionRow));
+	const session = await acceptSessionRow(c, sessionRow);
+	c.set("session", session);
 	c.set("auth", authRow);
+
+	/**
+	 * 记录"最近活跃"，供设置页的会话列表使用。
+	 *
+	 * 为什么不是每个请求都写：D1 的写也是一次往返 + 计入每日写额度，
+	 * 而这里只需要"让用户认出哪台设备是自己"，10 分钟粒度完全够。
+	 * 为什么放 waitUntil：响应不必等它，热路径往返次数不变。
+	 * 注意 last_seen 在创建时就有值，所以这里用的是上下文中已读出的行，不额外查库。
+	 */
+	const lastSeen = session?.last_seen ?? null;
+	if (session && (!lastSeen || Date.now() - Date.parse(lastSeen) > SESSION_TOUCH_MS)) {
+		const executionCtx = c.executionCtx as ExecutionContext | undefined;
+		if (typeof executionCtx?.waitUntil === "function") {
+			executionCtx.waitUntil(touchSession(c, session.id));
+		}
+	}
+
 	await next();
 });
 

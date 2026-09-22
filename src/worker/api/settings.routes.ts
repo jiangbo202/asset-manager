@@ -19,6 +19,7 @@ import { isValidTimeZone } from "../../shared/time";
 import { lookupFxRate } from "../services/quotes";
 import { parseProviderSettings, PROVIDERS, PROVIDER_MAP, type ProviderId } from "../services/quotes/providers";
 import { isRecord } from "../core/utils";
+import { clearSessionCookie, currentSessionId, listSessions, revokeSession } from "../core/session";
 import { asRecord, requireCurrency, requireNumber, requireString } from "./validate";
 
 const settings = new Hono<AppEnv>();
@@ -235,6 +236,55 @@ settings.delete("/fx", async (c) => {
 		before: { base, quote },
 	});
 	return ok(c, { deleted: true });
+});
+
+/**
+ * 会话列表（设置页的"会话"卡片）
+ *
+ * 放在 /api/settings 下而不是 /api/auth 下，是为了自动落进 requireAuthOrPublicRead 的
+ * 保护范围：公开只读分享的白名单里没有它，所以匿名访客拿不到本人登录过的 IP 与设备
+ * （auth 路由挂在该中间件之外，历史遗留，新接口不往那边放）。
+ */
+settings.get("/sessions", async (c) => {
+	const [sessions, currentId] = await Promise.all([listSessions(c), currentSessionId(c)]);
+	const rows = sessions.map((row) => ({
+		id: row.id,
+		current: row.id === currentId,
+		userAgent: row.ua,
+		ip: row.ip,
+		createdAt: row.created_at,
+		lastSeen: row.last_seen,
+		expiresAt: row.expires_at,
+	}));
+	// 当前设备排最前（列表按最近活跃排序，但"本设备"最好一眼可见）
+	rows.sort((a, b) => Number(b.current) - Number(a.current));
+	return ok(c, { items: rows });
+});
+
+/** 踢出指定会话（"登出这台设备"）。踢自己等于登出：清 cookie，前端回登录页 */
+settings.delete("/sessions/:id", async (c) => {
+	const t = tOf(c);
+	const id = c.req.param("id");
+	if (!/^[0-9a-f]{64}$/.test(id)) throw badRequest(t("error.bad_request"));
+
+	const currentId = await currentSessionId(c);
+	const before = await c.env.DB.prepare(`SELECT ua, ip, created_at FROM sessions WHERE id = ?`)
+		.bind(id)
+		.first<{ ua: string | null; ip: string | null; created_at: string }>();
+	if (!before) throw notFound(t("error.not_found"));
+
+	await revokeSession(c.env.DB, id);
+	if (id === currentId) clearSessionCookie(c);
+
+	await writeAudit(c.env.DB, {
+		entity: "auth",
+		entityId: id.slice(0, 8),
+		action: "security",
+		source: "web",
+		before: { ip: before.ip, ua: before.ua, createdAt: before.created_at },
+		note: t("audit.sessionRevoked"),
+	});
+	return ok(c, { revoked: true, current: id === currentId });
 });
 
 /** 数据概览：判断是否接近免费额度（PRD FR-7.6） */

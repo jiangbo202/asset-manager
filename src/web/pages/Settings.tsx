@@ -1,13 +1,14 @@
 import { useState } from "react";
-import { api, type ImportPreview, type ImportResult, type SettingsDto } from "../lib/api";
+import { api, type ImportPreview, type ImportResult, type SessionItemDto, type SettingsDto } from "../lib/api";
 import { useAsync, useSubmit } from "../lib/useAsync";
 import { useT, useI18n, useTimeZone } from "../lib/i18n";
-import { dateTime } from "../lib/format";
+import { dateTime, relativeTime } from "../lib/format";
 import { decryptBackup, deriveCredential, encryptBackup, isEncryptedBackup, ITERATIONS, randomSaltHex } from "../lib/crypto";
 import { downloadText, humanSize } from "../lib/download";
 import { MarketDataSection } from "./MarketDataSection";
 import { LANGUAGES, LANGUAGE_LABELS, type LanguageSetting } from "../../shared/i18n";
 import { COMMON_TIMEZONES, isValidTimeZone, offsetLabel } from "../../shared/time";
+import { describeUserAgent } from "../../shared/device";
 
 export function SettingsPage({ onChanged }: { onChanged?: () => void }) {
 	const t = useT();
@@ -27,6 +28,9 @@ export function SettingsPage({ onChanged }: { onChanged?: () => void }) {
 
 	const publicView = useSubmit();
 	const [copied, setCopied] = useState(false);
+
+	const sessions = useAsync<{ items: SessionItemDto[] }>(() => api.auth.sessions(), []);
+	const revokeSession = useSubmit();
 
 	const [timeZoneInput, setTimeZoneInput] = useState("");
 	const timezoneSave = useSubmit();
@@ -645,6 +649,59 @@ export function SettingsPage({ onChanged }: { onChanged?: () => void }) {
 						<p className="small muted">
 							{t("settings.sessionsActive", { count: overview.data?.rows.sessions ?? 0 })}
 						</p>
+						{revokeSession.error && <div className="alert error">{revokeSession.error}</div>}
+
+						<div className="session-list">
+							{(sessions.data?.items ?? []).map((item) => {
+								const device = describeUserAgent(item.userAgent);
+								const label = [device.os, device.browser].filter(Boolean).join(" · ");
+								return (
+									<div key={item.id} className={`session-row${item.current ? " current" : ""}`}>
+										<div className="session-main">
+											<span className="session-device" title={item.userAgent ?? ""}>
+												{label || t("settings.deviceUnknown")}
+											</span>
+											{item.current && <span className="chip">{t("settings.thisDevice")}</span>}
+										</div>
+										<div className="small muted session-meta">
+											<span className="mono">{item.ip ?? t("settings.ipUnknown")}</span>
+											{" · "}
+											{t("settings.sessionLoginAt", { time: dateTime(item.createdAt, timeZone) })}
+											{item.lastSeen && (
+												<>
+													{" · "}
+													{t("settings.sessionActiveAt", { time: relativeTime(t, item.lastSeen) })}
+												</>
+											)}
+										</div>
+										{!item.current && (
+											<button
+												className="ghost"
+												disabled={revokeSession.pending}
+												onClick={async () => {
+													if (!window.confirm(t("settings.revokeConfirm", { device: label || t("settings.deviceUnknown") }))) return;
+													await revokeSession.run(async () => {
+														const result = await api.auth.revokeSession(item.id);
+														// 踢的是自己（理论上按钮不显示，防御一下）：直接回登录页
+														if (result.current) {
+															window.location.reload();
+															return;
+														}
+														sessions.reload();
+														overview.reload();
+													});
+												}}
+											>
+												{t("settings.revokeSession")}
+											</button>
+										)}
+									</div>
+								);
+							})}
+							{sessions.loading && !sessions.data && <div className="small muted">{t("common.loading")}</div>}
+							{sessions.error && <div className="alert error">{sessions.error}</div>}
+						</div>
+
 						<button
 							className="danger"
 							onClick={async () => {

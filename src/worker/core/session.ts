@@ -105,11 +105,38 @@ export async function revokeAllSessions(c: Context<AppEnv>): Promise<number> {
 	return result.meta.changes ?? 0;
 }
 
-export async function listSessions(c: Context<AppEnv>): Promise<Array<Omit<SessionRow, "id"> & { id: string }>> {
-	const { results } = await c.env.DB.prepare(
-		`SELECT id, created_at, expires_at, last_seen, ua, ip FROM sessions ORDER BY created_at DESC LIMIT 50`,
-	).all<SessionRow>();
+/** 活跃会话列表（不含已过期的；过期的留着没意义，前端也不该显示"还能用"的过程） */
+export async function listSessions(c: Context<AppEnv>): Promise<SessionRow[]> {
+	const statement = sessionsStatement(c.env.DB);
+	const { results } = await statement.all<SessionRow>();
 	return results ?? [];
+}
+
+/** 会话列表语句（不执行）：便于和别的查询合并成一次 batch */
+export function sessionsStatement(db: D1Database, now = nowIso()): D1PreparedStatement {
+	return db
+		.prepare(
+			`SELECT id, created_at, expires_at, last_seen, ua, ip FROM sessions
+			 WHERE expires_at > ? ORDER BY last_seen DESC, created_at DESC LIMIT 50`,
+		)
+		.bind(now);
+}
+
+/**
+ * 吊销指定会话（"踢出这台设备"）。
+ * 注意：`id` 是 **sha256(cookie token)**，不是 token 本身，所以把它交给前端是安全的 ——
+ * 拿到它也只能用来吊销，换不来登录态（token 是 32 字节随机值，反推不出来）。
+ */
+export async function revokeSession(db: D1Database, id: string): Promise<boolean> {
+	const result = await db.prepare(`DELETE FROM sessions WHERE id = ?`).bind(id).run();
+	return (result.meta.changes ?? 0) > 0;
+}
+
+/** 当前这个请求用的是哪条会话（用于在列表里标出"本设备"） */
+export async function currentSessionId(c: Context<AppEnv>): Promise<string | null> {
+	const token = readCookie(c.req.header("cookie") ?? null, COOKIE_NAME);
+	if (!token) return null;
+	return await tokenHash(token);
 }
 
 export const sessionTokenPreview = (value: string): string => toBase64(encoder.encode(value)).slice(0, 8);

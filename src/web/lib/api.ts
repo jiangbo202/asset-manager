@@ -13,12 +13,16 @@ import type {
 	ProviderId,
 	QuoteStatusDto,
 	RefreshReportDto,
+	SessionItemDto,
 	SettingsDto,
 	SnapshotItemDto,
 	TrendSeriesDto,
 } from "../../shared/api-types";
 
 /** 统一 API 客户端：自动带 cookie、统一错误信息 */
+/** 页面直接从 lib/api 引类型（历史写法），这里把新类型一并导出 */
+export type { SessionItemDto };
+
 export class ApiError extends Error {
 	readonly status: number;
 	readonly code: string;
@@ -75,6 +79,11 @@ export const api = {
 		logoutAll: () => request<{ revoked: number }>("/api/auth/logout-all", { method: "POST" }),
 		changePassword: (body: { oldCredential: string; newCredential: string; kdfSalt: string; iterations: number }) =>
 			request<{ changed: boolean }>("/api/auth/change-password", json(body)),
+		/** 活跃会话列表：设备 / IP / 登录时间，current = 本设备 */
+		sessions: () => request<{ items: SessionItemDto[] }>("/api/settings/sessions"),
+		/** 踢出指定会话（踢自己等于登出） */
+		revokeSession: (id: string) =>
+			request<{ revoked: boolean; current: boolean }>(`/api/settings/sessions/${id}`, { method: "DELETE" }),
 	},
 
 	accounts: {

@@ -103,6 +103,8 @@ trademark issues. Accounts without an icon get a colour derived from their name.
 
 - **Daily snapshots**: the Cron trigger refreshes quotes at your configured hour and takes the day's net-worth
   snapshot right after (see [Quotes and FX rates](#-quotes-and-fx-rates))
+- Sessions: every signed-in device with OS / browser / IP / sign-in time / last active, “this device” marked,
+  and one-click sign-out per device
 - **FX rates are frozen per day**, so editing a rate later never shifts the historical curve
 - Activity history: every write is recorded, the list shows *what* changed and *what it was*, and expanding a row
   reveals the field-level diff

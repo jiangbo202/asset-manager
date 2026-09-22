@@ -63,6 +63,24 @@ export function relativeDays(t: Translator, days: number | null | undefined): st
 	return t("time.daysAgo", { days });
 }
 
+/**
+ * 相对时间（分钟粒度）：用来显示会话"最近活跃"。
+ * 会话是"刚刚 / 5 分钟前 / 3 小时前"这种量级，按天算太粗。
+ */
+export function relativeTime(t: Translator, iso: string | null | undefined, now = Date.now()): string {
+	if (!iso) return t("time.never");
+	const at = Date.parse(iso);
+	if (Number.isNaN(at)) return t("time.never");
+	const minutes = Math.floor((now - at) / 60_000);
+	if (minutes < 1) return t("time.justNow");
+	if (minutes < 60) return t("time.minutesAgo", { minutes });
+	const hours = Math.floor(minutes / 60);
+	if (hours < 24) return t("time.hoursAgo", { hours });
+	const days = Math.floor(hours / 24);
+	if (days === 1) return t("time.yesterday");
+	return t("time.daysAgo", { days });
+}
+
 export function stalenessClass(days: number | null | undefined): string {
 	if (days === null || days === undefined) return "warn";
 	return days > 7 ? "warn" : "";

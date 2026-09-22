@@ -315,6 +315,23 @@ export interface AuthMeDto {
 	publicView: boolean;
 }
 
+export interface SessionItemDto {
+	/**
+	 * sha256(会话 token)。**不是** token 本身，所以可以安全地交给前端当作吊销句柄 ——
+	 * token 是 32 字节随机值，从哈希反推不出来。
+	 */
+	id: string;
+	/** 是否就是当前这台设备（界面据此显示"本设备"并隐藏踢出按钮） */
+	current: boolean;
+	/** 原始 User-Agent，由前端解析成"系统 · 浏览器" */
+	userAgent: string | null;
+	ip: string | null;
+	createdAt: string;
+	/** 最近活跃（10 分钟粒度；老会话可能从未更新过，此时等于登录时间） */
+	lastSeen: string | null;
+	expiresAt: string;
+}
+
 export interface OverviewDto {
 	rows: Record<string, number>;
 	settings: Record<string, string>;

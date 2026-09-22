@@ -45,6 +45,8 @@ const BUDGET: Record<string, { statements: number; roundTrips: number; method?: 
 	"/api/settings/overview": { statements: 4, roundTrips: 2 },
 	"/api/quotes/status": { statements: 5, roundTrips: 2 },
 	"/api/history": { statements: 4, roundTrips: 3 },
+	// 会话列表：认证上下文 + 一条 SELECT（过期会话在 SQL 里过滤掉）
+	"/api/settings/sessions": { statements: 3, roundTrips: 2 },
 };
 
 interface Counted {
