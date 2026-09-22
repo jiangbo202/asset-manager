@@ -368,13 +368,34 @@ Token 权限不足或未设置。确认含 **Workers 编辑 + D1 编辑**，或�
 
 ## 🔄 升级
 
+先导出一份备份（设置 → 备份）。升级一般不动数据（迁移只改表结构），但备份不亏。
+
+**你自己的仓库就是从本仓库克隆的**（直接 `git remote -v` 看得到上游）：
+
 ```bash
 git pull
 npm install
-npm run deploy:safe      # 会自动应用新的 D1 迁移
+npm run deploy:safe      # 自动应用新的 D1 迁移
 ```
 
-升级前建议先导出一份备份。若页面提示数据库需要升级，说明迁移没跑成功，见 FAQ。
+**你是点「Deploy to Cloudflare」按钮部署的** —— 那次是把仓库**复制**一份给你，
+上游后续的修复与功能不会自动流过去，需要显式合并：
+
+```bash
+npm run update:upstream   # 地址自动取自 package.json 的 repository
+# 或指定：npm run update:upstream -- https://github.com/<上游作者>/asset-manager.git
+git push                  # Workers Builds 会自动重新构建部署
+```
+
+这条命令会：检查工作区干净 → 加 `upstream` remote → 拉取 → **先列出将要合并的提交** →
+合并。中途只会在一种情况下冲突：`wrangler.jsonc` 里的 `database_id`（你填了真实 id，上游是占位值），
+这时**自动保留你的**，不会把 id 冲掉。其它冲突会原样停下并告诉你怎么处理。
+
+> 如果你的仓库页面显示 “forked from …”，也可以直接用 GitHub 的 **Sync fork → Update branch** 按钮，
+> 效果一样。
+
+**升级后页面提示「数据库需要升级」** = 迁移没跑：把 Worker → Settings → Build 的 Deploy command
+设成 `npm run deploy`（每次部署自动迁移），或本地跑一次 `npm run db:migrate:remote`。
 
 ## 🛠 开发与贡献
 

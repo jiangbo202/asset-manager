@@ -65,15 +65,26 @@ Dashboard → Workers & Pages → D1 → 选库 → Time Travel，可回滚到�
 
 ## 3. 升级
 
+**本仓库克隆出来的部署**：
+
 ```bash
 git pull
 npm install
 npm run deploy:safe
 ```
 
-- 迁移会自动应用；若页面提示「数据库需要升级」，说明迁移没跑成功，见 §1
+**点「Deploy to Cloudflare」按钮部署出来的副本**（上游不会自动流过去）：
+
+```bash
+npm run update:upstream    # 合并上游；wrangler.jsonc 的 database_id 冲突时保留你的
+git push                   # Workers Builds 自动重新部署
+```
+
+- 迁移会自动应用（`deploy:safe`，或 Builds 的 Deploy command 设为 `npm run deploy`）；
+  若页面提示「数据库需要升级」，说明迁移没跑成功，见 §1
 - 升级前建议导出一次备份（尤其是跨版本升级）
-- fork 用户如改过代码，注意 README 里「第一次必做」是否有新增步骤
+- 改过代码、或改动过上游会碰的文件时，先看清 `update:upstream` 打印的"将要合并的提交"
+- 步骤详见 [DEPLOYMENT.md §6](DEPLOYMENT.md#6-从上游更新)
 
 ## 4. 定时任务（Cron）
 

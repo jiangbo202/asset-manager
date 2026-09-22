@@ -401,14 +401,35 @@ No, and that is intentional: single user, single password, data in your own acco
 
 ## 🔄 Upgrading
 
+Export a backup first (Settings → Backup). Upgrades do not touch your data (migrations only change table
+structure), but a backup never hurts.
+
+**Your repo is a clone of this one** (`git remote -v` shows the upstream):
+
 ```bash
 git pull
 npm install
 npm run deploy:safe      # applies new D1 migrations automatically
 ```
 
-Export a backup before upgrading. If the page still says the database needs an upgrade, the migration did not
-run — see the FAQ.
+**You deployed with the “Deploy to Cloudflare” button** — that flow **copies** the repository into your account,
+so later fixes and features do not flow to you automatically; you have to merge them in:
+
+```bash
+npm run update:upstream   # upstream URL comes from package.json → repository
+# or explicitly: npm run update:upstream -- https://github.com/<owner>/asset-manager.git
+git push                  # Workers Builds rebuilds and redeploys
+```
+
+The command checks that your working tree is clean, adds an `upstream` remote, fetches, **lists the commits it
+is about to merge** and then merges. There is exactly one conflict it resolves for you: the `database_id` in
+`wrangler.jsonc` (yours is real, upstream keeps a placeholder) — **yours always wins**. Any other conflict stops
+and tells you what to do.
+
+> If your repo page says “forked from …”, you can also just use GitHub’s **Sync fork → Update branch** button.
+
+**“Database needs an upgrade” after updating** means the migrations did not run: set Builds **Deploy command** to
+`npm run deploy` (migrations on every deploy) or run `npm run db:migrate:remote` locally.
 
 ## 🛠 Development and contributing
 

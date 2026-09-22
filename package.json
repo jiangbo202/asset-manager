@@ -1,66 +1,71 @@
 {
-  "name": "asset-manager",
-  "version": "0.13.0",
-  "private": true,
-  "type": "module",
-  "description": "散落在各家券商与平台的股票 / ETF / 加密货币 / 现金，一处看清；部署在自己的 Cloudflare 上（Workers + D1）",
-  "license": "MIT",
-  "cloudflare": {
-    "bindings": {
-      "SETUP_TOKEN": {
-        "description": "初始化口令，只在首次打开网页时使用一次。用 `openssl rand -hex 32` 生成后粘贴到这里，并请自己留存好。"
-      },
-      "SESSION_SECRET": {
-        "description": "会话签名密钥。用 `openssl rand -hex 32` 生成后粘贴到这里。"
-      }
-    }
-  },
-  "scripts": {
-    "test:watch": "vitest",
-    "db:migrate:local": "wrangler d1 migrations apply DB --local --config wrangler.dev.jsonc",
-    "db:migrate:remote": "wrangler d1 migrations apply DB --remote",
-    "db:reset:local": "node scripts/reset-local.cjs",
-    "db:seed:local": "wrangler d1 execute DB --local --config wrangler.dev.jsonc --file=./scripts/seed.sql",
-    "db:console:local": "wrangler d1 execute DB --local --config wrangler.dev.jsonc --command",
-    "predev": "npm run check:env && npm run db:migrate:local",
-    "prepreview": "npm run db:migrate:local && npm run db:migrate:preview",
-    "db:migrate:preview": "wrangler d1 migrations apply DB --local",
-    "prebuild": "npm run check:env",
-    "pretest": "npm run check:env",
-    "dev": "vite",
-    "build": "vite build",
-    "preview": "vite preview",
-    "lint": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.worker.json --noEmit && tsc -p tsconfig.node.json --noEmit && tsc -p tests/tsconfig.json --noEmit",
-    "test": "vitest run",
-    "verify": "npm run check:env && npm run lint && npm test && npm run build && npm run check:bundle && npm run check:scripts",
-    "check:bundle": "node scripts/check-bundle.cjs",
-    "check:scripts": "node scripts/check-scripts.cjs",
-    "check:env": "node scripts/check-env.cjs",
-    "check:auth": "wrangler whoami",
-    "watch:cpu": "node scripts/watch-cpu.cjs",
-    "setup:d1": "node scripts/setup-d1.cjs",
-    "setup:secrets": "node scripts/setup-secrets.cjs",
-    "setup:repo": "node scripts/set-repo.cjs",
-    "deploy": "npm run db:migrate:remote && npm run deploy:worker",
-    "deploy:worker": "wrangler deploy",
-    "deploy:safe": "node scripts/deploy-safe.cjs"
-  },
-  "dependencies": {
-    "hono": "^4.13.8",
-    "react": "^19.3.0",
-    "react-dom": "^19.3.0"
-  },
-  "devDependencies": {
-    "@cloudflare/vite-plugin": "^1.56.0",
-    "@cloudflare/vitest-plugin": "^1.1.13",
-    "@cloudflare/workers-types": "^5.20260920.1",
-    "@types/node": "^26.6.2",
-    "@types/react": "^19.3.0",
-    "@types/react-dom": "^19.3.0",
-    "@vitejs/plugin-react": "^6.1.1",
-    "typescript": "^7.0.2",
-    "vite": "^8.3.0",
-    "vitest": "^4.1.11",
-    "wrangler": "^4.135.0"
-  }
+	"name": "asset-manager",
+	"version": "0.13.0",
+	"private": true,
+	"type": "module",
+	"description": "散落在各家券商与平台的股票 / ETF / 加密货币 / 现金，一处看清；部署在自己的 Cloudflare 上（Workers + D1）",
+	"license": "MIT",
+	"cloudflare": {
+		"bindings": {
+			"SETUP_TOKEN": {
+				"description": "初始化口令，只在首次打开网页时使用一次。用 `openssl rand -hex 32` 生成后粘贴到这里，并请自己留存好。"
+			},
+			"SESSION_SECRET": {
+				"description": "会话签名密钥。用 `openssl rand -hex 32` 生成后粘贴到这里。"
+			}
+		}
+	},
+	"scripts": {
+		"test:watch": "vitest",
+		"db:migrate:local": "wrangler d1 migrations apply DB --local --config wrangler.dev.jsonc",
+		"db:migrate:remote": "wrangler d1 migrations apply DB --remote",
+		"db:reset:local": "node scripts/reset-local.cjs",
+		"db:seed:local": "wrangler d1 execute DB --local --config wrangler.dev.jsonc --file=./scripts/seed.sql",
+		"db:console:local": "wrangler d1 execute DB --local --config wrangler.dev.jsonc --command",
+		"predev": "npm run check:env && npm run db:migrate:local",
+		"prepreview": "npm run db:migrate:local && npm run db:migrate:preview",
+		"db:migrate:preview": "wrangler d1 migrations apply DB --local",
+		"prebuild": "npm run check:env",
+		"pretest": "npm run check:env",
+		"dev": "vite",
+		"build": "vite build",
+		"preview": "vite preview",
+		"lint": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.worker.json --noEmit && tsc -p tsconfig.node.json --noEmit && tsc -p tests/tsconfig.json --noEmit",
+		"test": "vitest run",
+		"verify": "npm run check:env && npm run lint && npm test && npm run build && npm run check:bundle && npm run check:scripts",
+		"check:bundle": "node scripts/check-bundle.cjs",
+		"check:scripts": "node scripts/check-scripts.cjs",
+		"check:env": "node scripts/check-env.cjs",
+		"check:auth": "wrangler whoami",
+		"watch:cpu": "node scripts/watch-cpu.cjs",
+		"setup:d1": "node scripts/setup-d1.cjs",
+		"setup:secrets": "node scripts/setup-secrets.cjs",
+		"setup:repo": "node scripts/set-repo.cjs",
+		"update:upstream": "node scripts/update-upstream.cjs",
+		"deploy": "npm run db:migrate:remote && npm run deploy:worker",
+		"deploy:worker": "wrangler deploy",
+		"deploy:safe": "node scripts/deploy-safe.cjs"
+	},
+	"dependencies": {
+		"hono": "^4.13.8",
+		"react": "^19.3.0",
+		"react-dom": "^19.3.0"
+	},
+	"devDependencies": {
+		"@cloudflare/vite-plugin": "^1.56.0",
+		"@cloudflare/vitest-plugin": "^1.1.13",
+		"@cloudflare/workers-types": "^5.20260920.1",
+		"@types/node": "^26.6.2",
+		"@types/react": "^19.3.0",
+		"@types/react-dom": "^19.3.0",
+		"@vitejs/plugin-react": "^6.1.1",
+		"typescript": "^7.0.2",
+		"vite": "^8.3.0",
+		"vitest": "^4.1.11",
+		"wrangler": "^4.135.0"
+	},
+	"repository": {
+		"type": "git",
+		"url": "https://github.com/jiangbo202/asset-manager.git"
+	}
 }

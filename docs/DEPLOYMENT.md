@@ -71,17 +71,14 @@ Worker → Settings → Build → Build command 改成：npx vite build
 #### A2c. 部署之后如何更新
 
 一键部署是**在你点击的那一刻把仓库复制一份**给你，所以上游后续的修复不会自动流过去。
-想跟进上游：
+一条命令跟进：
 
 ```bash
-cd 你的仓库
-git remote add upstream https://github.com/<上游作者>/asset-manager.git
-git fetch upstream
-git merge upstream/main
+npm run update:upstream
+git push      # Workers Builds 自动重新构建部署（推送即部署）
 ```
 
-冲突通常只会出现在 `wrangler.jsonc` 的 `database_id` 上 —— **保留你自己的真实 id**，
-把上游的占位值丢掉即可（上游那边保持占位值是刻意的）。合并后 `git push`，Workers Builds 会自动重新部署。
+细节、冲突处理与手动做法见 **[6. 从上游更新](#6-从上游更新)**。
 
 #### A4. 重测一键部署：先清干净
 
@@ -231,7 +228,48 @@ Dashboard → Workers & Pages → 选你的 Worker → Settings → Domains & Ro
 Zero Trust（免费版 ≤50 用户）→ Access → Applications → 添加自托管应用 → 选择你的域名，
 即可在 Worker 之前再加一道邮箱 OTP 登录（与 App 自带密码互不冲突）。
 
-## 6. 故障排查
+## 6. 从上游更新
+
+一键部署出来的仓库是**一次快照**，上游的新提交不会自动流过去 —— 这是所有模板/脚手架类项目的固有行为。
+仓库提供了一个命令来做这件事：
+
+```bash
+npm run update:upstream
+# 上游地址默认取 package.json 的 repository；也可显式指定：
+npm run update:upstream -- https://github.com/<上游作者>/asset-manager.git
+```
+
+它按顺序做这些事，每一步都会打印出来：
+
+1. 检查工作区是否干净（脏工作区上做合并很难回退）→ 不干净就停下并告诉你 `commit` 或 `stash`
+2. 加/更新 `upstream` remote（本地路径也可以，方便内网镜像）
+3. `git fetch upstream`
+4. **先列出将要合并的提交**（最多 20 条），再执行 `git merge upstream/main`
+5. 若冲突里包含 `wrangler.jsonc` → 自动保留你的版本（你有真实 `database_id`，上游是占位值）；
+   其它冲突会列出文件名并停下，让你解决或 `git merge --abort`
+
+完成后把结果推上去，Workers Builds 会自动重新构建部署：
+
+```bash
+git push
+```
+
+升级前建议导出一份备份。**这次更新若带数据库迁移**：
+
+- Builds 的 **Deploy command** 是 `npm run deploy` → 自动跑，无需操作
+- 否则本地跑一次 `npm run db:migrate:remote`
+
+手动做法（不想用脚本、或想保留自己的改动）等价于：
+
+```bash
+git remote add upstream https://github.com/<上游作者>/asset-manager.git
+git fetch upstream
+git merge upstream/main          # 冲突时保留你的 wrangler.jsonc
+```
+
+> fork 出来的仓库还有个更省事的办法：GitHub 仓库页的 **Sync fork → Update branch** 按钮。
+
+## 7. 故障排查
 
 | 现象 | 原因与处理 |
 |---|---|

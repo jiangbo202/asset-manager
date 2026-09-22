@@ -121,7 +121,7 @@ for (const file of docs) {
 /* 4. 关键脚本齐备 */
 const required = [
 	"dev", "build", "preview", "lint", "test", "verify", "check:bundle", "check:scripts",
-	"check:auth", "setup:d1", "setup:secrets", "setup:repo",
+	"check:auth", "setup:d1", "setup:secrets", "setup:repo", "update:upstream",
 	"deploy", "deploy:worker", "deploy:safe",
 	"db:migrate:local", "db:migrate:remote", "db:reset:local", "db:seed:local",
 ];

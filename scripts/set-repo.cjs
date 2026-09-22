@@ -31,6 +31,7 @@ const TARGETS = [
 	"docs/PRD.md",
 	"docs/ARCHITECTURE.md",
 	"docs/DEPLOYMENT.md",
+	"package.json",
 ];
 
 /** 正则里要用到的转义（owner 里可能有连字符，虽然安全，但保持通用） */
