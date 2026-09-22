@@ -150,7 +150,8 @@ npm run deploy:safe
 
 **首次构建就失败？** 把 Worker → Settings → Build 的 **Build command** 临时改成 `npx vite build` 再 Retry
 （体检脚本只提示环境问题，不含构建逻辑）；或者把上游修复合并进你的仓库（见部署指南）。
-**部署完成后首页报「数据库需要升级」** 就是第 2 步没做。
+**部署完成后首页报「数据库需要升级」** 就是第 2 步没做。重测前要先清干净（仓库 / Worker / D1 三样），
+照 [部署指南 · 验收清单](docs/DEPLOYMENT.md#a5-验收清单重测时照着勾) 勾一遍即可。
 
 逐步截图级说明（含向导每个字段怎么选）与故障排查见 **[docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)**。
 

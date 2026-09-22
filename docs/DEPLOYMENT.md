@@ -83,6 +83,32 @@ git merge upstream/main
 冲突通常只会出现在 `wrangler.jsonc` 的 `database_id` 上 —— **保留你自己的真实 id**，
 把上游的占位值丢掉即可（上游那边保持占位值是刻意的）。合并后 `git push`，Workers Builds 会自动重新部署。
 
+#### A4. 重测一键部署：先清干净
+
+向导是**从零创建资源**的，所以重测前要把上一次留下的东西删掉，否则会撞重名（仓库已存在、
+Worker 名被占用）。三样都要删，顺序无所谓：
+
+| 删什么 | 在哪删 | 不删会怎样 |
+|---|---|---|
+| GitHub **仓库** | 你新账号里那个副本 → Settings → 最下方 Danger Zone → Delete this repository | 向导建同名仓库失败（或你得改名） |
+| **Worker**（含 Workers Builds 项目） | 控制台 **Workers & Pages** → 选中它 → Settings → 最下方 Delete | 新部署会尝试覆盖旧的，构建配置可能沿用旧的 |
+| **D1 数据库** | 控制台 **Storage & Databases → D1** → 选中它 → Settings → Delete | 账号里留下一堆没用的库（免费额度里也算配额） |
+
+不用动的：Cloudflare 账号本身、GitHub 上给 Cloudflare Workers 的授权（留着还能少点几次授权）。
+
+删完再点一次 Deploy to Cloudflare，按 A1 走一遍即可。
+
+#### A5. 验收清单（重测时照着勾）
+
+- [ ] 向导三个字段填完 → 点 **Deploy**，构建日志里**没有** `Failed: error occurred while running build command`
+- [ ] 构建日志里能看到形如 `4f191450-…` 的 id → 说明 D1 已自动创建并回写
+- [ ] 构建日志末尾出现 `Deployed … workers.dev` 之类的地址
+- [ ] 把 **Deploy command** 改成 `npm run deploy`（否则下一步首页会报"数据库需要升级"）
+- [ ] 加 `SETUP_TOKEN` / `SESSION_SECRET` 两个 Secret，再 Retry 一次部署
+- [ ] 打开 `https://<项目名>.<子域>.workers.dev` → 看到初始化页（不是报错页）
+- [ ] 用 `SETUP_TOKEN` 完成初始化 → 能进「设置」，D1 用量能读出来
+- [ ] （可选）打开「公开只读分享」→ 用无痕窗口看总览 → 点「更新行情」应被拒绝
+
 #### 一键部署的取舍
 
 | | 一键按钮 | 命令行（路径 B） |
