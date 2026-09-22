@@ -281,7 +281,14 @@ git fetch upstream
 git merge upstream/main          # 冲突时保留你的 wrangler.jsonc
 ```
 
-> fork 出来的仓库还有个更省事的办法：GitHub 仓库页的 **Sync fork → Update branch** 按钮。
+> **fork 与 Sync fork 按钮**：只有副本没有自己的提交时，Sync fork 才能一键快进。
+> 一键部署把真实 `database_id` 写进仓库并提交，分支就与上游分叉了 —— 此时按钮要么不可用，
+> 要么提示"丢弃提交"（会冲掉你的 id）。所以默认走上面的 `update:upstream`（保留你的 id）；
+> 若确实用了 Sync fork，更新后务必确认 `wrangler.jsonc` 里仍是你自己的 `database_id`。
+
+**要终端吗？** 部署不需要（向导 + 控制台即可）；**跟进上游更新目前需要一次终端命令**（上面那条），
+因为它本质是一次 git 合并。不想用终端的话，让仓库保持"无本地提交"就能用 Sync fork，
+但那样 `database_id` 得手工维护 —— 通常不如直接跑一次命令省事。
 
 ## 7. 故障排查
 

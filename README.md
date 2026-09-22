@@ -337,6 +337,16 @@ Token 权限不足或未设置。确认含 **Workers 编辑 + D1 编辑**，或�
 操作历史里会有来源为 `system` 的记录：「刷新行情：…」是到点刷的行情，「定时快照（…）」「补拍当日快照（…）」是拍的快照。
 设置页的「行情与快照」卡片也会显示**上次行情刷新**与**下次定时运行**的时间。
 
+**fork 之后用 Sync fork 是不是就一直是新的了？**
+不一定。Sync fork 只能在你的分支**没有自己的提交**时快进。一键部署会把真实的 `database_id`
+写进仓库并提交，分支就分叉了 —— 这时按钮要么不可用，要么提示丢弃提交（会把你的 id 冲掉）。
+稳妥做法还是 `npm run update:upstream`（自动保留你的 id），详见 [升级](#-升级)。
+
+**一键部署之后，更新一定要用终端吗？**
+跟进上游更新目前需要一次终端命令（本质是 git 合并）。如果你不想碰终端，可以让仓库保持"没有本地提交"
+（即 `database_id` 手工维护），这样 fork 的 Sync fork 按钮可用 —— 但多数人会觉得比跑一次命令更麻烦。
+部署本身完全不需要终端。详见 [部署指南 §6](docs/DEPLOYMENT.md#6-从上游更新)。
+
 **点了 Deploy to Cloudflare 按钮，接下来呢？**
 向导只做三件事：授权 GitHub、填项目名、点 Deploy（把仓库复制到你的账号并建好构建项目）。
 之后还要补：D1 绑定、跑一次迁移、加两个密钥 —— 逐步说明见
@@ -410,8 +420,12 @@ git push                  # Workers Builds 会自动重新构建部署
 合并。中途只会在一种情况下冲突：`wrangler.jsonc` 里的 `database_id`（你填了真实 id，上游是占位值），
 这时**自动保留你的**，不会把 id 冲掉。其它冲突会原样停下并告诉你怎么处理。
 
-> 如果你的仓库页面显示 “forked from …”，也可以直接用 GitHub 的 **Sync fork → Update branch** 按钮，
-> 效果一样。
+> **关于 fork 的 Sync fork 按钮**：只有当你的副本**没有自己的提交**时它才能一键更新。
+> 一键部署会把真实的 `database_id` 写进仓库并提交，于是分支与上游"分叉"了 ——
+> 这时 GitHub 要么不给点，要么提示"丢弃提交"（那会把你的 id 冲掉）。
+> 所以大多数情况下还是走上面 `update:upstream` 这条（它会保留你的 id）；
+> 如果你确实用了 Sync fork，更新完请确认 `wrangler.jsonc` 里的 `database_id` 还是你自己的，
+> 不是 `REPLACE_WITH_YOUR_D1_ID`。
 
 **升级后页面提示「数据库需要升级」** = 迁移没跑：把 Worker → Settings → Build 的 Deploy command
 设成 `npm run deploy`（每次部署自动迁移），或本地跑一次 `npm run db:migrate:remote`。

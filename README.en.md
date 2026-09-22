@@ -369,6 +369,17 @@ The activity history gets entries with source `system`: “刷新行情…” fo
 “定时快照…” / “补拍当日快照…” for snapshots. The Quotes & snapshots card in Settings also shows the
 **last quote refresh** and the **next scheduled run**.
 
+**If I fork it, does “Sync fork” keep me up to date?**
+Not necessarily. Sync fork can only fast-forward when your branch has **no commits of its own**. The one-click
+flow writes your real `database_id` into the repo and commits it, so the branches diverge — GitHub then either
+hides the button or offers to discard commits (wiping your id). Use `npm run update:upstream` instead (it keeps
+your id); see [Upgrading](#-upgrading).
+
+**Does one-click deployment need a terminal later on?**
+Updating from upstream currently needs one terminal command (it is a git merge). If you want to avoid the
+terminal entirely, keep your repo free of local commits (i.e. maintain `database_id` by hand) so the fork
+“Sync fork” button stays usable. Deploying itself never needs a terminal.
+
 **I clicked “Deploy to Cloudflare” — what next?**
 The wizard only authorises GitHub, takes a project name and deploys a copy of the repo. You still need to bind
 D1, run the migrations once and add two secrets — see the deployment guide (Chinese) for the exact steps.
@@ -446,7 +457,11 @@ is about to merge** and then merges. There is exactly one conflict it resolves f
 `wrangler.jsonc` (yours is real, upstream keeps a placeholder) — **yours always wins**. Any other conflict stops
 and tells you what to do.
 
-> If your repo page says “forked from …”, you can also just use GitHub’s **Sync fork → Update branch** button.
+> **About the fork “Sync fork” button**: it only works when your copy has **no commits of its own**. The
+> one-click flow writes your real `database_id` into the repo and commits it, which makes your branch diverge
+> from upstream — GitHub then either will not offer the button or offers to *discard* commits (which would wipe
+> your id). So prefer `update:upstream` above (it keeps your id). If you do use Sync fork, check afterwards that
+> `wrangler.jsonc` still has **your** `database_id` and not `REPLACE_WITH_YOUR_D1_ID`.
 
 **“Database needs an upgrade” after updating** means the migrations did not run: set Builds **Deploy command** to
 `npm run deploy` (migrations on every deploy) or run `npm run db:migrate:remote` locally.
