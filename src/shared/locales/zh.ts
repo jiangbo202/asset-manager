@@ -513,6 +513,8 @@ const zh: Dict = {
 	"error.invalid_field": "字段校验失败",
 	"error.setup_token_placeholder": "SETUP_TOKEN 还是示例占位值：请用 openssl rand -hex 32 生成真随机值后重新部署，否则任何人都能初始化你的实例。",
 	"error.session_secret_weak": "SESSION_SECRET 太短或仍是示例值：请用 openssl rand -hex 32 生成后重新部署。",
+	"error.d1DailyLimit": "今天的免费额度用完了（D1 每日读/写行数上限），UTC 零点自动恢复；你的数据没有丢，也不用改代码。",
+	"error.d1StorageFull": "D1 免费存储（5 GB）已用满，暂时无法写入。到 Cloudflare 控制台清理历史数据（例如较早的快照）后即可恢复。",
 	"error.setup_token_missing": "服务端未配置 SETUP_TOKEN，请重新部署并写入该 Secret",
 	"error.password_incorrect": "密码不正确",
 	"error.setup_token_invalid": "setup token 不正确",

@@ -342,6 +342,32 @@ allows 10 ms per invocation, so the whole architecture is built around it:
 
 Settings → Data overview shows your real row counts at any time.
 
+### What happens if I go over the limits? Will I be billed?
+
+**The free tier never bills you.** Workers Free has no overage pricing at all — going over produces
+**errors**, not charges:
+
+| What you exceeded | What you see | When it recovers |
+|---|---|---|
+| Worker requests > 100,000/day | Cloudflare's error page (`Error 1027`: the site is temporarily unavailable because the owner reached their plan limit) | Automatically at midnight UTC |
+| D1 rows read / written | Endpoints that touch the database return 503 with “today’s free quota is used up — it resets at midnight UTC and your data is intact” | Automatically at midnight UTC |
+| D1 storage > 5 GB | Writes and table changes are blocked until you free space | Immediately after cleanup |
+
+**The only way to be billed is to upgrade to Workers Paid yourself** ($5/month: 10 million requests per month,
+D1 switches to usage-based pricing). Stay on Free and there is no bill.
+
+Two things worth knowing:
+
+- **Pages do not count**: HTML / JS / CSS / icons are **static assets**, and Cloudflare's rule is that static
+  asset requests are *free and unlimited* — only `/api/*` actually invokes the Worker and is counted. So one
+  overview page load costs about 3 requests (portfolio / history / accounts),
+  making 100,000/day ≈ **30,000 page views**, which a personal setup never reaches.
+- **Your data is not lost**: exceeding a D1 limit only makes queries fail; stored data is untouched.
+
+If it ever happens: ① wait for the UTC reset; ② watch the usage graphs under Workers & Pages → your Worker →
+**Metrics** and **D1 → Metrics**; ③ check row counts in Settings → Data overview; ④ Cloudflare also **emails you**
+when D1 hits its daily limit. Note that a public read-only share link spends requests on every visitor reload.
+
 ## ❓ FAQ
 
 **I forgot my password.**
@@ -368,6 +394,11 @@ The API token is missing or lacks permission. It needs **Workers Scripts: Edit +
 The activity history gets entries with source `system`: “刷新行情…” for the scheduled quote refresh, and
 “定时快照…” / “补拍当日快照…” for snapshots. The Quotes & snapshots card in Settings also shows the
 **last quote refresh** and the **next scheduled run**.
+
+**Does exceeding the free tier cost me money?**
+No. Going over produces errors (`Error 1027` for Worker requests; a 503 explaining “resets at midnight UTC,
+data intact” for D1), never a bill — only an explicit upgrade to Workers Paid can be charged.
+See [Does it stay within the free tier?](#-does-it-stay-within-the-free-tier).
 
 **If I fork it, does “Sync fork” keep me up to date?**
 Not necessarily. Sync fork can only fast-forward when your branch has **no commits of its own**. The one-click

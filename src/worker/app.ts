@@ -4,6 +4,7 @@ import { acceptSessionRow, sessionLookupStatement, touchSession } from "./core/s
 import { ApiError } from "./core/errors";
 import api from "./api";
 import { detectLang, translator } from "./core/i18n";
+import { classifyQuotaError } from "./core/quota";
 
 const app = new Hono<AppEnv>();
 
@@ -90,6 +91,25 @@ app.onError((err, c) => {
 					message:
 						"数据库结构未升级：本地请运行 `npm run db:migrate:local`，线上请重新部署（部署脚本会自动应用迁移）或运行 `npm run db:migrate:remote`",
 					details: { hint: rawMessage },
+				},
+			},
+			503,
+		);
+	}
+
+	// 免费额度用尽（D1 每天的读/写行数、或存储写满）：这不是 bug，别让用户去查日志
+	const quotaIssue = classifyQuotaError(rawMessage);
+	if (quotaIssue) {
+		console.error("[app] 免费额度用尽:", quotaIssue, rawMessage);
+		return c.json(
+			{
+				ok: false,
+				error: {
+					code: quotaIssue === "d1_storage" ? "d1_storage_full" : "d1_daily_limit",
+					message: translator(c.get("lang"))(
+						quotaIssue === "d1_storage" ? "error.d1StorageFull" : "error.d1DailyLimit",
+					),
+					details: { issue: quotaIssue, hint: rawMessage },
 				},
 			},
 			503,

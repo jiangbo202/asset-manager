@@ -119,6 +119,20 @@ git push                   # Workers Builds 自动重新部署
 | D1 行写 | < 100/天 | 100,000/天 |
 | D1 存储 | 快照约 1–2MB/年 | 5GB |
 
+### 超限之后会发生什么
+
+**免费版不会有账单** —— 超限的表现是**报错**，不是扣费（唯一的计费入口是主动升级 Workers Paid）：
+
+| 超限项 | 表现 | 恢复 |
+|---|---|---|
+| Workers 请求 > 100,000/天 | 返回 Cloudflare 错误页 `Error 1027`（Worker 根本不会被调用，应用层无从拦截） | UTC 零点 |
+| D1 行读 / 行写 | 查询报错，应用返回 503 + 「今天的免费额度用完了…数据没有丢」（`core/quota.ts` 识别报错原文） | UTC 零点 |
+| D1 存储 > 5GB | 无法 INSERT / CREATE / ALTER，需要先清理 | 清理后立即 |
+
+官方报错原文（用于识别，写进 `core/quota.ts`）：
+`Your account has exceeded D1's free tier daily row read limit…` / `…daily row write limit…`；
+D1 达到每日上限时 Cloudflare 还会发邮件提醒。**已存数据不受影响**。
+
 > 自 2026-09 起 D1 免费额度超额会**直接返回错误**（当天不可用，UTC 零点重置），所以出现异常时
 > 先排除「是不是有人写了循环、或改了查询范围」。
 

@@ -513,6 +513,8 @@ const en: Dict = {
 	"error.invalid_field": "Field validation failed",
 	"error.setup_token_placeholder": "SETUP_TOKEN is still the sample placeholder. Generate a real random value (openssl rand -hex 32) and redeploy, otherwise anyone can initialize your instance.",
 	"error.session_secret_weak": "SESSION_SECRET is too short or still a sample value. Generate one with openssl rand -hex 32 and redeploy.",
+	"error.d1DailyLimit": "Today's free quota is used up (D1 daily row read/write limit). It resets at midnight UTC — your data is intact and nothing needs fixing in the code.",
+	"error.d1StorageFull": "The 5 GB free D1 storage is full, so writes are blocked. Free space in the Cloudflare dashboard (for example by deleting old snapshots) to recover.",
 	"error.setup_token_missing": "SETUP_TOKEN is not configured — redeploy and set that secret",
 	"error.password_incorrect": "Incorrect password",
 	"error.setup_token_invalid": "Incorrect setup token",
