@@ -9,6 +9,7 @@ import { MarketDataSection } from "./MarketDataSection";
 import { LANGUAGES, LANGUAGE_LABELS, type LanguageSetting } from "../../shared/i18n";
 import { COMMON_TIMEZONES, isValidTimeZone, offsetLabel } from "../../shared/time";
 import { describeUserAgent } from "../../shared/device";
+import { parsePublicSections, PUBLIC_SECTIONS, type PublicSection } from "../../shared/public-sections";
 
 export function SettingsPage({ onChanged }: { onChanged?: () => void }) {
 	const t = useT();
@@ -27,6 +28,7 @@ export function SettingsPage({ onChanged }: { onChanged?: () => void }) {
 	const language = useSubmit();
 
 	const publicView = useSubmit();
+	const publicSections = useSubmit();
 	const [copied, setCopied] = useState(false);
 
 	const sessions = useAsync<{ items: SessionItemDto[] }>(() => api.auth.sessions(), []);
@@ -73,6 +75,16 @@ export function SettingsPage({ onChanged }: { onChanged?: () => void }) {
 	};
 
 	const shareUrl = typeof location === "undefined" ? "" : location.origin;
+
+	// 已分享的区域：读服务端设置（缺省=全部），勾选即时保存
+	const sharedSections = parsePublicSections(values.public_sections);
+	const saveSections = async (next: PublicSection[]) => {
+		if (next.length === 0) return; // 至少留一块，否则访客看到空白页
+		await publicSections.run(async () => {
+			await api.settings.update({ publicSections: next });
+			settings.reload();
+		});
+	};
 
 	const togglePublicView = async (next: boolean) => {
 		await publicView.run(async () => {
@@ -354,6 +366,32 @@ export function SettingsPage({ onChanged }: { onChanged?: () => void }) {
 					</label>
 					{values.public_view === "1" ? (
 						<>
+							<div className="section-row" style={{ marginTop: 2 }}>
+								<span className="small muted">{t("settings.publicSections")}</span>
+							</div>
+							<div className="check-row">
+								{PUBLIC_SECTIONS.map((section) => {
+									const checked = sharedSections.includes(section);
+									return (
+										<label key={section} className="check-item">
+											<input
+												type="checkbox"
+												checked={checked}
+												disabled={publicSections.pending || (checked && sharedSections.length === 1)}
+												onChange={(e) =>
+													void saveSections(
+														e.target.checked
+															? [...sharedSections, section]
+															: sharedSections.filter((item) => item !== section),
+													)
+												}
+											/>
+											<span>{t(`settings.section.${section}`)}</span>
+										</label>
+									);
+								})}
+							</div>
+							{publicSections.error && <div className="alert error">{publicSections.error}</div>}
 							<div className="share-url">
 								<code>{shareUrl}</code>
 								<button className="ghost" onClick={() => void copyShareUrl()}>

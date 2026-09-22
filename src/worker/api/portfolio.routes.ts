@@ -6,7 +6,7 @@ import { writeAudit } from "../core/audit";
 import { holdingsStatement } from "../data/accounts.repo";
 import { fxRatesStatement } from "../data/fx.repo";
 import { displayCurrencyOf, settingsStatement, timeZoneOf, toSettingsMap } from "../data/settings.repo";
-import { buildPortfolio } from "../services/portfolio";
+import { buildPortfolio, projectPortfolio } from "../services/portfolio";
 import {
 	buildTrendSeries,
 	deleteSnapshot,
@@ -45,14 +45,17 @@ portfolio.get("/", async (c) => {
 		.toUpperCase()
 		.slice(0, 5);
 
-	return ok(
-		c,
-		buildPortfolio(
-			(holdingsResult?.results ?? []) as never,
-			displayCurrency,
-			(fxResult?.results ?? []) as never,
-		),
+	const board = buildPortfolio(
+		(holdingsResult?.results ?? []) as never,
+		displayCurrency,
+		(fxResult?.results ?? []) as never,
 	);
+
+	// 公开只读分享：按"已分享的区域"裁剪响应。
+	// 这一步必须在服务端做 —— 前端隐藏区域只是界面礼貌，接口才是边界：
+	// 只分享"分布"的人，不该在 /api/portfolio 的响应里拿到每条持仓的数量与成本。
+	const sections = c.get("publicSections");
+	return ok(c, sections ? projectPortfolio(board, sections) : board);
 });
 
 /** 每日走势（v0.10）：从快照读取，按日补齐，点过多时服务端先降采样 */

@@ -7,6 +7,7 @@ import {
 	BUILT_IN_CURRENCIES,
 	getSettings,
 	SETTING_DISPLAY_CURRENCY,
+	SETTING_PUBLIC_SECTIONS,
 	SETTING_PUBLIC_VIEW,
 	SETTING_TIMEZONE,
 	setSetting,
@@ -16,6 +17,12 @@ import {
 import { deleteFxRate, listFxHistory, listFxRates, upsertFxRate } from "../data/fx.repo";
 import { encryptSecret, decryptSecret } from "../core/secrets";
 import { isValidTimeZone } from "../../shared/time";
+import {
+	isPublicSection,
+	parsePublicSections,
+	PUBLIC_SECTIONS,
+	serializePublicSections,
+} from "../../shared/public-sections";
 import { lookupFxRate } from "../services/quotes";
 import { parseProviderSettings, PROVIDERS, PROVIDER_MAP, type ProviderId } from "../services/quotes/providers";
 import { isRecord } from "../core/utils";
@@ -128,6 +135,18 @@ settings.put("/", async (c) => {
 	// 且 PUT 不在白名单里，所以匿名请求到不了这里）
 	if (payload.publicView !== undefined) {
 		await setSetting(c.env.DB, SETTING_PUBLIC_VIEW, payload.publicView ? "1" : "0");
+	}
+	// 分享哪些区域：只接受已知分区名，未知值直接报错（不静默丢弃，否则用户以为勾上了）
+	if (payload.publicSections !== undefined) {
+		if (!Array.isArray(payload.publicSections)) throw badRequest(t("error.bad_request"));
+		const values = payload.publicSections.map((item) => String(item));
+		const unknown = values.filter((item) => !isPublicSection(item));
+		if (unknown.length > 0) {
+			throw badRequest(t("error.field_enum", { label: t("settings.publicSections"), allowed: PUBLIC_SECTIONS.join(" / ") }));
+		}
+		const sections = parsePublicSections(values.join(","));
+		if (sections.length === 0) throw badRequest(t("settings.publicSectionsEmpty"));
+		await setSetting(c.env.DB, SETTING_PUBLIC_SECTIONS, serializePublicSections(sections));
 	}
 
 	// 数据源开关 + 自定义源配置

@@ -4,6 +4,7 @@ import { useAsync } from "./lib/useAsync";
 import { Link, RouterProvider, useRouter } from "./lib/router";
 import { I18nProvider, useI18n, useT } from "./lib/i18n";
 import type { LanguageSetting } from "../shared/i18n";
+import type { PublicSection } from "../shared/public-sections";
 // 首屏只需要 登录 / 初始化 / 总览；其余页面按需加载，避免把设置页和趋势图算进首包
 import { SetupPage } from "./pages/Setup";
 import { LoginPage } from "./pages/Login";
@@ -76,7 +77,14 @@ function Shell({ onAuthChanged }: { onAuthChanged: () => void }) {
  * 这里只是不渲染入口，真正的边界在服务端：middleware.ts 的 PUBLIC_READ_ROUTES 白名单，
  * 其余接口对匿名一律 401 —— 就算有人在地址栏手敲 /settings 也只会看到登录页。
  */
-function PublicShell({ onAuthChanged }: { onAuthChanged: () => void }) {
+function PublicShell({
+	onAuthChanged,
+	sections,
+}: {
+	onAuthChanged: () => void;
+	/** 作者勾选公开的区域；决定访客能看到总览的哪几块 */
+	sections: PublicSection[];
+}) {
 	const { path, navigate } = useRouter();
 	const t = useT();
 
@@ -112,7 +120,7 @@ function PublicShell({ onAuthChanged }: { onAuthChanged: () => void }) {
 					<Link to="/login">{t("public.login")}</Link>
 				</nav>
 			</div>
-			<DashboardPage readOnly />
+			<DashboardPage readOnly sections={sections} />
 		</div>
 	);
 }
@@ -187,7 +195,9 @@ function Gate() {
 	if (!me.data.initialized) return <SetupPage onDone={refresh} />;
 	// 未登录：开关开着就给只读总览（右上角可登录），关着就是原来的登录页
 	if (!me.data.authenticated) {
-		if (me.data.publicView) return <PublicShell onAuthChanged={refresh} />;
+		if (me.data.publicView) {
+			return <PublicShell onAuthChanged={refresh} sections={me.data.publicSections ?? []} />;
+		}
 		return <LoginPage onDone={refresh} />;
 	}
 	if (me.data.mustChange)

@@ -1,4 +1,4 @@
-import { env } from "cloudflare:test";
+import { env, SELF } from "cloudflare:test";
 import { beforeEach, describe, expect, it } from "vitest";
 import type { AuthMeDto, Portfolio } from "../../src/shared/api-types";
 import { bootstrap, call, clearAll, login, TEST_ITERATIONS } from "../helpers";
@@ -344,5 +344,198 @@ describe("首次部署：公开只读不会抢在初始化/登录之前", () => 
 		// ⑤ 关掉开关：立刻回到必须登录
 		await call("/api/settings", { method: "PUT", cookie, body: JSON.stringify({ publicView: false }) });
 		expect((await call("/api/portfolio")).status).toBe(401);
+	});});
+
+/**
+ * 分区分享：可以只公开总览的一部分（开头 / 走势 / 分布 / 持仓明细）
+ *
+ * 这里的重点同样是"边界"：前端隐藏区域只是界面礼貌，接口裁剪才是真的。
+ * 所以断言直接搜**原始响应文本** —— 不分享明细时，数量与成本不能出现在字节里。
+ */
+describe("分区分享", () => {
+	let cookie: string;
+
+	beforeEach(async () => {
+		await clearAll();
+		cookie = (await bootstrap()).cookie;
+	});
+
+	/** 一笔数量与成本都很特别的持仓：便于在原始响应里搜它有没有泄露 */
+	const seed = async () => {
+		const account = await call<Envelope<{ id: string }>>("/api/accounts", {
+			method: "POST",
+			cookie,
+			body: JSON.stringify({ name: "券商", kind: "broker", currency: "USD", market: "us" }),
+		});
+		await call("/api/holdings", {
+			method: "POST",
+			cookie,
+			body: JSON.stringify({
+				accountId: account.body.data.id,
+				class: "stock",
+				market: "us",
+				symbol: "AAPL",
+				name: "苹果",
+				currency: "USD",
+				// 指纹用"6 位数量 + 小数点成本"：不会和 ISO 时间戳里的数字撞车，
+				// 这样可以放心地直接搜原始响应文本
+				qty: 987654,
+				price: 1.23,
+				avgCost: 333333.21,
+			}),
+		});
+	};
+
+	const setSections = async (sections: string[], publicView = true) =>
+		await call<Envelope<unknown>>("/api/settings", {
+			method: "PUT",
+			cookie,
+			body: JSON.stringify({ publicView, publicSections: sections }),
+		});
+
+	/** 匿名请求的原始响应文本（用于确认"字节里没有"） */
+	const rawAnonymous = async (path: string) => {
+		const response = await SELF.fetch(`https://example.com${path}`);
+		return { status: response.status, text: await response.text() };
+	};
+
+	const anonymousPortfolio = async () => {
+		const response = await call<Envelope<Portfolio>>("/api/portfolio");
+		expect(response.status).toBe(200);
+		return response.body.data;
+	};
+
+	it("打开开关但没指定区域：默认全部分享（最不容易让人意外）", async () => {
+		await seed();
+		await call("/api/settings", { method: "PUT", cookie, body: JSON.stringify({ publicView: true }) });
+
+		const me = (await call<Envelope<AuthMeDto>>("/api/auth/me")).body.data;
+		expect(me.publicSections).toEqual(["summary", "trend", "breakdown", "holdings"]);
+
+		const data = await anonymousPortfolio();
+		expect(data.total).toBeCloseTo(1_214_814.42, 2);
+		expect(data.byClass.length).toBeGreaterThan(0);
+		expect(data.holdings[0]?.qty).toBe(987654);
+		expect((await call("/api/portfolio/history")).status).toBe(200);
+	});
+
+	it("只分享开头：分布与明细都不返回，走势与账户接口 401", async () => {
+		await seed();
+		await setSections(["summary"]);
+
+		const data = await anonymousPortfolio();
+		expect(data.total).toBeCloseTo(1_214_814.42, 2);
+		expect(data.counts.holdings).toBe(1);
+		expect(data.byClass).toEqual([]);
+		expect(data.byAccount).toEqual([]);
+		expect(data.byCurrency).toEqual([]);
+		expect(data.holdings).toEqual([]);
+
+		expect((await call("/api/portfolio/history")).status).toBe(401);
+		expect((await call("/api/accounts")).status).toBe(401);
+	});
+
+	it("只分享分布：接口保留画图字段，但数量与成本不出现在响应字节里", async () => {
+		await seed();
+		await setSections(["breakdown"]);
+
+		const displayed = await anonymousPortfolio();
+		// 总资产被裁掉了（没分享开头）
+		expect(displayed.total).toBe(0);
+		expect(displayed.staleDays).toBeNull();
+		expect(displayed.byClass.length).toBeGreaterThan(0);
+
+		// 但画图要用的字段还在：否则环形图与 treemap 会缺一块
+		const item = displayed.holdings[0];
+		expect(item?.symbol).toBe("AAPL");
+		expect(item?.accountName).toBe("券商");
+		expect(item?.marketValueDisplay).toBeCloseTo(1_214_814.42, 2);
+		expect(item?.share).toBeCloseTo(100, 1);
+
+		// 明细字段一律抹平
+		expect(item?.qty).toBe(0);
+		expect(item?.avgCost).toBeNull();
+		expect(item?.cost).toBeNull();
+		expect(item?.pnl).toBeNull();
+		expect(item?.costDisplay).toBeNull();
+
+		// 最硬的一条：原始响应里不该出现数量与成本这几个数字
+		const raw = await rawAnonymous("/api/portfolio");
+		expect(raw.text).not.toContain("987654"); // 数量
+		expect(raw.text).not.toContain("333333"); // 平均成本
+
+		// 走势没分享 → 401；账户名用于分布 → 放行
+		expect((await call("/api/portfolio/history")).status).toBe(401);
+		expect((await call("/api/accounts")).status).toBe(200);
+	});
+
+	it("只分享持仓明细：分布为空，但明细数字齐全", async () => {
+		await seed();
+		await setSections(["holdings"]);
+
+		const data = await anonymousPortfolio();
+		expect(data.byClass).toEqual([]);
+		expect(data.holdings[0]?.qty).toBe(987654);
+		expect(data.holdings[0]?.avgCost).toBe(333333.21);
+		expect(data.total).toBe(0); // 开头没分享
+		// 明细表要显示"占市值多少"，所以 share 仍由服务端算好给出
+		expect(data.holdings[0]?.share).toBeCloseTo(100, 1);
+	});
+
+	it("只分享走势：总览接口整体 401，走势 200", async () => {
+		await seed();
+		await setSections(["trend"]);
+
+		expect((await call("/api/portfolio")).status).toBe(401);
+		expect((await call("/api/accounts")).status).toBe(401);
+		expect((await call("/api/portfolio/history")).status).toBe(200);
+	});
+
+	it("多个区域可以叠加，且只有勾选的生效", async () => {
+		await seed();
+		await setSections(["trend", "holdings"]);
+
+		const data = await anonymousPortfolio();
+		expect(data.byClass).toEqual([]); // 未勾选分布
+		expect(data.holdings[0]?.qty).toBe(987654); // 勾了明细
+		expect(data.total).toBe(0); // 未勾选开头
+		expect((await call("/api/portfolio/history")).status).toBe(200);
+	});
+
+	it("关掉开关后与分区无关：一律 401", async () => {
+		await seed();
+		await setSections(["summary", "trend"], false);
+		expect((await call("/api/portfolio")).status).toBe(401);
+		expect((await call("/api/portfolio/history")).status).toBe(401);
+		expect((await call("/api/accounts")).status).toBe(401);
+	});
+
+	it("非法或空的分区被拒绝（不静默存进去，否则用户以为勾上了）", async () => {
+		await seed();
+		expect((await setSections(["summary", "nope"])).status).toBe(400);
+		expect((await setSections([])).status).toBe(400);
+		// 拒绝之后设置没被改动：默认仍是全部
+		const me = (await call<Envelope<AuthMeDto>>("/api/auth/me", { cookie })).body.data;
+		expect(me.publicSections).toEqual(["summary", "trend", "breakdown", "holdings"]);
+	});
+
+	it("存了脏值：解析成空集合 → 分区接口一律 401（不放宽）", async () => {
+		await seed();
+		await setSections(["summary"]);
+		await env.DB.prepare(`UPDATE settings SET value = 'bogus' WHERE key = 'public_sections'`).run();
+
+		expect((await call("/api/portfolio")).status).toBe(401);
+		expect((await call("/api/portfolio/history")).status).toBe(401);
+	});
+
+	it("本人登录后永远看全（分区只影响匿名访客）", async () => {
+		await seed();
+		await setSections(["summary"]);
+
+		const authed = await call<Envelope<Portfolio>>("/api/portfolio", { cookie });
+		expect(authed.body.data.total).toBeCloseTo(1_214_814.42, 2);
+		expect(authed.body.data.byClass.length).toBeGreaterThan(0);
+		expect(authed.body.data.holdings[0]?.qty).toBe(987654);
+		expect((await call("/api/portfolio/history", { cookie })).status).toBe(200);
 	});
 });

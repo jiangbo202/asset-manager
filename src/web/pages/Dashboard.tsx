@@ -14,6 +14,7 @@ import {
 	trendClass,
 } from "../lib/format";
 import { BrandIcon } from "../lib/icons";
+import type { PublicSection } from "../../shared/public-sections";
 import { buildTreemapItems } from "../lib/treemap";
 import { pnlSummary, staleHoldings } from "../lib/stats";
 import { useT } from "../lib/i18n";
@@ -55,9 +56,19 @@ function Skeleton() {
  * 需要登录的入口（刷新行情、去改价、去设置、空状态的新增引导）一律不渲染 ——
  * 只是藏起来，服务端那三道白名单才是真正的边界。
  */
-export function DashboardPage({ readOnly = false }: { readOnly?: boolean } = {}) {
+export function DashboardPage({
+	readOnly = false,
+	sections = [],
+}: {
+	readOnly?: boolean;
+	/** 只读访客被允许看的区域（readOnly 为 false 时忽略） */
+	sections?: PublicSection[];
+} = {}) {
 	const t = useT();
 	const { query, setQuery, navigate } = useRouter();
+
+	/** 本人永远全看；访客按分区。注意这只是界面层，"藏"不是边界 —— 服务端会裁剪/拒绝 */
+	const can = (section: PublicSection) => !readOnly || sections.includes(section);
 
 	const dimension = (query.get("dim") as Dimension | null) ?? "class";
 	const assetClass = query.get("class") ?? "";
@@ -73,7 +84,12 @@ export function DashboardPage({ readOnly = false }: { readOnly?: boolean } = {})
 	const [refreshing, setRefreshing] = useState(false);
 	const [refreshNote, setRefreshNote] = useState<string | null>(null);
 
-	const accounts = useAsync<{ items: AccountDto[] }>(() => api.accounts.list(), []);
+	const wantBreakdown = can("breakdown");
+	const wantTrend = can("trend");
+	const accounts = useAsync<{ items: AccountDto[] }>(
+		() => (wantBreakdown ? api.accounts.list() : Promise.resolve({ items: [] })),
+		[wantBreakdown],
+	);
 	const portfolio = useAsync<Portfolio>(
 		() =>
 			api.portfolio({
@@ -85,15 +101,17 @@ export function DashboardPage({ readOnly = false }: { readOnly?: boolean } = {})
 		[assetClass, markets.join(","), accountId, currencyFilter],
 	);
 
-	const trend = useAsync<TrendSeriesDto>(
+	const trend = useAsync<TrendSeriesDto | null>(
 		() =>
-			api.trend({
-				range,
-				class: assetClass || undefined,
-				accountId: accountId || undefined,
-				market: markets.length > 0 ? markets.join(",") : undefined,
-			}),
-		[range, assetClass, accountId, markets.join(",")],
+			wantTrend
+				? api.trend({
+						range,
+						class: assetClass || undefined,
+						accountId: accountId || undefined,
+						market: markets.length > 0 ? markets.join(",") : undefined,
+					})
+				: Promise.resolve(null),
+		[range, assetClass, accountId, markets.join(","), wantTrend],
 	);
 
 	const data = portfolio.data;
@@ -141,19 +159,19 @@ export function DashboardPage({ readOnly = false }: { readOnly?: boolean } = {})
 		if (dimension === "class") return data.byClass.map((item) => ({ ...item, label: classLabel(t, item.key) }));
 		if (dimension === "account") return data.byAccount;
 		if (dimension === "currency") return data.byCurrency;
-		const buckets = new Map<string, number>();
+		// 按标的：从持仓聚合。占比用服务端算好的 share 相加，
+		// 这样"只分享分布、不分享开头"时也不用把总资产发给访客（total 会被裁成 0）
+		const buckets = new Map<string, { value: number; share: number }>();
 		for (const holding of data.holdings) {
 			if (holding.marketValueDisplay === null) continue;
 			const key = holding.symbol ? `${holding.symbol} ${holding.name}` : holding.name;
-			buckets.set(key, (buckets.get(key) ?? 0) + holding.marketValueDisplay);
+			const bucket = buckets.get(key) ?? { value: 0, share: 0 };
+			bucket.value += holding.marketValueDisplay;
+			bucket.share += holding.share;
+			buckets.set(key, bucket);
 		}
 		return [...buckets.entries()]
-			.map(([key, value]) => ({
-				key,
-				label: key,
-				value,
-				share: data.total > 0 ? (value / data.total) * 100 : 0,
-			}))
+			.map(([key, bucket]) => ({ key, label: key, value: bucket.value, share: bucket.share }))
 			.sort((a, b) => b.value - a.value);
 		// t 变化时需要重算标签
 	}, [data, dimension, t]);
@@ -225,7 +243,7 @@ export function DashboardPage({ readOnly = false }: { readOnly?: boolean } = {})
 
 	return (
 		<>
-			{data.missingFxCurrencies.length > 0 && (
+			{can("summary") && data.missingFxCurrencies.length > 0 && (
 				<div className="alert">
 					{t("dashboard.missingFxAlert", { currencies: data.missingFxCurrencies.join(", ") })}
 					{!readOnly && (
@@ -236,7 +254,8 @@ export function DashboardPage({ readOnly = false }: { readOnly?: boolean } = {})
 				</div>
 			)}
 
-			{stale.length > 0 && (
+			{/* 横幅会列出具体标的，所以只在访客本来就能看到持仓信息时显示；纯"开头"分享只给数字 */}
+			{can("summary") && (can("breakdown") || can("holdings")) && stale.length > 0 && (
 				<div className="alert">
 					{t("dashboard.staleAlert", {
 						count: stale.length,
@@ -254,6 +273,7 @@ export function DashboardPage({ readOnly = false }: { readOnly?: boolean } = {})
 				</div>
 			)}
 
+			{can("summary") && (
 			<div className="grid cols-4">
 				<div className="card stat">
 					<div className="label">{t("dashboard.totalAssets", { currency })}</div>
@@ -288,7 +308,9 @@ export function DashboardPage({ readOnly = false }: { readOnly?: boolean } = {})
 					</div>
 				</div>
 			</div>
+			)}
 
+			{can("trend") && (
 			<div className="section">
 				<div className="section-head">
 					<h2>{t("dashboard.trend")}</h2>
@@ -355,7 +377,9 @@ export function DashboardPage({ readOnly = false }: { readOnly?: boolean } = {})
 					)}
 				</div>
 			</div>
+			)}
 
+			{can("breakdown") && (
 			<div className="section">
 				<div className="section-head">
 					<h2>{t("dashboard.distribution")}</h2>
@@ -477,8 +501,13 @@ export function DashboardPage({ readOnly = false }: { readOnly?: boolean } = {})
 					</div>
 				)}
 			</div>
+			)}
 
-			{rows.length > 0 && (
+			{readOnly && !can("summary") && !can("trend") && !can("breakdown") && rows.length === 0 && (
+				<div className="card empty">{t("dashboard.emptyPublic")}</div>
+			)}
+
+			{can("holdings") && rows.length > 0 && (
 				<div className="section">
 					<div className="section-head">
 						<h2>{t("dashboard.holdingsDetail")}</h2>

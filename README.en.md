@@ -116,6 +116,9 @@ trademark issues. Accounts without an icon get a colour derived from their name.
 - **Public read-only link** (off by default): turn it on and anyone with the link can see the overview
   without a password; a sign-in button sits in the top bar. Visitors cannot see account notes,
   history, settings or backups, and cannot refresh quotes. Turn it off and the link shows the sign-in page again.
+- Pick which **sections** to share: top stats / trend / breakdown (donut & treemap) / holdings table.
+  The trimming happens server-side — if you don’t share the holdings table, quantities and costs never
+  appear in the API response at all
 
 **Other**
 

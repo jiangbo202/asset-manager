@@ -1,5 +1,6 @@
 /** 配置读写（settings 表：key/value 纯文本） */
 import { normalizeTimeZone } from "../../shared/time";
+import { parsePublicSections, type PublicSection } from "../../shared/public-sections";
 
 export const SETTING_DISPLAY_CURRENCY = "display_currency";
 export const SETTING_SNAPSHOT_HOUR = "snapshot_hour_utc";
@@ -8,6 +9,8 @@ export const SETTING_TIMEZONE = "timezone";
 export const SETTING_SETUP_DONE = "setup_done_at";
 /** 公开只读分享开关（"1" 开启）：开启后未登录也能看总览，见 api/middleware.ts */
 export const SETTING_PUBLIC_VIEW = "public_view";
+/** 公开只读分享的区域（逗号分隔的 PublicSection） */
+export const SETTING_PUBLIC_SECTIONS = "public_sections";
 
 /** 内置币种（PRD D13：内置三种，用户可自行添加其他） */
 export const BUILT_IN_CURRENCIES = ["USD", "HKD", "CNY"] as const;
@@ -73,6 +76,14 @@ export function snapshotHourOf(settings: Record<string, string>): number {
  */
 export function publicViewOf(settings: Record<string, string>): boolean {
 	return settings[SETTING_PUBLIC_VIEW] === "1";
+}
+
+/**
+ * 公开只读分享的**区域**（summary / trend / breakdown / holdings）。
+ * 没存过就是全部；解析规则见 shared/public-sections.ts（脏值一律丢弃）。
+ */
+export function publicSectionsOf(settings: Record<string, string>): PublicSection[] {
+	return parsePublicSections(settings[SETTING_PUBLIC_SECTIONS]);
 }
 
 /** 显示币种；缺失时回退 USD */

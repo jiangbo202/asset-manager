@@ -1,6 +1,8 @@
 /**
  * Worker 绑定与环境类型
  */
+import type { PublicSection } from "../shared/public-sections";
+
 export interface Env {
 	DB: D1Database;
 	/** 首次初始化用的一次性口令（部署时写入 Secret） */
@@ -84,5 +86,7 @@ export interface AppEnv {
 		 * 例如账户备注不该出现在公开视图里。
 		 */
 		publicViewer?: boolean;
+		/** 访客被允许查看的区域（本人访问时为 undefined = 不做任何裁剪） */
+		publicSections?: PublicSection[];
 	};
 }

@@ -1,3 +1,5 @@
+import type { PublicSection } from "./public-sections";
+
 /**
  * 前后端共用的 API 数据结构
  *
@@ -313,6 +315,8 @@ export interface AuthMeDto {
 	 * 为 true 且 authenticated 为 false 时，前端进入只读总览而不是登录页。
 	 */
 	publicView: boolean;
+	/** 已公开分享的区域（publicView 为 false 时忽略）；访客据此决定渲染与是否发请求 */
+	publicSections: PublicSection[];
 }
 
 export interface SessionItemDto {

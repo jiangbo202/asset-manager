@@ -1,3 +1,4 @@
+import type { PublicSection } from "../../shared/public-sections";
 import type { HoldingWithAccount } from "../data/accounts.repo";
 import { buildFxLookup, type FxRate } from "../data/fx.repo";
 import type { AssetClass } from "../../shared/labels";
@@ -57,6 +58,54 @@ export interface Portfolio {
 	/** 非现金持仓里，价格超过 1 天没更新的条数（新鲜度卡片用来说明"是哪些没更新"） */
 	staleCount: number;
 	generatedAt: string;
+}
+
+/**
+ * 公开只读分享的裁剪（纯函数）
+ *
+ * 规则与区域一一对应：
+ *   summary   总资产、账户/持仓数、价格新鲜度、缺汇率提示
+ *   breakdown 三类分布（类别/账户/币种）
+ *   holdings  持仓明细里真正敏感的部分：数量、单价、平均成本、成本与盈亏
+ *   trend     走势接口，不在这里（由 middleware 的分区白名单直接拒绝）
+ *
+ * 一个容易踩的点：环形图与 treemap 是**从持仓列表**算出来的，所以"不分享明细"时
+ * 不能把 holdings 整个清空 —— 只保留画图需要的字段（名称、市值、占比、账户名），
+ * 把数量与成本抹掉。否则要么图缺一块、要么明细从网络面板里漏出去。
+ */
+export function projectPortfolio(board: Portfolio, sections: readonly PublicSection[]): Portfolio {
+	const has = (section: PublicSection) => sections.includes(section);
+
+	const holdings = has("holdings")
+		? board.holdings
+		: !has("breakdown")
+			? // 既没分享明细、也没分享分布：连画图用的那份都不必发
+				[]
+			: board.holdings.map((item) => ({
+				...item,
+				qty: 0,
+				price: 0,
+				avgCost: null,
+				cost: null,
+				pnl: null,
+				pnlPct: null,
+				costDisplay: null,
+				pnlDisplay: null,
+					priceUpdatedAt: null,
+				}));
+
+	return {
+		...board,
+		holdings,
+		byClass: has("breakdown") ? board.byClass : [],
+		byAccount: has("breakdown") ? board.byAccount : [],
+		byCurrency: has("breakdown") ? board.byCurrency : [],
+		total: has("summary") ? board.total : 0,
+		counts: has("summary") ? board.counts : { accounts: 0, holdings: 0 },
+		staleDays: has("summary") ? board.staleDays : null,
+		staleCount: has("summary") ? board.staleCount : 0,
+		missingFxCurrencies: has("summary") ? board.missingFxCurrencies : [],
+	};
 }
 
 const dayDiff = (iso: string | null): number | null => {

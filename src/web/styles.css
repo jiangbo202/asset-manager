@@ -203,6 +203,30 @@ tr.row-editing {
 	font-weight: 500;
 }
 
+.check-row {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 6px 16px;
+	margin: 6px 0 2px;
+}
+
+.check-item {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	cursor: pointer;
+}
+
+.check-item input {
+	cursor: pointer;
+}
+
+.section-row {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+}
+
 .share-url {
 	display: flex;
 	align-items: center;

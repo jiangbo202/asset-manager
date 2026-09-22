@@ -2,7 +2,14 @@ import { Hono } from "hono";
 import type { AppEnv } from "../types";
 import { ApiError, badRequest, conflict, ok, unauthorized } from "../core/errors";
 import { writeAudit } from "../core/audit";
-import { getSetting, getSettings, publicViewOf, setSetting, SETTING_DISPLAY_CURRENCY } from "../data/settings.repo";
+import {
+	getSetting,
+	getSettings,
+	publicSectionsOf,
+	publicViewOf,
+	setSetting,
+	SETTING_DISPLAY_CURRENCY,
+} from "../data/settings.repo";
 import { SCHEMA_VERSION } from "../../shared/version";
 import { normalizeTimeZone } from "../../shared/time";
 import { getAuth, insertAuthIfAbsent, isInitialized, touchLastLogin, updateCredential } from "../data/auth.repo";
@@ -91,6 +98,8 @@ auth.get("/me", async (c) => {
 	const timezone = normalizeTimeZone(settings.timezone);
 	// 公开只读分享开关（设置已经读出来了，零额外查询）：前端据此决定进"只读总览"还是登录页
 	const publicView = publicViewOf(settings);
+	// 访客要知道"能看到哪些区域"：既用于渲染，也用于**不发**注定 401 的请求
+	const publicSections = publicSectionsOf(settings);
 
 	return ok(c, {
 		initialized,
@@ -104,6 +113,7 @@ auth.get("/me", async (c) => {
 		language,
 		timezone,
 		publicView,
+		publicSections,
 	});
 });
 

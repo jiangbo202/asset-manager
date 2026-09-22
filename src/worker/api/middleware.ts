@@ -1,7 +1,8 @@
 import { createMiddleware } from "hono/factory";
 import type { AppEnv } from "../types";
 import { ApiError, unauthorized } from "../core/errors";
-import { getSettings, publicViewOf } from "../data/settings.repo";
+import { getSettings, publicSectionsOf, publicViewOf } from "../data/settings.repo";
+import type { PublicSection } from "../../shared/public-sections";
 
 /**
  * 已初始化检查：在 setup 完成前，除 /api/auth/* 之外一律拒绝
@@ -31,11 +32,13 @@ export const requireInitialized = createMiddleware<AppEnv>(async (c, next) => {
  *   - /api/accounts          分布图与筛选器里的账户名
  * 注意：都是 GET。写操作、设置、历史、备份、行情刷新**永远**需要登录。
  */
-export const PUBLIC_READ_ROUTES: ReadonlySet<string> = new Set([
-	"GET /api/portfolio",
-	"GET /api/portfolio/history",
-	"GET /api/accounts",
-]);
+export const PUBLIC_READ_ROUTES: Readonly<Record<string, readonly PublicSection[]>> = {
+	// 这个接口同时供开头 / 分布 / 明细三个区域使用，命中任意一个即放行，
+	// 具体返回哪些内容由路由按分区裁剪（见 publicProjection）
+	"GET /api/portfolio": ["summary", "breakdown", "holdings"],
+	"GET /api/portfolio/history": ["trend"],
+	"GET /api/accounts": ["breakdown"],
+};
 
 /** must_change 未完成时只放行改密码/登出（未改密码前进不了设置页，所以也就开不了公开分享） */
 function enforceMustChange(c: { get: (key: "auth") => { must_change: number } | null }, path: string): void {
@@ -71,10 +74,16 @@ export const requireAuthOrPublicRead = createMiddleware<AppEnv>(async (c, next) 
 		return;
 	}
 
-	const isPublicRoute = PUBLIC_READ_ROUTES.has(`${c.req.method.toUpperCase()} ${path}`);
-	// 只有"白名单端点"才值得去读开关：非白名单直接 401，省掉这次查询
-	if (!isPublicRoute || !publicViewOf(await getSettings(c.env.DB))) throw unauthorized();
+	const required = PUBLIC_READ_ROUTES[`${c.req.method.toUpperCase()} ${path}`];
+	// 只有"白名单端点"才值得去读设置：非白名单直接 401，省掉这次查询
+	if (!required) throw unauthorized();
+
+	const settings = await getSettings(c.env.DB);
+	const sections = publicSectionsOf(settings);
+	// 开关关着 → 全部 401；开关开着但没勾这个区域 → 也 401（白名单 + 分区两道门）
+	if (!publicViewOf(settings) || !required.some((section) => sections.includes(section))) throw unauthorized();
 
 	c.set("publicViewer", true);
+	c.set("publicSections", sections);
 	await next();
 });
