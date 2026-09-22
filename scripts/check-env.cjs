@@ -61,23 +61,42 @@ if (fs.existsSync(cloudflareDir)) {
 	}
 }
 
-/* ── 2.5 提交进仓库的 D1 id 必须是占位值（只在 CI 检查） ───
- * 本地不查：`npm run setup:d1` 会把真实 id 写进 wrangler.jsonc，
- * 每次部署后报错就成了噪音。CI 必须查：真实 id 一旦提交，
- * 别人克隆后部署会去绑定你的库（必然失败），也等于公开了自己的资源 id。
+/* ── 2.5 wrangler.jsonc 里的 database_id（只提醒，绝不拦） ───
+ *
+ * 两种情况都合法，所以这里**不能报错**：
+ *   - 模板仓库本身：应该是占位值，否则真实 id 公开、别人克隆后必然部署失败
+ *   - 你自己的副本（fork / 一键部署出来的仓库）：必须是**你自己的真实 id**，
+ *     否则根本部署不了 —— 一键部署向导回写的就是真实 id
+ *
+ * 曾经的教训：这条检查一开始写成"CI 里不是占位值就失败"，结果把正在部署的人
+ * 直接拦在构建门外（Workers Builds 的构建命令会跑 prebuild → check:env）。
+ * 一个会挡住合法流程的检查，比一条可能被忽略的提示要糟得多。
+ *
+ * 现在的行为：
+ *   - Workers Builds（WORKERS_CI）：一个字都不说（那里必须用真实 id）
+ *   - 其它 CI（例如 GitHub Actions）：打印一条提示，方便模板维护者发现自己手滑提交了真实 id
+ *   - 本地：不检查（setup:d1 本来就会写入真实 id）
  */
 const PLACEHOLDER_D1_ID = "REPLACE_WITH_YOUR_D1_ID";
-const IS_CI = Boolean(process.env.CI || process.env.WORKERS_CI);
-if (IS_CI) {
+const IS_WORKERS_CI = Boolean(process.env.WORKERS_CI);
+// 尽量认全各家 CI 的标记：认不出就等于在 CI 里做了本地检查，属主/权限类判断会误伤
+const IS_CI = Boolean(
+	process.env.CI ||
+		process.env.WORKERS_CI ||
+		process.env.GITHUB_ACTIONS ||
+		process.env.BUILD_ID ||
+		process.env.CONTINUOUS_INTEGRATION,
+);
+if (IS_CI && !IS_WORKERS_CI) {
 	try {
 		const config = fs.readFileSync(path.join(ROOT, "wrangler.jsonc"), "utf8");
 		const id = config.match(/"database_id"\s*:\s*"([^"]*)"/)?.[1] ?? "";
 		if (id !== "" && id !== PLACEHOLDER_D1_ID) {
-			errors.push(
+			warnings.push(
 				[
-					`wrangler.jsonc 里的 database_id 不是占位值（${id.slice(0, 12)}…）`,
-					"真实 id 属于你自己的 Cloudflare 账号，提交上去别人克隆后必然部署失败。修法：",
-					`  把 database_id 改回 ${PLACEHOLDER_D1_ID}（本地由 npm run setup:d1 自动回写）`,
+					`wrangler.jsonc 的 database_id 是具体值（${id.slice(0, 8)}…），不是占位值`,
+					"如果这是你自己的副本：正常，忽略本条（部署必须用真实 id）。",
+					`如果你是模板维护者：检查是不是手滑把真实 id 提交上去了，应该改回 ${PLACEHOLDER_D1_ID}。`,
 				].join("\n    "),
 			);
 		}

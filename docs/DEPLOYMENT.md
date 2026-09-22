@@ -192,6 +192,7 @@ Zero Trust（免费版 ≤50 用户）→ Access → Applications → 添加自�
 | 一键部署后初始化报 500「未配置密钥」 | 走 A2 第 3 步：补 `SETUP_TOKEN` 与 `SESSION_SECRET` 两个 Secret |
 | 一键部署后构建日志报找不到 D1 / `database_id` | 走 A2 第 1 步：建 D1 并把真实 id 写回 `wrangler.jsonc`（仓库里是占位值 `REPLACE_WITH_YOUR_D1_ID`） |
 | 构建日志提示属主检查失败 | 已只在本地生效（CI 会跳过该检查）；如果你在自己机器上遇到，按提示 `sudo chown -R $(whoami) .` |
+| 构建日志里出现 `database_id 是具体值…不是占位值` | 只是提示，不影响构建。你**自己的副本**里就应该填真实 id（一键部署向导回写的也是真实 id）；这条提示留给模板维护者，提醒别把真实 id 提交回上游仓库 |
 | 部署成功但页面 404 | 确认 `wrangler deploy` 读到的是构建产物配置（输出里会写 `Using redirected Wrangler configuration`） |
 | 行情一直失败 | 看设置页「最近运行」的失败原因；免费接口偶发限流属正常，系统会自动换源并冷却 |
 | 首包体积 CI 失败 | `npm run check:bundle` 会列出各 chunk；大依赖请改成动态 `import()` |
