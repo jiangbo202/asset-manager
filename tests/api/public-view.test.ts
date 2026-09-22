@@ -1,7 +1,7 @@
 import { env } from "cloudflare:test";
 import { beforeEach, describe, expect, it } from "vitest";
 import type { AuthMeDto, Portfolio } from "../../src/shared/api-types";
-import { bootstrap, call, clearAll, login } from "../helpers";
+import { bootstrap, call, clearAll, login, TEST_ITERATIONS } from "../helpers";
 
 interface Envelope<T> {
 	ok: boolean;
@@ -210,5 +210,136 @@ describe("公开只读分享", () => {
 		).run();
 		expect((await call("/api/portfolio")).status).toBe(401);
 		expect((await me()).publicView).toBe(false);
+	});
+});
+
+/**
+ * 首次部署的顺序（提问："是不是先输密码登录，之后才是公开只读"）
+ *
+ * 必须是这个顺序，而且要在两个层面都成立：
+ *   界面：未初始化 → 初始化页；已初始化未登录 → 开关开着才给只读总览，否则登录页
+ *   服务端：未初始化一律 503（requireInitialized 在公开放行**之前**），
+ *          所以就算数据库里被人预先塞了 public_view=1 也开不了门
+ */
+describe("首次部署：公开只读不会抢在初始化/登录之前", () => {
+	beforeEach(async () => {
+		await clearAll();
+	});
+
+	const me = async (cookie?: string) =>
+		(await call<Envelope<AuthMeDto>>("/api/auth/me", { cookie })).body.data;
+
+	it("全新数据库：界面停在初始化页，开关视为关闭", async () => {
+		const data = await me();
+		expect(data.initialized).toBe(false);
+		expect(data.authenticated).toBe(false);
+		expect(data.publicView).toBe(false);
+	});
+
+	it("初始化之前：接口一律 503，拿不到任何数据（也不能提前打开开关）", async () => {
+		// 未初始化时 /api/portfolio 是 503（not_initialized），不是 401、更不是 200
+		const portfolio = await call("/api/portfolio");
+		expect(portfolio.status).toBe(503);
+
+		// 匿名尝试提前打开开关：同样被 requireInitialized 拦下
+		const attempt = await call("/api/settings", {
+			method: "PUT",
+			body: JSON.stringify({ publicView: true }),
+		});
+		expect(attempt.status).toBe(503);
+	});
+
+	it("即使数据库里被预先塞了 public_view=1，未初始化也打不开", async () => {
+		await env.DB.prepare(
+			`INSERT INTO settings (key, value) VALUES ('public_view', '1') ON CONFLICT (key) DO UPDATE SET value = '1'`,
+		).run();
+
+		// 开关是"开"的，但没有初始化 → 依然 503，也不会进只读总览
+		expect((await call("/api/portfolio")).status).toBe(503);
+		const data = await me();
+		expect(data.initialized).toBe(false);
+	});
+
+	it("初始化：token 不对直接 401", async () => {
+		const response = await call("/api/auth/setup", {
+			method: "POST",
+			body: JSON.stringify({
+				setupToken: "wrong-token",
+				credential: "x".repeat(64),
+				kdfSalt: "a".repeat(32),
+				iterations: TEST_ITERATIONS,
+			}),
+		});
+		expect(response.status).toBe(401);
+		expect((await me()).initialized).toBe(false);
+	});
+
+	it("初始化成功后就是已登录状态：不用再输一次密码，也没有 must_change 拦路", async () => {
+		const { cookie } = await bootstrap();
+		const data = await me(cookie);
+		expect(data.initialized).toBe(true);
+		expect(data.authenticated).toBe(true);
+		expect(data.mustChange).toBe(false);
+		// 刚初始化完就是本人权限：设置能读、总览能看、公开开关默认还是关的
+		expect(data.publicView).toBe(false);
+		expect((await call("/api/settings", { cookie })).status).toBe(200);
+		expect((await call("/api/portfolio", { cookie })).status).toBe(200);
+	});
+
+	it("初始化后未登录：看到的是登录页（开关默认关），不是只读总览", async () => {
+		await bootstrap();
+		// 清掉 cookie 模拟新访客
+		const data = await me();
+		expect(data.authenticated).toBe(false);
+		expect(data.publicView).toBe(false);
+		expect((await call("/api/portfolio")).status).toBe(401);
+	});
+
+	it("完整顺序走一遍：初始化 → 本人登录 → 打开开关 → 访客可看 → 关掉即恢复", async () => {
+		// ① 初始化（此时已登录）
+		const { cookie } = await bootstrap();
+		const account = await call<Envelope<{ id: string }>>("/api/accounts", {
+			method: "POST",
+			cookie,
+			body: JSON.stringify({ name: "券商", kind: "broker", currency: "USD", market: "us", note: "私人" }),
+		});
+		await call("/api/holdings", {
+			method: "POST",
+			cookie,
+			body: JSON.stringify({
+				accountId: account.body.data.id,
+				class: "stock",
+				market: "us",
+				symbol: "AAPL",
+				name: "苹果",
+				currency: "USD",
+				qty: 10,
+				price: 100,
+			}),
+		});
+
+		// ② 未开开关：访客必须登录
+		expect((await call("/api/portfolio")).status).toBe(401);
+
+		// ③ 本人打开开关
+		expect(
+			(
+				await call("/api/settings", {
+					method: "PUT",
+					cookie,
+					body: JSON.stringify({ publicView: true }),
+				})
+			).status,
+		).toBe(200);
+
+		// ④ 访客能看总览，但看不到备注、也刷不了行情
+		const anonymous = await call<Envelope<Portfolio>>("/api/portfolio");
+		expect(anonymous.status).toBe(200);
+		expect(anonymous.body.data.total).toBeCloseTo(1000, 6);
+		expect((await call("/api/quotes/refresh", { method: "POST" })).status).toBe(401);
+
+		// ⑤ 关掉开关：立刻回到必须登录
+		await call("/api/settings", { method: "PUT", cookie, body: JSON.stringify({ publicView: false }) });
+		expect((await call("/api/portfolio")).status).toBe(401);
 	});
 });
