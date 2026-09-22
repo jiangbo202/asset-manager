@@ -172,6 +172,15 @@ npm run deploy:safe
 逐步说明（向导每个字段怎么选）、[验收清单](docs/DEPLOYMENT.md#a5-验收清单重测时照着勾) 与故障排查见
 **[docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)**。
 
+**以后上游更新了怎么办？** 一键部署出来的是一份**副本**，上游不会自动流过去：
+
+```bash
+npm run update:upstream    # 合并上游（唯一自动处理的冲突是你的 database_id，会保留）
+git push                   # Workers Builds 自动重新构建部署
+```
+
+详见 [升级](#-升级)。
+
 ## ✅ 第一次必做
 
 部署完成后，还需要你在浏览器里做这些：
@@ -407,6 +416,9 @@ npm test           # Vitest，跑在真实 workerd 里
 npm run lint       # 四套 tsconfig 的类型检查
 npm run verify     # 以上全跑 + 首包体积 + 脚本接线检查
 npm run watch:cpu  # 实时看线上每次调用的 CPU 时间（免费额度排障用）
+
+npm run deploy:safe      # 部署（建库 → 构建 → 迁移 → 部署 → 写 Secrets）
+npm run update:upstream  # 把这台部署跟上游模板对齐（一键部署出来的副本用）
 ```
 
 技术栈刻意保持精简：**Hono + D1 + React**，没有 UI 库、没有图表库、没有状态管理库。

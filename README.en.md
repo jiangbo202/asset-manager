@@ -189,6 +189,16 @@ the secrets.
 Field-by-field wizard instructions, an acceptance checklist and troubleshooting:
 **[docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)** (Chinese).
 
+**What about future upstream updates?** The one-click flow gives you a **copy**, so upstream changes do not
+reach you automatically:
+
+```bash
+npm run update:upstream    # merge upstream (the only conflict it resolves is your database_id — yours wins)
+git push                   # Workers Builds rebuilds and redeploys
+```
+
+See [Upgrading](#-upgrading).
+
 ## ✅ First-run checklist
 
 Once deployed, these are the steps you do in the browser:
@@ -441,6 +451,9 @@ npm test           # Vitest, running inside real workerd
 npm run lint       # type-checks four tsconfig projects
 npm run verify     # all of the above + bundle budget + script wiring checks
 npm run watch:cpu  # live CPU time of every invocation (free-tier debugging)
+
+npm run deploy:safe      # deploy (D1 → build → migrations → deploy → secrets)
+npm run update:upstream  # align this deployment with the upstream template (for one-click copies)
 ```
 
 The stack is deliberately small: **Hono + D1 + React**, with no UI library, no chart library and no state
