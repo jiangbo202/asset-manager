@@ -355,6 +355,7 @@ export function SettingsPage({ onChanged }: { onChanged?: () => void }) {
 					<h3 style={{ marginTop: 0, fontSize: 14 }}>{t("settings.publicView")}</h3>
 					<p className="small muted">{t("settings.publicViewHint")}</p>
 					{publicView.error && <div className="alert error">{publicView.error}</div>}
+
 					<label className="switch-row">
 						<input
 							type="checkbox"
@@ -362,18 +363,19 @@ export function SettingsPage({ onChanged }: { onChanged?: () => void }) {
 							disabled={publicView.pending}
 							onChange={(e) => void togglePublicView(e.target.checked)}
 						/>
-						<span>{values.public_view === "1" ? t("settings.publicViewOn") : t("settings.publicViewOff")}</span>
+						<span className="switch-state">
+							{values.public_view === "1" ? t("settings.publicViewOn") : t("settings.publicViewOff")}
+						</span>
 					</label>
-					{values.public_view === "1" ? (
+
+					{values.public_view === "1" && (
 						<>
-							<div className="section-row" style={{ marginTop: 2 }}>
-								<span className="small muted">{t("settings.publicSections")}</span>
-							</div>
-							<div className="check-row">
+							<div className="field-label">{t("settings.publicSections")}</div>
+							<div className="option-grid">
 								{PUBLIC_SECTIONS.map((section) => {
 									const checked = sharedSections.includes(section);
 									return (
-										<label key={section} className="check-item">
+										<label key={section} className={`option-card${checked ? " on" : ""}`}>
 											<input
 												type="checkbox"
 												checked={checked}
@@ -386,14 +388,18 @@ export function SettingsPage({ onChanged }: { onChanged?: () => void }) {
 													)
 												}
 											/>
-											<span>{t(`settings.section.${section}`)}</span>
+											<span className="option-text">
+												<span className="option-title">{t(`settings.section.${section}`)}</span>
+												<span className="option-desc">{t(`settings.sectionHint.${section}`)}</span>
+											</span>
 										</label>
 									);
 								})}
 							</div>
 							{publicSections.error && <div className="alert error">{publicSections.error}</div>}
+
 							<div className="share-url">
-								<code>{shareUrl}</code>
+								<code title={shareUrl}>{shareUrl}</code>
 								<button className="ghost" onClick={() => void copyShareUrl()}>
 									{copied ? t("settings.copied") : t("settings.copyLink")}
 								</button>
@@ -402,10 +408,6 @@ export function SettingsPage({ onChanged }: { onChanged?: () => void }) {
 								{t("settings.publicViewWarn")}
 							</p>
 						</>
-					) : (
-						<p className="small muted" style={{ marginBottom: 0 }}>
-							{t("settings.publicViewOffHint")}
-						</p>
 					)}
 				</div>
 			</div>
@@ -701,11 +703,21 @@ export function SettingsPage({ onChanged }: { onChanged?: () => void }) {
 											</span>
 											{item.current && <span className="chip">{t("settings.thisDevice")}</span>}
 										</div>
-										<div className="small muted session-meta">
+										<div
+											className="small muted session-meta"
+											title={[
+												item.ip ?? t("settings.ipUnknown"),
+												t("settings.sessionLoginAt", { time: dateTime(item.createdAt, timeZone) }),
+												item.lastSeen ? t("settings.sessionActiveAt", { time: relativeTime(t, item.lastSeen) }) : "",
+											]
+												.filter(Boolean)
+												.join(" · ")}
+										>
 											<span className="mono">{item.ip ?? t("settings.ipUnknown")}</span>
 											{" · "}
 											{t("settings.sessionLoginAt", { time: dateTime(item.createdAt, timeZone) })}
-											{item.lastSeen && (
+											{/* 本设备不用显示"最近活跃"（就是此刻），省下的宽度留给 IP 与登录时间 */}
+											{!item.current && item.lastSeen && (
 												<>
 													{" · "}
 													{t("settings.sessionActiveAt", { time: relativeTime(t, item.lastSeen) })}

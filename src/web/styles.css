@@ -194,56 +194,96 @@ tr.row-editing {
 	font-size: 12px;
 }
 
-/* 设置页：公开只读分享的开关与分享链接 */
+/* 设置页：公开只读分享的开关、区域多选与分享链接 */
 .switch-row {
 	display: flex;
 	align-items: center;
 	gap: 8px;
+	margin: 2px 0 4px;
 	cursor: pointer;
+}
+
+.switch-state {
 	font-weight: 500;
 }
 
-.check-row {
-	display: flex;
-	flex-wrap: wrap;
-	gap: 6px 16px;
-	margin: 6px 0 2px;
+.field-label {
+	font-size: 12px;
+	color: var(--muted);
+	margin: 12px 0 6px;
 }
 
-.check-item {
-	display: flex;
-	align-items: center;
-	gap: 6px;
-	cursor: pointer;
-}
-
-.check-item input {
-	cursor: pointer;
-}
-
-.section-row {
-	display: flex;
-	align-items: center;
+/* 区域多选：自适应两列（窄屏一列），每项是标题 + 说明的小卡片 */
+.option-grid {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(158px, 1fr));
 	gap: 8px;
+}
+
+.option-card {
+	display: flex;
+	align-items: flex-start;
+	gap: 8px;
+	padding: 8px 10px;
+	border: 1px solid var(--border);
+	border-radius: 8px;
+	cursor: pointer;
+	transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.option-card:hover {
+	border-color: var(--accent);
+}
+
+.option-card.on {
+	border-color: var(--accent);
+	background: var(--accent-weak);
+}
+
+.option-card input[type="checkbox"] {
+	margin-top: 2px;
+}
+
+.option-text {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+	min-width: 0;
+}
+
+.option-title {
+	font-size: 13px;
+	font-weight: 500;
+}
+
+.option-desc {
+	font-size: 12px;
+	color: var(--muted);
+	line-height: 1.35;
 }
 
 .share-url {
 	display: flex;
 	align-items: center;
 	gap: 8px;
-	margin: 10px 0 6px;
+	flex-wrap: wrap;
+	margin: 12px 0 6px;
 	padding: 8px 10px;
 	border: 1px solid var(--border);
 	border-radius: 8px;
 	background: var(--surface-2);
-	overflow: hidden;
 }
 
 .share-url code {
-	flex: 1;
+	flex: 1 1 auto;
+	min-width: 0;
 	overflow: hidden;
 	text-overflow: ellipsis;
 	white-space: nowrap;
+}
+
+.share-url button {
+	flex: 0 0 auto;
 }
 
 /* 「公开只读分享」下给访客的小标签：让他知道这不是完整界面，右上角能登录 */
@@ -285,6 +325,13 @@ tr.row-editing {
 
 .grid.cols-2 {
 	grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+}
+
+/* grid 项默认 min-width:auto：里面 nowrap 的内容（分享链接、IP + 时间那一行）
+   会把卡片撑得比屏幕还宽。两栏布局里允许收缩，溢出交给内部的 ellipsis。
+   （不全局设：总览页的数字卡宁可撑出横向滚动，也不要数字压到邻居身上） */
+.grid.cols-2 > * {
+	min-width: 0;
 }
 
 .stat {
@@ -377,7 +424,21 @@ button:disabled {
 	cursor: not-allowed;
 }
 
-input,
+/* 复选框/单选框不套用下面的表单控件样式：它们被 width:100% 一撑，
+   会把同一行的文字挤到最右边并换行（公开分享卡片曾因此排版崩掉） */
+input[type="checkbox"],
+input[type="radio"] {
+	width: auto;
+	flex: 0 0 auto;
+	padding: 0;
+	border: 1px solid var(--border);
+	border-radius: 4px;
+	background: var(--surface);
+	accent-color: var(--accent);
+	cursor: pointer;
+}
+
+input:not([type="checkbox"]):not([type="radio"]),
 select,
 textarea {
 	font: inherit;
