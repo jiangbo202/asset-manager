@@ -167,6 +167,10 @@ work yet:
 > Do not keep the sample values. The server refuses to initialise with a placeholder, so you can never end up
 > with an instance anyone can take over.
 
+**First build failed?** Set Worker → Settings → Build → **Build command** to `npx vite build` and hit *Retry
+deployment* (the pre-build check only reports environment problems and contains no build logic), or merge the
+upstream fix into your repo. **“Database needs an upgrade” on first load** means follow-up 2 is still pending.
+
 Step-by-step field-by-field instructions and troubleshooting: **[docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)**
 (Chinese — the deployment walkthrough is worth reading with a translator if needed).
 

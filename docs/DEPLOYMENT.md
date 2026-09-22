@@ -44,7 +44,7 @@ Cloudflare 会打开 **Create an app → Set up your application**，一共三�
 
 | # | 做什么 | 在哪做 |
 |---|---|---|
-| 1 | **D1 数据库**：向导通常会按 `wrangler.jsonc` 里的绑定自动创建并回写 `database_id`。若构建日志里出现找不到 D1 的报错，就去 Cloudflare 控制台 → **Storage & Databases → D1** 建一个（名字随意），然后在 Worker → **Settings → Bindings** 加一条 D1 绑定，**变量名必须是 `DB`**，并把它的 id 写回你仓库的 `wrangler.jsonc` 后重新部署 | 控制台 + 仓库 |
+| 1 | **D1 数据库**：向导会按 `wrangler.jsonc` 里的绑定自动创建 D1，并把真实 `database_id` 回写进你新仓库的配置 —— 通常**这一步已经替你做完**（构建日志里出现形如 `4f191450-…` 的 id 就是证据）。若日志报找不到 D1，就去控制台 → **Storage & Databases → D1** 建一个，再回 Worker → **Settings → Bindings** 加 D1 绑定，**变量名必须是 `DB`**，并把 id 写回 `wrangler.jsonc` | 控制台 + 仓库 |
 | 2 | **建表**：`npm run db:migrate:remote`（需要 `CLOUDFLARE_API_TOKEN`，权限 Workers 编辑 + D1 编辑）。想一劳永逸可以在 **Settings → Build → Deploy command** 里把 `npx wrangler deploy` 改成 `npm run deploy` —— 它会在每次部署前自动跑迁移 | 本地终端 或 Builds 设置 |
 | 3 | **两个密钥**：Worker → **Settings → Variables and Secrets** 添加（都选 *Secret* 类型）`SETUP_TOKEN` 与 `SESSION_SECRET`，各自用 `openssl rand -hex 32` 生成。**`SETUP_TOKEN` 要记好**，首次打开网页时要用它完成初始化 | 控制台 |
 
@@ -56,6 +56,32 @@ Cloudflare 会打开 **Create an app → Set up your application**，一共三�
 1. 访问 `https://<Worker 名>.<你的子域>.workers.dev`
 2. 粘贴 `SETUP_TOKEN` → 设置自己的登录密码（可用页面上的「生成随机密码」）
 3. 进入「设置」确认显示币种与时区 → 回「账户」开始记
+
+#### A2b. 首次构建就失败怎么办
+
+构建命令是 `npm run build`，它会先跑一个环境体检（`check:env`）。体检只提示环境问题，
+不含任何构建逻辑，所以绕过它不会漏掉构建步骤：
+
+```
+Worker → Settings → Build → Build command 改成：npx vite build
+```
+
+另一条路是把上游的修复拉到你的仓库里（见下方"部署之后如何更新"）。两种都可以，改完点 **Retry deployment**。
+
+#### A2c. 部署之后如何更新
+
+一键部署是**在你点击的那一刻把仓库复制一份**给你，所以上游后续的修复不会自动流过去。
+想跟进上游：
+
+```bash
+cd 你的仓库
+git remote add upstream https://github.com/<上游作者>/asset-manager.git
+git fetch upstream
+git merge upstream/main
+```
+
+冲突通常只会出现在 `wrangler.jsonc` 的 `database_id` 上 —— **保留你自己的真实 id**，
+把上游的占位值丢掉即可（上游那边保持占位值是刻意的）。合并后 `git push`，Workers Builds 会自动重新部署。
 
 #### 一键部署的取舍
 
