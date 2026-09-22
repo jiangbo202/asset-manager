@@ -167,33 +167,3 @@ export function treemapLabel(
 	if (fontSize < TREEMAP_MIN_FONT) return { show: false, fontSize: TREEMAP_MIN_FONT };
 	return { show: true, fontSize: Math.round(fontSize * 10) / 10 };
 }
-
-/* ── 组合统计 ───────────────────────────────────────────────── */
-
-export interface PnlSummary {
-	costTotal: number;
-	pnlTotal: number;
-	pnlPct: number | null;
-	/** 没填平均成本的**非现金**持仓条数（现金本来就没有成本，不算"漏填"） */
-	missingCostCount: number;
-}
-
-/**
- * 浮动盈亏汇总。
- *
- * 现金按定义没有平均成本：既不该进"未填成本"的计数（用户看到"2 条未填成本"，
- * 点进去发现是两笔现金），也不参与盈亏比例 —— 盈亏比例的口径是"已投入成本"。
- */
-export function pnlSummary(
-	holdings: Array<{ isCash: boolean; avgCost: number | null; costDisplay: number | null; pnlDisplay: number | null }>,
-): PnlSummary {
-	const costTotal = holdings.reduce((sum, item) => sum + (item.costDisplay ?? 0), 0);
-	const pnlTotal = holdings.reduce((sum, item) => sum + (item.pnlDisplay ?? 0), 0);
-	const missingCostCount = holdings.filter((item) => !item.isCash && item.avgCost === null).length;
-	return {
-		costTotal,
-		pnlTotal,
-		pnlPct: costTotal > 0 ? (pnlTotal / costTotal) * 100 : null,
-		missingCostCount,
-	};
-}

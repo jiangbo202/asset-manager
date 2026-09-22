@@ -245,6 +245,7 @@ lookup.ts      代码查询（输入代码 → 名称/价格/币种/市场）
 | 层次 | 位置 | 做法 |
 |---|---|---|
 | 纯函数单测 | `tests/services/` | 代码映射、适配器解析、健康度冷却、readPath |
+| 口径护栏 | `tests/api/cash-rules.test.ts` | 现金该不该进某个统计（已踩三次坑，集中钉住） |
 | API 集成 | `tests/api/` | 用 `SELF.fetch` 打真实 Worker + 真实 D1（每个文件前自动应用迁移） |
 | 网络隔离 | 同上 | 适配器层注入假 `fetch`，真实网络只在人工验证时使用 |
 | 体积门禁 | `scripts/check-bundle.cjs` | 首包 > 110KB 或合计 > 160KB 直接失败 |

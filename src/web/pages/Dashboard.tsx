@@ -14,7 +14,8 @@ import {
 	trendClass,
 } from "../lib/format";
 import { BrandIcon } from "../lib/icons";
-import { buildTreemapItems, pnlSummary } from "../lib/treemap";
+import { buildTreemapItems } from "../lib/treemap";
+import { pnlSummary, staleHoldings } from "../lib/stats";
 import { useT } from "../lib/i18n";
 import { MarketFilter, parseMarketParam } from "../components/MarketFilter";
 import { useRouter } from "../lib/router";
@@ -180,11 +181,12 @@ export function DashboardPage() {
 		return sorted;
 	}, [data, sortKey]);
 
-	const staleHoldings = useMemo(() => {
+	// 停更告警：口径（>7 天、排除现金）在 lib/stats.ts，由 tests/api/cash-rules.test.ts 钉住
+	const stale = useMemo(() => {
 		if (!data) return [];
-		return data.holdings
-			.filter((item) => !item.isCash && item.daysSincePriceUpdate !== null && item.daysSincePriceUpdate > 7)
-			.sort((a, b) => (b.daysSincePriceUpdate ?? 0) - (a.daysSincePriceUpdate ?? 0));
+		return staleHoldings(data.holdings).sort(
+			(a, b) => (b.daysSincePriceUpdate ?? 0) - (a.daysSincePriceUpdate ?? 0),
+		);
 	}, [data]);
 
 	/** 点击环形图 → 联动筛选（同一维度再次点击则取消） */
@@ -225,15 +227,15 @@ export function DashboardPage() {
 				</div>
 			)}
 
-			{staleHoldings.length > 0 && (
+			{stale.length > 0 && (
 				<div className="alert">
 					{t("dashboard.staleAlert", {
-						count: staleHoldings.length,
-						list: staleHoldings
+						count: stale.length,
+						list: stale
 							.slice(0, 5)
 							.map((item) => `${item.symbol ?? item.name} (${relativeDays(t, item.daysSincePriceUpdate)})`)
 							.join(", "),
-						more: staleHoldings.length > 5 ? t("dashboard.staleMore") : "",
+						more: stale.length > 5 ? t("dashboard.staleMore") : "",
 					})}
 					<button className="ghost" onClick={() => navigate("/holdings")}>
 						{t("dashboard.goBulkUpdate")}

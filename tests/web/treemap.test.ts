@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildTreemapItems, pnlSummary, textWidthEm, treemapLabel } from "../../src/web/lib/treemap";
+import { buildTreemapItems, textWidthEm, treemapLabel } from "../../src/web/lib/treemap";
 import { createTranslator } from "../../src/shared/i18n";
 import zh from "../../src/shared/locales/zh";
 
@@ -144,37 +144,5 @@ describe("treemap 单元格标签", () => {
 		expect(textWidthEm("现金")).toBe(2);
 		expect(textWidthEm("SLDP")).toBeCloseTo(2.24, 2);
 		expect(textWidthEm("嘉信 RKLB")).toBeCloseTo(2 + 0.56 + 2.24, 2);
-	});
-});
-
-/* ── 浮动盈亏口径 ─────────────────────────────────────────── */
-
-describe("浮动盈亏汇总", () => {
-	const row = (
-		extra: Partial<{ isCash: boolean; avgCost: number | null; costDisplay: number | null; pnlDisplay: number | null }>,
-	) => ({ isCash: false, avgCost: 100, costDisplay: 1000, pnlDisplay: 100, ...extra });
-
-	it("现金不算「未填成本」（用户看到「2 条未填成本」，点进去发现是两笔现金）", () => {
-		const summary = pnlSummary([
-			row({}),
-			row({ isCash: true, avgCost: null, costDisplay: null, pnlDisplay: null }),
-			row({ isCash: true, avgCost: null, costDisplay: null, pnlDisplay: null }),
-		]);
-		expect(summary.missingCostCount).toBe(0);
-		// 现金也不参与盈亏比例（口径是"已投入成本"）
-		expect(summary.costTotal).toBe(1000);
-		expect(summary.pnlPct).toBeCloseTo(10, 6);
-	});
-
-	it("非现金没填成本才计数", () => {
-		const summary = pnlSummary([row({}), row({ avgCost: null, costDisplay: null, pnlDisplay: null })]);
-		expect(summary.missingCostCount).toBe(1);
-	});
-
-	it("没有成本时比例是 null（界面显示 —），不是 0% 或 Infinity", () => {
-		const summary = pnlSummary([row({ isCash: true, avgCost: null, costDisplay: null, pnlDisplay: null })]);
-		expect(summary.pnlPct).toBeNull();
-		expect(summary.costTotal).toBe(0);
-		expect(summary.pnlTotal).toBe(0);
 	});
 });
