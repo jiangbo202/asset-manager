@@ -149,18 +149,26 @@ The token needs **Workers Scripts: Edit + D1: Edit** permissions.
 
 [![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/jiangbo202/asset-manager)
 
-Cloudflare copies the repo into your account, creates and binds D1, asks for two secrets, and builds through
-Workers Builds:
+The wizard asks for three things and nothing else: **New GitHub connection** (authorise),
+a project name (`asset-manager`), and **Deploy**. Three follow-ups are still required, or the site will not
+work yet:
+
+1. **D1 database** — the wizard usually creates and binds it from `wrangler.jsonc`; if the build log complains
+   about a missing D1, create one in the dashboard and add a binding (the variable name must be `DB`)
+2. **Create the tables** — `npm run db:migrate:remote`, or set the Builds **Deploy command** to
+   `npm run deploy` so migrations run on every deploy
+3. **Two secrets** (Worker → Settings → Variables and Secrets, both as *Secret*):
 
 | Name | Where it comes from |
 |---|---|
 | `SETUP_TOKEN` | `openssl rand -hex 32` — keep it, you need it the first time you open the site |
 | `SESSION_SECRET` | `openssl rand -hex 32` |
 
-> The wizard pre-fills the sample values that are public in this repository, so **replace both**. The server
-> refuses to initialise with a placeholder, so you can never end up with an instance anyone can take over.
+> Do not keep the sample values. The server refuses to initialise with a placeholder, so you can never end up
+> with an instance anyone can take over.
 
-More commands and troubleshooting: **[docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)** (Chinese).
+Step-by-step field-by-field instructions and troubleshooting: **[docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)**
+(Chinese — the deployment walkthrough is worth reading with a translator if needed).
 
 ## ✅ First-run checklist
 
@@ -329,6 +337,10 @@ The API token is missing or lacks permission. It needs **Workers Scripts: Edit +
 The activity history gets entries with source `system`: “刷新行情…” for the scheduled quote refresh, and
 “定时快照…” / “补拍当日快照…” for snapshots. The Quotes & snapshots card in Settings also shows the
 **last quote refresh** and the **next scheduled run**.
+
+**I clicked “Deploy to Cloudflare” — what next?**
+The wizard only authorises GitHub, takes a project name and deploys a copy of the repo. You still need to bind
+D1, run the migrations once and add two secrets — see the deployment guide (Chinese) for the exact steps.
 
 **How do I share it with someone?**
 Settings → “Public read-only link”, switch it on and send the URL shown there. Visitors see the overview only

@@ -26,24 +26,44 @@
 https://deploy.workers.cloudflare.com/?url=https://github.com/<你的用户名>/asset-manager
 ```
 
-Cloudflare 会：
+#### A1. 向导里怎么点
 
-1. 把仓库复制到你自己的 GitHub/GitLab 账号（之后可继续开发）
-2. 让你在向导里自定义仓库名、Worker 名、**D1 库名**
-3. **自动创建 D1 并绑定**，把真实 `database_id` 写回你新仓库的配置
-4. 用 Workers Builds 执行 build 与 deploy
-5. 从 `.dev.vars.example` 识别需要你填写的两个 Secret：
+Cloudflare 会打开 **Create an app → Set up your application**，一共三步：
 
-| Secret | 怎么来 |
+| 界面元素 | 怎么选 |
 |---|---|
-| `SETUP_TOKEN` | `openssl rand -hex 32`，**自己留存**，首次打开网页要用 |
-| `SESSION_SECRET` | `openssl rand -hex 32` |
+| **Git account** → `New GitHub connection` | 点它，在 GitHub 上授权 Cloudflare Workers（可选择只授权这个仓库） |
+| `Create private Git repository` | 建议勾上：这是私人记账应用，仓库虽然不含任何数据与密钥，但也没必要公开 |
+| **Project name** | 填 `asset-manager`（会成为 Worker 名与 `asset-manager.<你的子域>.workers.dev` 地址） |
+| **Deploy** | 点它，Cloudflare 会把仓库复制到你的账号、建好 Workers Builds 项目并开始首次构建（1–3 分钟） |
 
-> 这条路径下 token 是你自己填的，所以**不会出现在任何日志里**。
+> 这一步**只做克隆仓库 + 建构建项目**。数据库、密钥都还没配好，所以部署完成后直接打开网址
+> 会看到报错或"数据库需要升级"——按下面 A2 补完即可。
 
-⚠️ **向导里预填的值是仓库公开的示例占位值，必须替换掉。** 如果你直接提交，别人就能用这个已知口令
-抢先初始化你的实例。服务端会拒绝用占位值完成初始化（报 `setup_token_placeholder` 并提示
-`openssl rand -hex 32`），所以不会出现"悄悄部署出一个不安全实例"的情况——但请一开始就填真随机值。
+#### A2. 部署后必须补的三件事
+
+| # | 做什么 | 在哪做 |
+|---|---|---|
+| 1 | **D1 数据库**：向导通常会按 `wrangler.jsonc` 里的绑定自动创建并回写 `database_id`。若构建日志里出现找不到 D1 的报错，就去 Cloudflare 控制台 → **Storage & Databases → D1** 建一个（名字随意），然后在 Worker → **Settings → Bindings** 加一条 D1 绑定，**变量名必须是 `DB`**，并把它的 id 写回你仓库的 `wrangler.jsonc` 后重新部署 | 控制台 + 仓库 |
+| 2 | **建表**：`npm run db:migrate:remote`（需要 `CLOUDFLARE_API_TOKEN`，权限 Workers 编辑 + D1 编辑）。想一劳永逸可以在 **Settings → Build → Deploy command** 里把 `npx wrangler deploy` 改成 `npm run deploy` —— 它会在每次部署前自动跑迁移 | 本地终端 或 Builds 设置 |
+| 3 | **两个密钥**：Worker → **Settings → Variables and Secrets** 添加（都选 *Secret* 类型）`SETUP_TOKEN` 与 `SESSION_SECRET`，各自用 `openssl rand -hex 32` 生成。**`SETUP_TOKEN` 要记好**，首次打开网页时要用它完成初始化 | 控制台 |
+
+缺第 3 步会怎样：页面能打开，但点了初始化会收到 500 与一条明确的提示（`SETUP_TOKEN` / `SESSION_SECRET`
+未配置或仍是示例值）—— 这是有意设计的，避免部署出一个"用公开默认口令就能接管"的实例。
+
+#### A3. 首次打开
+
+1. 访问 `https://<Worker 名>.<你的子域>.workers.dev`
+2. 粘贴 `SETUP_TOKEN` → 设置自己的登录密码（可用页面上的「生成随机密码」）
+3. 进入「设置」确认显示币种与时区 → 回「账户」开始记
+
+#### 一键部署的取舍
+
+| | 一键按钮 | 命令行（路径 B） |
+|---|---|---|
+| 需要本地环境 | 不需要 | 需要 Node 20/22/24 |
+| D1 / 迁移 / 密钥 | 要自己补（见 A2） | `npm run deploy:safe` 一次做完 |
+| 后续更新 | push 到你的仓库即自动部署 | 本地再跑一次 `npm run deploy:safe` |
 
 ### 路径 B：命令行
 
@@ -168,7 +188,10 @@ Zero Trust（免费版 ≤50 用户）→ Access → Applications → 添加自�
 | 页面提示「数据库需要升级」 | 数据库结构落后于代码。重跑 `npm run deploy:safe`，或单独 `npm run db:migrate:remote` |
 | `no such table: xxx` | 同上一行；若迁移记录已存在但表确实丢了（例如手工删过表），需要手工重建或从备份恢复 |
 | 初始化时 `setup token 不正确` | 用的是终端最后一次打印的 token；丢失则删掉 `auth` 行 + `npm run setup:secrets -- --rotate` |
-| 提示 `SETUP_TOKEN 还是示例里的占位值` | 你在一键部署向导里沿用了默认值。用 `openssl rand -hex 32` 生成新值更新 Secret 后重试（无需改代码） |
+| 提示 `SETUP_TOKEN 还是示例里的占位值` | Secret 没设或沿用了示例值。用 `openssl rand -hex 32` 生成后，在 Worker → Settings → Variables and Secrets 里更新（无需改代码） |
+| 一键部署后初始化报 500「未配置密钥」 | 走 A2 第 3 步：补 `SETUP_TOKEN` 与 `SESSION_SECRET` 两个 Secret |
+| 一键部署后构建日志报找不到 D1 / `database_id` | 走 A2 第 1 步：建 D1 并把真实 id 写回 `wrangler.jsonc`（仓库里是占位值 `REPLACE_WITH_YOUR_D1_ID`） |
+| 构建日志提示属主检查失败 | 已只在本地生效（CI 会跳过该检查）；如果你在自己机器上遇到，按提示 `sudo chown -R $(whoami) .` |
 | 部署成功但页面 404 | 确认 `wrangler deploy` 读到的是构建产物配置（输出里会写 `Using redirected Wrangler configuration`） |
 | 行情一直失败 | 看设置页「最近运行」的失败原因；免费接口偶发限流属正常，系统会自动换源并冷却 |
 | 首包体积 CI 失败 | `npm run check:bundle` 会列出各 chunk；大依赖请改成动态 `import()` |

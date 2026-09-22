@@ -61,8 +61,36 @@ if (fs.existsSync(cloudflareDir)) {
 	}
 }
 
-/* ── 3. 目录属主（仅类 Unix） ───────────────────────────── */
-if (process.platform !== "win32" && typeof process.getuid === "function") {
+/* ── 2.5 提交进仓库的 D1 id 必须是占位值（只在 CI 检查） ───
+ * 本地不查：`npm run setup:d1` 会把真实 id 写进 wrangler.jsonc，
+ * 每次部署后报错就成了噪音。CI 必须查：真实 id 一旦提交，
+ * 别人克隆后部署会去绑定你的库（必然失败），也等于公开了自己的资源 id。
+ */
+const PLACEHOLDER_D1_ID = "REPLACE_WITH_YOUR_D1_ID";
+const IS_CI = Boolean(process.env.CI || process.env.WORKERS_CI);
+if (IS_CI) {
+	try {
+		const config = fs.readFileSync(path.join(ROOT, "wrangler.jsonc"), "utf8");
+		const id = config.match(/"database_id"\s*:\s*"([^"]*)"/)?.[1] ?? "";
+		if (id !== "" && id !== PLACEHOLDER_D1_ID) {
+			errors.push(
+				[
+					`wrangler.jsonc 里的 database_id 不是占位值（${id.slice(0, 12)}…）`,
+					"真实 id 属于你自己的 Cloudflare 账号，提交上去别人克隆后必然部署失败。修法：",
+					`  把 database_id 改回 ${PLACEHOLDER_D1_ID}（本地由 npm run setup:d1 自动回写）`,
+				].join("\n    "),
+			);
+		}
+	} catch {
+		/* 没有 wrangler.jsonc 就跳过 */
+	}
+}
+
+/* ── 3. 目录属主（仅类 Unix；CI 里跳过） ──────────────────
+ * 构建容器的检出目录属主未必等于构建用户（例如镜像里是 root），
+ * 本地才需要这个检查：它防的是"用 sudo 写过文件之后脚本改不动"。
+ */
+if (!IS_CI && process.platform !== "win32" && typeof process.getuid === "function") {
 	const uid = process.getuid();
 	const suspects = ["node_modules", "dist", ".wrangler"];
 	const bad = [];

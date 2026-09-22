@@ -133,17 +133,22 @@ npm run deploy:safe
 
 [![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/jiangbo202/asset-manager)
 
-Cloudflare 会把仓库复制到你的账号、创建并绑定 D1、让你填两个 Secret，然后用 Workers Builds 构建部署：
+向导里只需三步：**New GitHub connection**（授权）→ 项目名填 `asset-manager` → **Deploy**。
+完成后还有三件事要补，否则打不开或初始化失败：
+
+1. **D1 数据库**：向导一般会自动创建并绑定；若构建日志报找不到 D1，就在控制台建一个，
+   然后在 Worker → Settings → Bindings 里加绑定（变量名必须是 `DB`）
+2. **建表**：`npm run db:migrate:remote`，或把 Builds 的 **Deploy command** 改成 `npm run deploy`（每次部署自动迁移）
+3. **两个密钥**（Worker → Settings → Variables and Secrets，都选 Secret）：
 
 | 名称 | 怎么来 |
 |---|---|
 | `SETUP_TOKEN` | `openssl rand -hex 32`，**自己记好**，首次打开网页要用 |
 | `SESSION_SECRET` | `openssl rand -hex 32` |
 
-> 向导里预填的是仓库公开的示例值，**必须替换**。服务端会拒绝用占位值完成初始化，
-> 不会静默部署出一个"用公开口令就能接管"的实例。
+> 别用示例里的占位值：服务端会拒绝用占位值完成初始化，不会静默部署出一个"用公开口令就能接管"的实例。
 
-常用命令与故障排查见 **[docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)**。
+逐步截图级说明（含向导每个字段怎么选）与故障排查见 **[docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)**。
 
 ## ✅ 第一次必做
 
@@ -298,6 +303,11 @@ Token 权限不足或未设置。确认含 **Workers 编辑 + D1 编辑**，或�
 **怎么确认定时任务真的跑了？**
 操作历史里会有来源为 `system` 的记录：「刷新行情：…」是到点刷的行情，「定时快照（…）」「补拍当日快照（…）」是拍的快照。
 设置页的「行情与快照」卡片也会显示**上次行情刷新**与**下次定时运行**的时间。
+
+**点了 Deploy to Cloudflare 按钮，接下来呢？**
+向导只做三件事：授权 GitHub、填项目名、点 Deploy（把仓库复制到你的账号并建好构建项目）。
+之后还要补：D1 绑定、跑一次迁移、加两个密钥 —— 逐步说明见
+[部署指南 · 路径 A](docs/DEPLOYMENT.md#路径-a一键部署按钮推荐给非开发者)。
 
 **怎么分享给别人看？**
 设置 → 「公开只读分享」打开开关，把显示的链接发出去即可。访客只能看总览（总资产、分布、treemap、走势、持仓明细），
