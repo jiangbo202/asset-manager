@@ -97,11 +97,11 @@ function countingDb(db: D1Database, log: Counted): D1Database {
 	}) as D1Database;
 }
 
-async function countRequest(path: string, cookie: string, method = "GET"): Promise<Counted> {
+async function countRequest(path: string, cookie: string | null, method = "GET"): Promise<Counted> {
 	const log: Counted = { statements: [], batches: 0, batchedStatements: 0 };
 	const instrumented = { ...env, DB: countingDb(env.DB, log) } as Env;
 	await app.fetch(
-		new Request(`https://example.com${path}`, { method, headers: { Cookie: cookie } }),
+		new Request(`https://example.com${path}`, { method, headers: cookie ? { Cookie: cookie } : undefined }),
 		instrumented,
 		{} as ExecutionContext,
 	);
@@ -136,6 +136,24 @@ describe("D1 语句预算", () => {
 			}),
 		});
 		await call("/api/portfolio/snapshots", { method: "POST", cookie });
+	});
+
+	/**
+	 * 匿名访客（公开只读分享）的预算
+	 *
+	 * 公开页可能被人反复刷新，而且**没有任何认证门槛**，所以它比登录后的同类请求
+	 * 更不能超预算：多出来的只有"读 public_view 开关"这一条语句。
+	 */
+	it("匿名访客看总览（公开只读分享）", async () => {
+		await call("/api/settings", { method: "PUT", cookie, body: JSON.stringify({ publicView: true }) });
+		const { statements, batches, batchedStatements } = await countRequest("/api/portfolio", null);
+
+		const total = statements.length + batchedStatements;
+		const roundTrips = batches + statements.length;
+		const detail = `匿名 /api/portfolio：语句 ${total} 条 / 往返 ${roundTrips} 次\n  ${statements.join("\n  ")}`;
+		// 登录后是 5 条 2 次往返；访客多一次"读开关"，但开关查询与上下文共用一次往返
+		expect(total, detail).toBeLessThanOrEqual(6);
+		expect(roundTrips, detail).toBeLessThanOrEqual(3);
 	});
 
 	for (const [path, budget] of Object.entries(BUDGET)) {

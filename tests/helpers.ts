@@ -79,6 +79,20 @@ export async function bootstrap(password = "test-password-123", setupToken = TES
 	return { cookie: response.cookie, credential, kdfSalt };
 }
 
+/**
+ * 用密码换会话（默认与 bootstrap 相同的密码）。
+ * 返回的是"这次登录请求本身"的响应，所以错误密码会得到 4xx 且没有 cookie ——
+ * 测试里常要断言"密码错了就还是访客"。
+ */
+export async function login(password = "test-password-123") {
+	const params = await call<{ ok: boolean; data: { kdfSalt: string; iterations: number } }>("/api/auth/params");
+	const credential = await deriveCredential(password, params.body.data.kdfSalt, params.body.data.iterations);
+	return await call<{ ok: boolean }>("/api/auth/login", {
+		method: "POST",
+		body: JSON.stringify({ credential }),
+	});
+}
+
 export async function clearAll(): Promise<void> {
 	await env.DB.batch([
 		env.DB.prepare("DELETE FROM sessions"),

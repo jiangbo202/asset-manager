@@ -48,7 +48,14 @@ function Skeleton() {
 	);
 }
 
-export function DashboardPage() {
+/**
+ * 总览页。
+ *
+ * readOnly = 「公开只读分享」下的匿名访客视图：数据照样显示，但凡是有副作用或
+ * 需要登录的入口（刷新行情、去改价、去设置、空状态的新增引导）一律不渲染 ——
+ * 只是藏起来，服务端那三道白名单才是真正的边界。
+ */
+export function DashboardPage({ readOnly = false }: { readOnly?: boolean } = {}) {
 	const t = useT();
 	const { query, setQuery, navigate } = useRouter();
 
@@ -221,9 +228,11 @@ export function DashboardPage() {
 			{data.missingFxCurrencies.length > 0 && (
 				<div className="alert">
 					{t("dashboard.missingFxAlert", { currencies: data.missingFxCurrencies.join(", ") })}
-					<button className="ghost" onClick={() => navigate("/settings")}>
-						{t("dashboard.goSettings")}
-					</button>
+					{!readOnly && (
+						<button className="ghost" onClick={() => navigate("/settings")}>
+							{t("dashboard.goSettings")}
+						</button>
+					)}
 				</div>
 			)}
 
@@ -237,9 +246,11 @@ export function DashboardPage() {
 							.join(", "),
 						more: stale.length > 5 ? t("dashboard.staleMore") : "",
 					})}
-					<button className="ghost" onClick={() => navigate("/holdings")}>
-						{t("dashboard.goBulkUpdate")}
-					</button>
+					{!readOnly && (
+						<button className="ghost" onClick={() => navigate("/holdings")}>
+							{t("dashboard.goBulkUpdate")}
+						</button>
+					)}
 				</div>
 			)}
 
@@ -302,9 +313,11 @@ export function DashboardPage() {
 					</div>
 					<div className="spacer" />
 					{refreshNote && <span className="small muted hide-sm">{refreshNote}</span>}
-					<button onClick={refreshQuotes} disabled={refreshing}>
-						{refreshing ? t("dashboard.refreshing") : t("dashboard.refreshQuotes")}
-					</button>
+					{!readOnly && (
+						<button onClick={refreshQuotes} disabled={refreshing}>
+							{refreshing ? t("dashboard.refreshing") : t("dashboard.refreshQuotes")}
+						</button>
+					)}
 				</div>
 				<div className="card panel">
 					{trend.error ? (
@@ -410,7 +423,8 @@ export function DashboardPage() {
 								</button>
 							</>
 						) : (
-							t("dashboard.emptyCta")
+							// 访客没法新增持仓，给他一句"还没有数据"就行，别引导他去点一个进不去的页面
+							t(readOnly ? "dashboard.emptyPublic" : "dashboard.emptyCta")
 						)}
 					</div>
 				) : (

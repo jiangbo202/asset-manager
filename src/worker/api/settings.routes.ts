@@ -7,6 +7,7 @@ import {
 	BUILT_IN_CURRENCIES,
 	getSettings,
 	SETTING_DISPLAY_CURRENCY,
+	SETTING_PUBLIC_VIEW,
 	SETTING_TIMEZONE,
 	setSetting,
 	settingsStatement,
@@ -121,6 +122,11 @@ settings.put("/", async (c) => {
 	}
 	if (payload.marketDataEnabled !== undefined) {
 		await setSetting(c.env.DB, "market_data_enabled", payload.marketDataEnabled ? "1" : "0");
+	}
+	// 公开只读分享：只能由已登录的本人开关（本路由整体在 requireAuthOrPublicRead 之后，
+	// 且 PUT 不在白名单里，所以匿名请求到不了这里）
+	if (payload.publicView !== undefined) {
+		await setSetting(c.env.DB, SETTING_PUBLIC_VIEW, payload.publicView ? "1" : "0");
 	}
 
 	// 数据源开关 + 自定义源配置

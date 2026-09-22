@@ -2,7 +2,7 @@ import { Hono } from "hono";
 import type { AppEnv } from "../types";
 import { ApiError, badRequest, conflict, ok, unauthorized } from "../core/errors";
 import { writeAudit } from "../core/audit";
-import { getSetting, getSettings, setSetting, SETTING_DISPLAY_CURRENCY } from "../data/settings.repo";
+import { getSetting, getSettings, publicViewOf, setSetting, SETTING_DISPLAY_CURRENCY } from "../data/settings.repo";
 import { SCHEMA_VERSION } from "../../shared/version";
 import { normalizeTimeZone } from "../../shared/time";
 import { getAuth, insertAuthIfAbsent, isInitialized, touchLastLogin, updateCredential } from "../data/auth.repo";
@@ -89,6 +89,8 @@ auth.get("/me", async (c) => {
 	const migrationRequired = schemaVersion < SCHEMA_VERSION;
 	const language = settings.language ?? "auto";
 	const timezone = normalizeTimeZone(settings.timezone);
+	// 公开只读分享开关（设置已经读出来了，零额外查询）：前端据此决定进"只读总览"还是登录页
+	const publicView = publicViewOf(settings);
 
 	return ok(c, {
 		initialized,
@@ -101,6 +103,7 @@ auth.get("/me", async (c) => {
 		migrationRequired,
 		language,
 		timezone,
+		publicView,
 	});
 });
 
@@ -191,6 +194,9 @@ auth.post("/logout", async (c) => {
 });
 
 auth.post("/logout-all", async (c) => {
+	// 必须已登录：这是"把所有会话踢下线"，不校验的话任何知道地址的人都
+	// 能反复把本人登出（拒绝服务），而且还会在审计里留下误导性的记录。
+	if (!c.get("session")) throw unauthorized();
 	const t = tOf(c);
 	const count = await revokeAllSessions(c);
 	clearSessionCookie(c);

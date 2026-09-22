@@ -308,6 +308,11 @@ export interface AuthMeDto {
 	language: string;
 	/** 服务端保存的时区（IANA 名称） */
 	timezone: string;
+	/**
+	 * 「公开只读分享」是否开启（默认关闭）。
+	 * 为 true 且 authenticated 为 false 时，前端进入只读总览而不是登录页。
+	 */
+	publicView: boolean;
 }
 
 export interface OverviewDto {

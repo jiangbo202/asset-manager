@@ -240,6 +240,17 @@ lookup.ts      代码查询（输入代码 → 名称/价格/币种/市场）
 - `src/shared/time.ts` 基于 `Intl.DateTimeFormat` 实现 `dateIn` / `hourIn` / `offsetMinutes` / `zonedDayRange`
 - 影响面：快照日期与 Cron 闸门、价格历史生效日期、历史筛选边界、界面时间展示
 
+### 6.8 公开只读分享的放行方式
+
+`api/index.ts` 上只挂一个 `requireAuthOrPublicRead`（`api/middleware.ts`），判定顺序：
+
+1. 有会话 → 等同 `requireAuth`（本人权限与开关无关）
+2. 无会话 → `PUBLIC_READ_ROUTES`（`"GET /api/portfolio"` 这样的 method+path 精确串）里**且**开关为开
+3. 其余 → 401
+
+要点：白名单是常量表、集中在中间件里（评审一眼看完）；非白名单的路径**不会**去读开关
+（省掉一次 D1 查询）；被放行的请求带 `publicViewer` 标记，路由据此脱敏。
+
 ## 7. 测试策略
 
 | 层次 | 位置 | 做法 |

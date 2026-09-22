@@ -109,6 +109,12 @@ trademark issues. Accounts without an icon get a colour derived from their name.
 - Backup: export JSON (optionally with history, optionally encrypted with a passphrase); imports are fully
   validated and **diffed before anything is written**, in either merge or replace mode
 
+**Sharing**
+
+- **Public read-only link** (off by default): turn it on and anyone with the link can see the overview
+  without a password; a sign-in button sits in the top bar. Visitors cannot see account notes,
+  history, settings or backups, and cannot refresh quotes. Turn it off and the link shows the sign-in page again.
+
 **Other**
 
 - Multi-currency with a switchable display currency — holdings missing an FX rate are clearly marked
@@ -318,6 +324,11 @@ The API token is missing or lacks permission. It needs **Workers Scripts: Edit +
 The activity history gets entries with source `system`: “刷新行情…” for the scheduled quote refresh, and
 “定时快照…” / “补拍当日快照…” for snapshots. The Quotes & snapshots card in Settings also shows the
 **last quote refresh** and the **next scheduled run**.
+
+**How do I share it with someone?**
+Settings → “Public read-only link”, switch it on and send the URL shown there. Visitors see the overview only
+(total, breakdowns, treemap, trend, holdings table) with a “Read-only” badge and a sign-in button. Turn the
+switch off and the same URL shows the sign-in page.
 
 **Why did prices not update?**
 Quotes refresh once a day, at the hour configured under Settings → Quotes & snapshots (22:00 by default, in your

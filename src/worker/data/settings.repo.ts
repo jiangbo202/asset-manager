@@ -6,6 +6,8 @@ export const SETTING_SNAPSHOT_HOUR = "snapshot_hour_utc";
 export const SETTING_MARKET_DATA = "market_data_enabled";
 export const SETTING_TIMEZONE = "timezone";
 export const SETTING_SETUP_DONE = "setup_done_at";
+/** 公开只读分享开关（"1" 开启）：开启后未登录也能看总览，见 api/middleware.ts */
+export const SETTING_PUBLIC_VIEW = "public_view";
 
 /** 内置币种（PRD D13：内置三种，用户可自行添加其他） */
 export const BUILT_IN_CURRENCIES = ["USD", "HKD", "CNY"] as const;
@@ -61,6 +63,16 @@ export function timeZoneOf(settings: Record<string, string>): string {
 export function snapshotHourOf(settings: Record<string, string>): number {
 	const parsed = Number.parseInt(settings[SETTING_SNAPSHOT_HOUR] ?? "", 10);
 	return Number.isInteger(parsed) && parsed >= 0 && parsed <= 23 ? parsed : 22;
+}
+
+/**
+ * 公开只读分享是否开启。
+ *
+ * 默认**必须**是关闭：这是唯一一个让数据在没有密码的情况下可见的开关，
+ * 缺值、脏值、读不到设置时都当关闭处理（fail-closed）。
+ */
+export function publicViewOf(settings: Record<string, string>): boolean {
+	return settings[SETTING_PUBLIC_VIEW] === "1";
 }
 
 /** 显示币种；缺失时回退 USD */

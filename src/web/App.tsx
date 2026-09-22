@@ -69,6 +69,54 @@ function Shell({ onAuthChanged }: { onAuthChanged: () => void }) {
 	);
 }
 
+/**
+ * 「公开只读分享」下匿名访客看到的外壳
+ *
+ * 只挂总览一个入口，右上角是登录按钮（必须输密码才会真的进来）。
+ * 这里只是不渲染入口，真正的边界在服务端：middleware.ts 的 PUBLIC_READ_ROUTES 白名单，
+ * 其余接口对匿名一律 401 —— 就算有人在地址栏手敲 /settings 也只会看到登录页。
+ */
+function PublicShell({ onAuthChanged }: { onAuthChanged: () => void }) {
+	const { path, navigate } = useRouter();
+	const t = useT();
+
+	// 访客只有总览和登录两处可去：手敲 /settings 之类不会被"顺路"渲染出别的东西，
+	// 直接按回总览（服务端那些接口对匿名本来也是 401）。
+	useEffect(() => {
+		if (path === "/" || path.startsWith("/login")) return;
+		navigate("/", { replace: true });
+	}, [path, navigate]);
+
+	if (path.startsWith("/login")) {
+		return (
+			<LoginPage
+				onDone={() => {
+					onAuthChanged();
+					// 登录成功后回到总览（此时已拿到完整权限）
+					navigate("/", { replace: true });
+				}}
+			/>
+		);
+	}
+
+	return (
+		<div className="app-shell">
+			<div className="topbar">
+				<span className="brand">{t("app.name")}</span>
+				<span className="badge-readonly">{t("public.readonly")}</span>
+				<nav className="nav">
+					<Link to="/">{t("nav.overview")}</Link>
+				</nav>
+				<div className="spacer" />
+				<nav className="nav">
+					<Link to="/login">{t("public.login")}</Link>
+				</nav>
+			</div>
+			<DashboardPage readOnly />
+		</div>
+	);
+}
+
 function Gate() {
 	const me = useAsync<AuthMeDto>(() => api.auth.me(), []);
 	const t = useT();
@@ -137,7 +185,11 @@ function Gate() {
 	}
 
 	if (!me.data.initialized) return <SetupPage onDone={refresh} />;
-	if (!me.data.authenticated) return <LoginPage onDone={refresh} />;
+	// 未登录：开关开着就给只读总览（右上角可登录），关着就是原来的登录页
+	if (!me.data.authenticated) {
+		if (me.data.publicView) return <PublicShell onAuthChanged={refresh} />;
+		return <LoginPage onDone={refresh} />;
+	}
 	if (me.data.mustChange)
 		return (
 			<Suspense fallback={<PageLoading />}>

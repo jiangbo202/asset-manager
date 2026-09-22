@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import type { AppEnv } from "../types";
-import { requireAuth, requireInitialized } from "./middleware";
+import { requireAuthOrPublicRead, requireInitialized } from "./middleware";
 import authRoutes from "./auth.routes";
 import accountsRoutes from "./accounts.routes";
 import holdingsRoutes from "./holdings.routes";
@@ -16,9 +16,10 @@ const api = new Hono<AppEnv>();
 api.route("/auth", authRoutes);
 
 // 其余接口：先要求已初始化，再要求已登录
+// （requireAuthOrPublicRead = 登录检查 + 「公开只读分享」白名单放行，见 middleware.ts）
 const guarded = new Hono<AppEnv>();
 guarded.use("*", requireInitialized);
-guarded.use("*", requireAuth);
+guarded.use("*", requireAuthOrPublicRead);
 guarded.route("/accounts", accountsRoutes);
 guarded.route("/holdings", holdingsRoutes);
 guarded.route("/portfolio", portfolioRoutes);

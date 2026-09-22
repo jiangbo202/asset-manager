@@ -25,6 +25,9 @@ export function SettingsPage({ onChanged }: { onChanged?: () => void }) {
 	const pwd = useSubmit();
 	const language = useSubmit();
 
+	const publicView = useSubmit();
+	const [copied, setCopied] = useState(false);
+
 	const [timeZoneInput, setTimeZoneInput] = useState("");
 	const timezoneSave = useSubmit();
 	const [oldPassword, setOldPassword] = useState("");
@@ -63,6 +66,25 @@ export function SettingsPage({ onChanged }: { onChanged?: () => void }) {
 			settings.reload();
 			onChanged?.();
 		});
+	};
+
+	const shareUrl = typeof location === "undefined" ? "" : location.origin;
+
+	const togglePublicView = async (next: boolean) => {
+		await publicView.run(async () => {
+			await api.settings.update({ publicView: next });
+			settings.reload();
+		});
+	};
+
+	const copyShareUrl = async () => {
+		try {
+			await navigator.clipboard.writeText(shareUrl);
+		} catch {
+			// 非 https 或未授权剪贴板：至少把链接显示出来让用户手抄
+		}
+		setCopied(true);
+		setTimeout(() => setCopied(false), 1800);
 	};
 
 	const changeTimeZone = async () => {
@@ -311,6 +333,38 @@ export function SettingsPage({ onChanged }: { onChanged?: () => void }) {
 					<p className="small muted" style={{ marginBottom: 0 }}>
 						{t("settings.priceSource")}
 					</p>
+				</div>
+
+				<div className="card panel">
+					<h3 style={{ marginTop: 0, fontSize: 14 }}>{t("settings.publicView")}</h3>
+					<p className="small muted">{t("settings.publicViewHint")}</p>
+					{publicView.error && <div className="alert error">{publicView.error}</div>}
+					<label className="switch-row">
+						<input
+							type="checkbox"
+							checked={values.public_view === "1"}
+							disabled={publicView.pending}
+							onChange={(e) => void togglePublicView(e.target.checked)}
+						/>
+						<span>{values.public_view === "1" ? t("settings.publicViewOn") : t("settings.publicViewOff")}</span>
+					</label>
+					{values.public_view === "1" ? (
+						<>
+							<div className="share-url">
+								<code>{shareUrl}</code>
+								<button className="ghost" onClick={() => void copyShareUrl()}>
+									{copied ? t("settings.copied") : t("settings.copyLink")}
+								</button>
+							</div>
+							<p className="small muted" style={{ marginBottom: 0 }}>
+								{t("settings.publicViewWarn")}
+							</p>
+						</>
+					) : (
+						<p className="small muted" style={{ marginBottom: 0 }}>
+							{t("settings.publicViewOffHint")}
+						</p>
+					)}
 				</div>
 			</div>
 

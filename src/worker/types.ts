@@ -79,5 +79,10 @@ export interface AppEnv {
 		auth: AuthRow | null;
 		/** 请求语言（由 Accept-Language 判定），用于把提示文案本地化 */
 		lang: "zh" | "en";
+		/**
+		 * 匿名访客（「公开只读分享」开启时被放行）。路由用它做脱敏，
+		 * 例如账户备注不该出现在公开视图里。
+		 */
+		publicViewer?: boolean;
 	};
 }

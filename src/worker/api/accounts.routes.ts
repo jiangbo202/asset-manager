@@ -18,7 +18,10 @@ const accounts = new Hono<AppEnv>();
 
 accounts.get("/", async (c) => {
 	const includeArchived = c.req.query("includeArchived") === "true";
-	return ok(c, { items: await listAccounts(c.env.DB, includeArchived) });
+	const items = await listAccounts(c.env.DB, includeArchived);
+	// 匿名访客（公开只读分享）：只给总览需要的账户名/图标，备注属于私人内容
+	if (c.get("publicViewer")) return ok(c, { items: items.map((item) => ({ ...item, note: null })) });
+	return ok(c, { items });
 });
 
 accounts.post("/", async (c) => {

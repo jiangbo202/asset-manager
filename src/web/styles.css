@@ -138,6 +138,45 @@ tr.row-editing {
 	flex-wrap: wrap;
 }
 
+/* 设置页：公开只读分享的开关与分享链接 */
+.switch-row {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	cursor: pointer;
+	font-weight: 500;
+}
+
+.share-url {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	margin: 10px 0 6px;
+	padding: 8px 10px;
+	border: 1px solid var(--border);
+	border-radius: 8px;
+	background: var(--surface-2);
+	overflow: hidden;
+}
+
+.share-url code {
+	flex: 1;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+/* 「公开只读分享」下给访客的小标签：让他知道这不是完整界面，右上角能登录 */
+.badge-readonly {
+	align-self: center;
+	padding: 3px 10px;
+	border-radius: 999px;
+	background: var(--accent-weak);
+	color: var(--accent);
+	font-size: 12px;
+	font-weight: 500;
+}
+
 .nav a {
 	padding: 6px 12px;
 	border-radius: 999px;
