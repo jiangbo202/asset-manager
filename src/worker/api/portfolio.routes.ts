@@ -120,7 +120,7 @@ portfolio.post("/snapshots", async (c) => {
 		entityId: result.date,
 		action: "create",
 		after: { date: result.date, total: result.total, currency: result.currency, holdings: result.holdings },
-		source: "system",
+		source: "web",
 		note: t("audit.snapshot", { currency: result.currency, total: result.total }),
 	});
 	return ok(c, result);
@@ -132,7 +132,7 @@ portfolio.delete("/snapshots/:date", async (c) => {
 	if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) throw badRequest(t("error.dateFormat"));
 	const deleted = await deleteSnapshot(c.env.DB, date);
 	if (!deleted) throw badRequest(t("error.noSnapshot"));
-	await writeAudit(c.env.DB, { entity: "snapshot", entityId: date, action: "delete", source: "system" });
+	await writeAudit(c.env.DB, { entity: "snapshot", entityId: date, action: "delete", source: "web" });
 	return ok(c, { deleted: true });
 });
 

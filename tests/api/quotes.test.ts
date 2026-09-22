@@ -35,6 +35,11 @@ const providerStubs = fakeFetch([
 	},
 ]);
 
+const latestAudit = async (entity: string) =>
+	await env.DB.prepare(`SELECT source, note FROM audit_log WHERE entity = ? ORDER BY ts DESC LIMIT 1`)
+		.bind(entity)
+		.first<{ source: string; note: string | null }>();
+
 describe("v0.10 行情刷新 / 快照 / 走势", () => {
 	let cookie: string;
 
@@ -100,6 +105,11 @@ describe("v0.10 行情刷新 / 快照 / 走势", () => {
 
 		const report = await refreshQuotes(env, { trigger: "manual", fetcher: providerStubs });
 		expect(report.updated).toBe(2);
+
+		// 手动刷新要留痕，且来源是 web（用户点的），不是 system
+		const audit = await latestAudit("quotes");
+		expect(audit?.source).toBe("web");
+		expect(audit?.note ?? "").toContain("刷新行情");
 		expect(report.fxUpdated).toBe(1);
 		expect(report.sources.coingecko).toBe(1);
 		expect(report.sources.yahoo).toBe(1);
@@ -241,10 +251,21 @@ describe("v0.10 行情刷新 / 快照 / 走势", () => {
 		expect(refreshed.reason).toContain("快照");
 		expect(refreshed.snapshot).toBeUndefined();
 
+		// 定时刷新也要写操作历史 —— 之前只有手动刷新写，定时任务悄无声息，
+		// 用户看到"凌晨 5 点没有记录"根本无从判断是没跑还是没记
+		const refreshAudit = await latestAudit("quotes");
+		expect(refreshAudit?.source).toBe("system");
+		expect(refreshAudit?.note ?? "").toContain("刷新行情");
+
 		// 下一个整点：行情当天已刷过 → 拍快照
 		const snapshot = await handleCron(env, at(23), { fetcher: providerStubs });
 		expect(snapshot.ran).toBe(true);
 		expect(snapshot.snapshot?.date).toBe(now.toISOString().slice(0, 10));
+
+		// 定时拍的快照同样留痕，来源是 system
+		const snapshotAudit = await latestAudit("snapshot");
+		expect(snapshotAudit?.source).toBe("system");
+		expect(snapshotAudit?.note ?? "").toContain("快照");
 
 		const second = await handleCron(env, at(23), { fetcher: providerStubs });
 		expect(second.ran).toBe(false);

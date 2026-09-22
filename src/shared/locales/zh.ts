@@ -612,6 +612,8 @@ const zh: Dict = {
 	"audit.importModeMerge": "合并导入",
 	"audit.importModeReplace": "覆盖导入",
 	"audit.refreshQuotes": "刷新行情：{{updated}} 条价格、{{fxUpdated}} 条汇率、{{failed}} 条失败",
+	"audit.snapshotAuto": "定时快照（{{currency}} {{total}}）",
+	"audit.snapshotCatchUp": "补拍当日快照（{{currency}} {{total}}）",
 	"audit.snapshot": "手动生成快照（{{currency}} {{total}}）",
 
 	// ── 错误页面（Worker 兜底） ──────────────────────────────

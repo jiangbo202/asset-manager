@@ -1,7 +1,6 @@
 import { Hono } from "hono";
 import type { AppEnv } from "../types";
 import { badRequest, ok } from "../core/errors";
-import { writeAudit } from "../core/audit";
 import { getQuoteStatus, refreshQuotes } from "../services/quotes";
 import { parseProviderSettings, runAdapter, type ProviderId, type QuoteKind, type QuoteTarget } from "../services/quotes/providers";
 import { lookupSymbol } from "../services/quotes/lookup";
@@ -15,26 +14,9 @@ const quotes = new Hono<AppEnv>();
 /** 手动刷新行情（设置页按钮 / 总览页按钮） */
 quotes.post("/refresh", async (c) => {
 	const t = tOf(c);
+	// 审计由 refreshQuotes 自己写（source 按 trigger 区分 web / system），
+	// 这样手动与定时两条路径不会漏记、也不会各写一份
 	const report = await refreshQuotes(c.env, { trigger: "manual", t });
-
-	await writeAudit(c.env.DB, {
-		entity: "quotes",
-		entityId: null,
-		action: "update",
-		after: {
-			updated: report.updated,
-			fxUpdated: report.fxUpdated,
-			requests: report.requests,
-			failed: report.failed.length,
-		},
-		source: "system",
-		note: t("audit.refreshQuotes", {
-			updated: report.updated,
-			fxUpdated: report.fxUpdated,
-			failed: report.failed.length,
-		}),
-	});
-
 	return ok(c, { report });
 });
 

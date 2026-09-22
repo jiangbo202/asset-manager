@@ -314,6 +314,11 @@ The schema is behind the code. Run `npm run db:migrate:local` (local) or `npm ru
 The API token is missing or lacks permission. It needs **Workers Scripts: Edit + D1: Edit**, or use
 `npx wrangler login` instead.
 
+**How do I confirm the scheduled job actually ran?**
+The activity history gets entries with source `system`: “刷新行情…” for the scheduled quote refresh, and
+“定时快照…” / “补拍当日快照…” for snapshots. The Quotes & snapshots card in Settings also shows the
+**last quote refresh** and the **next scheduled run**.
+
 **Why did prices not update?**
 Quotes refresh once a day, at the hour configured under Settings → Quotes & snapshots (22:00 by default, in your
 time zone). Press “Refresh quotes” to update immediately.

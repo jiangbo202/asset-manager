@@ -1,4 +1,6 @@
 import type { Env } from "../types";
+import { writeAudit } from "../core/audit";
+import { translator as sharedTranslator } from "../core/i18n";
 import { getSettings, snapshotHourOf, timeZoneOf } from "../data/settings.repo";
 import { dateIn, hourIn } from "../../shared/time";
 import { refreshQuotes } from "./quotes";
@@ -60,6 +62,8 @@ export async function handleCron(
 ): Promise<CronResult> {
 	// 一次读出全部设置（早先是两次 getSetting = 两次往返）
 	const settings = await getSettings(env.DB);
+	// 自动运行的审计记事也跟着用户设置的语言走，免得英文用户的历史里冒出中文
+	const t = sharedTranslator(settings.language ?? "zh");
 	const snapshotHour = snapshotHourOf(settings);
 	const timeZone = timeZoneOf(settings);
 	const localHour = hourIn(timeZone, now);
@@ -116,6 +120,25 @@ export async function handleCron(
 	/* ── 阶段二：拍当日快照（包含过了点没拍成的补拍） ── */
 	const catchUp = localHour > snapshotHour;
 	const snapshot = await takeSnapshot(env.DB, { date: today });
+	// 定时拍的快照同样要留痕：否则"自动快照到底有没有拍"没法查（只有手动按钮写审计）
+	if (snapshot.created) {
+		await writeAudit(env.DB, {
+			entity: "snapshot",
+			entityId: snapshot.date,
+			action: "create",
+			after: {
+				date: snapshot.date,
+				total: snapshot.total,
+				currency: snapshot.currency,
+				holdings: snapshot.holdings,
+			},
+			source: "system",
+			note: t(catchUp ? "audit.snapshotCatchUp" : "audit.snapshotAuto", {
+				currency: snapshot.currency,
+				total: snapshot.total,
+			}),
+		});
+	}
 	return {
 		ran: true,
 		reason: catchUp ? "已补拍当日快照" : "已生成当日快照",

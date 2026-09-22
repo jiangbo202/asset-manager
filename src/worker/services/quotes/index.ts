@@ -382,6 +382,40 @@ export async function refreshQuotes(
 	}
 
 	report.finishedAt = nowIso();
+	// 审计：自动（Cron）与手动都要留痕，用户才能回答"凌晨 5 点那次到底跑没跑"。
+	// 之前只有手动接口写审计，定时任务悄无声息 —— 出问题时无从查证。
+	// 语句直接并进下面这个 batch，不额外多一次往返。
+	const auditT = options.t ?? sharedTranslator(settingsMap.language ?? "zh");
+	statements.push(
+		db
+			.prepare(
+				`INSERT INTO audit_log (id, ts, actor, entity, entity_id, action, before_json, after_json, source, note)
+				 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			)
+			.bind(
+				newId(),
+				report.finishedAt,
+				"owner",
+				"quotes",
+				null,
+				"update",
+				null,
+				JSON.stringify({
+					trigger: report.trigger,
+					updated: report.updated,
+					fxUpdated: report.fxUpdated,
+					requests: report.requests,
+					failed: report.failed.length,
+				}),
+				report.trigger === "cron" ? "system" : "web",
+				auditT("audit.refreshQuotes", {
+					updated: report.updated,
+					fxUpdated: report.fxUpdated,
+					failed: report.failed.length,
+				}),
+			),
+	);
+
 	// 收尾的 3 次写和上面的价格写入合成一次 batch：
 	// 实测一次往返约等于 5–6 条语句的固定开销，所以能合并就合并。
 	// 代价：这个 batch 是事务性的，写入失败时运行记录也不会落库（日志里仍看得到异常）。

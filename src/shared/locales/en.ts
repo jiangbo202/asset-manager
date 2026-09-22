@@ -612,6 +612,8 @@ const en: Dict = {
 	"audit.importModeMerge": "Merged",
 	"audit.importModeReplace": "Replaced with",
 	"audit.refreshQuotes": "Quote refresh: {{updated}} prices, {{fxUpdated}} FX rates, {{failed}} failures",
+	"audit.snapshotAuto": "Scheduled snapshot ({{currency}} {{total}})",
+	"audit.snapshotCatchUp": "Catch-up snapshot for the day ({{currency}} {{total}})",
 	"audit.snapshot": "Manual snapshot ({{currency}} {{total}})",
 
 	// ── Worker fallbacks ────────────────────────────────────
