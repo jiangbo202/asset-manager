@@ -95,6 +95,8 @@ export interface Portfolio {
 	holdings: PortfolioHolding[];
 	missingFxCurrencies: string[];
 	staleDays: number | null;
+	/** 非现金持仓里价格超过 1 天未更新的条数 */
+	staleCount: number;
 	generatedAt: string;
 }
 

@@ -8,6 +8,12 @@ interface Envelope<T> {
 	data: T;
 }
 
+/** 把某条持仓的价格更新时间往前挪几天（模拟"很久没更新"） */
+const backdate = async (id: string, days: number) =>
+	await env.DB.prepare(`UPDATE holdings SET price_updated_at = ? WHERE id = ?`)
+		.bind(new Date(Date.now() - days * 86_400_000).toISOString(), id)
+		.run();
+
 describe("账户 / 持仓 / 组合视图", () => {
 	let cookie: string;
 
@@ -299,5 +305,34 @@ describe("账户 / 持仓 / 组合视图", () => {
 			{ cookie },
 		);
 		expect(today.body.data.total).toBeGreaterThan(0);
+	});
+
+	it("价格新鲜度不把现金算进去（现金永不更新，否则卡片只会越来越旧）", async () => {
+		const account = await createAccount();
+		const stock = await createHolding(account.id, {});
+		const cash = await createHolding(account.id, { class: "cash", symbol: null, name: "现金", qty: 500, price: 1, avgCost: null });
+
+		// 两条都"3 天没更新"：只有股票那条算数
+		await backdate(stock.id, 3);
+		await backdate(cash.id, 3);
+		const old = await call<Envelope<Portfolio>>("/api/portfolio", { cookie });
+		expect(old.body.data.staleDays).toBe(3);
+		expect(old.body.data.staleCount).toBe(1);
+
+		// 股票更新到今天 → 归零；现金仍然是 3 天前，但不该把卡片拖住
+		await backdate(stock.id, 0);
+		const fresh = await call<Envelope<Portfolio>>("/api/portfolio", { cookie });
+		expect(fresh.body.data.staleDays).toBe(0);
+		expect(fresh.body.data.staleCount).toBe(0);
+	});
+
+	it("只有现金时新鲜度是 null（界面显示 —），不是 0 也不是很大的数", async () => {
+		const account = await createAccount();
+		const cash = await createHolding(account.id, { class: "cash", symbol: null, name: "现金", qty: 500, price: 1, avgCost: null });
+		await backdate(cash.id, 30);
+
+		const portfolio = await call<Envelope<Portfolio>>("/api/portfolio", { cookie });
+		expect(portfolio.body.data.staleDays).toBeNull();
+		expect(portfolio.body.data.staleCount).toBe(0);
 	});
 });

@@ -134,6 +134,7 @@ const zh: Dict = {
 	"dashboard.filtered": " · 已筛选",
 	"dashboard.avgCostHint": "按平均成本法，已折算到 {{currency}}",
 	"dashboard.pnlMissing": " · {{count}} 条未填成本",
+	"dashboard.staleHintCount": "{{count}} 条超过 1 天未更新（现金不计）",
 	"dashboard.staleHint": "最久未更新的价格（手动录入或自动抓取）",
 	"dashboard.missingFxAlert": "以下币种缺少汇率，相关持仓未计入总额：{{currencies}}。",
 	"dashboard.goSettings": "去设置汇率",

@@ -134,6 +134,7 @@ const en: Dict = {
 	"dashboard.filtered": " · filtered",
 	"dashboard.avgCostHint": "Average cost basis, converted to {{currency}}",
 	"dashboard.pnlMissing": " · {{count}} without cost",
+	"dashboard.staleHintCount": "{{count}} holdings older than a day (cash excluded)",
 	"dashboard.staleHint": "Oldest price update (manual or fetched)",
 	"dashboard.missingFxAlert": "These currencies have no FX rate, so their holdings are excluded from the total: {{currencies}}.",
 	"dashboard.goSettings": "Add FX rate",

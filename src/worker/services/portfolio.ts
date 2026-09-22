@@ -54,6 +54,8 @@ export interface Portfolio {
 	holdings: PortfolioHolding[];
 	missingFxCurrencies: string[];
 	staleDays: number | null;
+	/** 非现金持仓里，价格超过 1 天没更新的条数（新鲜度卡片用来说明"是哪些没更新"） */
+	staleCount: number;
 	generatedAt: string;
 }
 
@@ -135,9 +137,16 @@ export function buildPortfolio(
 			.sort((a, b) => b.value - a.value);
 	};
 
+	// 现金没有行情可更新（价格恒为 1、也不在任何报价源里），
+	// 把它算进来的话这张卡片只会随着时间越来越大 —— 用户刚点完「更新行情」却看到"1 天"。
+	// 这里同时数一下"确实陈旧"的条数，界面才能给出可操作的信息。
 	const stale = items
+		.filter((item) => !item.isCash)
 		.map((item) => item.daysSincePriceUpdate)
 		.filter((value): value is number => value !== null);
+	const staleCount = items.filter(
+		(item) => !item.isCash && item.daysSincePriceUpdate !== null && item.daysSincePriceUpdate >= 1,
+	).length;
 
 	return {
 		displayCurrency,
@@ -162,6 +171,7 @@ export function buildPortfolio(
 		holdings: items.sort((a, b) => (b.marketValueDisplay ?? -1) - (a.marketValueDisplay ?? -1)),
 		missingFxCurrencies: [...missing].sort(),
 		staleDays: stale.length > 0 ? Math.max(...stale) : null,
+		staleCount,
 		generatedAt: new Date().toISOString(),
 	};
 }

@@ -268,7 +268,11 @@ export function DashboardPage() {
 					<div className={`value ${data.staleDays !== null && data.staleDays > 7 ? "negative" : ""}`}>
 						{data.staleDays === null ? "—" : t("dashboard.freshnessDays", { days: data.staleDays })}
 					</div>
-					<div className="hint">{t("dashboard.staleHint")}</div>
+					<div className="hint">
+						{data.staleCount > 0
+							? t("dashboard.staleHintCount", { count: data.staleCount })
+							: t("dashboard.staleHint")}
+					</div>
 				</div>
 			</div>
 
