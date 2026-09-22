@@ -200,6 +200,7 @@ const zh: Dict = {
 	"holdings.createSubmit": "创建持仓",
 	"holdings.candidatesHint": "其它匹配结果（点一下替换）：",
 	"holdings.lookupCached": "（缓存）",
+	"holdings.lookupKeptName": "（名称保留了你填的值）",
 	"holdings.lookupMatched": "已从 {{source}} 匹配：{{name}}{{price}}",
 	"holdings.lookupPrice": "，最新价 {{price}} {{currency}}",
 	"holdings.lookupRateLimited": "行情接口暂时被限流，稍后再试（或到设置页换一个数据源）",

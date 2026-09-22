@@ -200,6 +200,7 @@ const en: Dict = {
 	"holdings.createSubmit": "Create holding",
 	"holdings.candidatesHint": "Other matches (click to use):",
 	"holdings.lookupCached": "(cached) ",
+	"holdings.lookupKeptName": " (your custom name was kept)",
 	"holdings.lookupMatched": "Matched via {{source}}: {{name}}{{price}}",
 	"holdings.lookupPrice": ", latest price {{price}} {{currency}}",
 	"holdings.lookupRateLimited": "The quote API is rate limited right now — try again later or switch provider in Settings",

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { api, type AccountDto, type HoldingListDto, type LookupCandidate } from "../lib/api";
 import { useAsync, useSubmit } from "../lib/useAsync";
+import { shouldFillNameFromLookup, symbolsEqual } from "../lib/holdings";
 import { BrandIcon } from "../lib/icons";
 import { useT } from "../lib/i18n";
 import { money, number, relativeDays, stalenessClass } from "../lib/format";
@@ -84,6 +85,10 @@ export function HoldingsPage() {
 	// 表单在列表上方：列表一长，从下面的行点「编辑」屏幕上什么都没有变化，
 	// 看起来就像"点了没反应"。所以每次打开/切换表单都滚过去并高亮一下。
 	const formRef = useRef<HTMLFormElement | null>(null);
+	/** 当前「名称」属于哪个代码：换了代码它就成了陈旧值（见 lib/holdings.ts 的两次踩坑记录） */
+	const nameOwnerRef = useRef<string>("");
+	/** 用户是否手动改过名称框：改过就不覆盖他的意图 */
+	const nameTouchedRef = useRef(false);
 	const [formAttention, setFormAttention] = useState(0);
 	const focusForm = () => setFormAttention((value) => value + 1);
 
@@ -177,12 +182,16 @@ export function HoldingsPage() {
 		const first = accountList[0];
 		setEditingId(null);
 		setForm(emptyForm(first.id, first.currency));
+		nameOwnerRef.current = "";
+		nameTouchedRef.current = false;
 		focusForm();
 	};
 
 	const startEdit = (holding: HoldingListDto) => {
 		focusForm();
 		setEditingId(holding.id);
+		nameOwnerRef.current = holding.symbol ?? "";
+		nameTouchedRef.current = false;
 		setForm({
 			accountId: holding.account_id,
 			class: holding.class,
@@ -211,6 +220,7 @@ export function HoldingsPage() {
 			return;
 		}
 		setLookup({ loading: true, message: null, error: null, candidates: [] });
+		let keptCustomName = false;
 		try {
 			const result = await api.quotes.lookup({
 				symbol,
@@ -232,21 +242,33 @@ export function HoldingsPage() {
 
 			const best = result.candidates[0];
 			const patch: Partial<FormState> = {};
-			// "名称"里出现代码本身时，那只是占位值（查询没搜到正式名称），不能当成名字：
-			// 既不要填进表单，也要允许后续查询把它纠正过来
-			const codeLike = (value: string) => {
-				const upper = value.trim().toUpperCase();
-				return [symbol, best.symbol ?? "", (best.symbol ?? "").replace(/\.[A-Z]+$/i, "")].some(
-					(candidate) => candidate.trim() !== "" && candidate.trim().toUpperCase() === upper,
-				);
-			};
-			// 名称只在为空、或当前值只是代码时自动填，避免覆盖用户自己起的名字
-			if (best.name && !codeLike(best.name) && (!form.name.trim() || codeLike(form.name))) patch.name = best.name;
+			// 该不该把查询到的名字写进表单：规则见 lib/holdings.ts（改代码后旧名字已陈旧、
+			// 用户手改过的名字不覆盖、结果只是代码替身时不填）
+			const fillName = shouldFillNameFromLookup({
+				currentName: form.name,
+				typedSymbol: symbol,
+				nameOwner: nameOwnerRef.current,
+				touched: nameTouchedRef.current,
+				matchedName: best.name,
+				matchedSymbol: best.symbol,
+			});
+			// 用的是同一套代码归一化（大小写、港股 5 位、交易所后缀），避免"看起来没变/变了"误判
+			const symbolChanged = !symbolsEqual(nameOwnerRef.current, symbol);
+			if (fillName) {
+				patch.name = best.name;
+				nameTouchedRef.current = false;
+			} else if (symbolChanged && nameTouchedRef.current) {
+				// 换了代码但名称是你自己写的：保留，并说一声（否则看起来像"查询没生效"）
+				keptCustomName = true;
+			}
 			if (best.currency) patch.currency = best.currency;
 			if (best.market) patch.market = best.market as Market;
 			if (best.class && best.class !== "crypto" && best.class !== "cash") patch.class = best.class as AssetClass;
 			if (options.fillPrice && best.price !== null) patch.price = String(best.price);
 			if (best.symbol && (!form.symbol.trim() || options.fillPrice)) patch.symbol = best.symbol;
+			// 名称从此属于"这次查询用的代码"（补全后缀时以补全后的为准）。
+			// 注意要放在 patch.symbol 赋值之后，否则记下的是补全前的写法。
+			if (patch.symbol || symbolChanged) nameOwnerRef.current = (patch.symbol ?? symbol).trim();
 			setForm((current) => (current ? { ...current, ...patch } : current));
 
 			setLookup({
@@ -260,7 +282,8 @@ export function HoldingsPage() {
 							best.price !== null
 								? t("holdings.lookupPrice", { price: best.price, currency: best.currency ?? "" })
 								: "",
-					}),
+					}) +
+					(keptCustomName ? t("holdings.lookupKeptName") : ""),
 				error: null,
 				candidates: result.candidates,
 			});
@@ -512,7 +535,15 @@ export function HoldingsPage() {
 						)}
 						<label className="field">
 							<span>{t("holdings.name")}</span>
-							<input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required />
+							<input
+								value={form.name}
+								onChange={(e) => {
+									nameTouchedRef.current = true;
+									nameOwnerRef.current = form.symbol.trim();
+									setForm({ ...form, name: e.target.value });
+								}}
+								required
+							/>
 						</label>
 					</div>
 
@@ -591,6 +622,8 @@ export function HoldingsPage() {
 														}
 													: current,
 											);
+											nameOwnerRef.current = candidate.symbol;
+											nameTouchedRef.current = false;
 											setLookup({ loading: false, message: null, error: null, candidates: [] });
 										}}
 									>
