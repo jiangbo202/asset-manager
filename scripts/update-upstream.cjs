@@ -99,6 +99,13 @@ function main() {
 		git(["remote", "add", "upstream", upstream]);
 	}
 
+	// 在模板仓库本身跑这个命令时，upstream 就是 origin：合并是空操作，但用户可能困惑
+	const origin = tryGit(["remote", "get-url", "origin"]);
+	if (origin.ok && origin.output.trim().replace(/\.git$/, "") === upstream.trim().replace(/\.git$/, "")) {
+		log("提示：upstream 与 origin 是同一个仓库 —— 你大概在模板仓库本身里跑这条命令；");
+		log("      它会正常结束，但不会有任何合并。要更新自己的副本，请在那个副本目录里运行。");
+	}
+
 	log("拉取上游…");
 	const fetched = tryGit(["fetch", "upstream", "--prune"]);
 	if (!fetched.ok) {

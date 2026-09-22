@@ -111,7 +111,10 @@ if (IS_CI && !IS_WORKERS_CI) {
  */
 if (!IS_CI && process.platform !== "win32" && typeof process.getuid === "function") {
 	const uid = process.getuid();
-	const suspects = ["node_modules", "dist", ".wrangler"];
+	// .git 也要查：它在上面的遍历里被跳过（太大），但 sudo 跑过 git 命令会在这里留下
+	// root 属主的 index，之后普通用户 git 操作就报 "insufficient permission for adding an object"，
+	// 而症状看起来跟 git 无关，很难联想到 sudo。
+	const suspects = ["node_modules", "dist", ".wrangler", ".git", ".git/index"];
 	const bad = [];
 	for (const name of suspects) {
 		const target = path.join(ROOT, name);

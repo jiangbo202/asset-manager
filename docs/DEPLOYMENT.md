@@ -239,6 +239,20 @@ npm run update:upstream
 npm run update:upstream -- https://github.com/<上游作者>/asset-manager.git
 ```
 
+> **报 `Missing script: "update:upstream"`**：你那份副本早于这个命令存在，先手动合并一次
+> （合并本身就把命令带进来了，之后就能一直用它）：
+>
+> ```bash
+> git remote add upstream https://github.com/<上游作者>/asset-manager.git   # 已有则跳过
+> git fetch upstream
+> git merge upstream/main      # 冲突时保留你 wrangler.jsonc 里的真实 database_id
+> git push
+> ```
+>
+> **别用 `sudo` 跑这些命令**：git 会把 `.git/index` 写成 root 属主，之后普通用户做 git 操作
+> 会报 "insufficient permission for adding an object"，而且症状看起来跟权限无关，很难排查。
+> 已经这样了就跑 `sudo chown -R $(whoami) .git`（`npm run check:env` 也会提示）。
+
 它按顺序做这些事，每一步都会打印出来：
 
 1. 检查工作区是否干净（脏工作区上做合并很难回退）→ 不干净就停下并告诉你 `commit` 或 `stash`

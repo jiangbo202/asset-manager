@@ -431,6 +431,16 @@ npm run update:upstream   # upstream URL comes from package.json → repository
 git push                  # Workers Builds rebuilds and redeploys
 ```
 
+> **`Missing script: "update:upstream"`** means your copy was made before this command existed — merge once by
+> hand and the command becomes available afterwards:
+>
+> ```bash
+> git remote add upstream https://github.com/jiangbo202/asset-manager.git   # skip if it exists
+> git fetch upstream
+> git merge upstream/main        # keep your database_id in wrangler.jsonc on conflict
+> git push
+> ```
+
 The command checks that your working tree is clean, adds an `upstream` remote, fetches, **lists the commits it
 is about to merge** and then merges. There is exactly one conflict it resolves for you: the `database_id` in
 `wrangler.jsonc` (yours is real, upstream keeps a placeholder) — **yours always wins**. Any other conflict stops

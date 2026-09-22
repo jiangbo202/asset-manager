@@ -396,6 +396,16 @@ npm run update:upstream   # 地址自动取自 package.json 的 repository
 git push                  # Workers Builds 会自动重新构建部署
 ```
 
+> **如果报 `Missing script: "update:upstream"`**：说明你那份副本是在这个命令加进来之前复制的，
+> 得先手动合并一次（之后就能用命令了）：
+>
+> ```bash
+> git remote add upstream https://github.com/jiangbo202/asset-manager.git   # 已有则跳过
+> git fetch upstream
+> git merge upstream/main        # 冲突时保留你 wrangler.jsonc 里的 database_id
+> git push
+> ```
+
 这条命令会：检查工作区干净 → 加 `upstream` remote → 拉取 → **先列出将要合并的提交** →
 合并。中途只会在一种情况下冲突：`wrangler.jsonc` 里的 `database_id`（你填了真实 id，上游是占位值），
 这时**自动保留你的**，不会把 id 冲掉。其它冲突会原样停下并告诉你怎么处理。
