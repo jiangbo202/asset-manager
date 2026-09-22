@@ -118,7 +118,45 @@ for (const file of docs) {
 	}
 }
 
-/* 4. 关键脚本齐备 */
+/* 4. README 的长度与中英结构
+ *
+ * 加这条护栏是因为真实教训：README 曾长到 556 行 —— 部署步骤被埋到第六屏之后，
+ * 新用户根本翻不到。README 是**入口**，细节应该分派到 docs/ 并在文末给链接。
+ * 顺便检查两份 README 的二级标题序列（用 emoji 比对）：中英必须一一对应，
+ * 否则改动只落在一份里，另一份就悄悄过时了。
+ */
+const README_LINE_BUDGET = 360;
+const readmeTitles = {};
+for (const file of ["README.md", "README.en.md"]) {
+	let content;
+	try {
+		content = fs.readFileSync(path.join(ROOT, file), "utf8");
+	} catch {
+		note(`缺少 ${file}`);
+		continue;
+	}
+	const lines = content.split("\n").length;
+	if (lines > README_LINE_BUDGET) {
+		note(
+			`${file} 有 ${lines} 行，超过 ${README_LINE_BUDGET} 行上限：README 是入口，` +
+				`请把细节移到 docs/ 并在文末链接（这条护栏是因为它曾长到 556 行、部署步骤被埋到第六屏）`,
+		);
+	}
+	// 只看二级标题里的 emoji，用来比对两份文档的结构
+	readmeTitles[file] = content
+		.split("\n")
+		.filter((line) => line.startsWith("## "))
+		.map((line) => line.replace(/[^\p{Extended_Pictographic}]/gu, "").trim());
+}
+if (readmeTitles["README.md"] && readmeTitles["README.en.md"]) {
+	const zh = readmeTitles["README.md"].join(" ");
+	const en = readmeTitles["README.en.md"].join(" ");
+	if (zh !== en) {
+		note(`两份 README 的章节结构不一致：中文 [${zh}] vs 英文 [${en}]（同一节要同时改两份）`);
+	}
+}
+
+/* 5. 关键脚本齐备 */
 const required = [
 	"dev", "build", "preview", "lint", "test", "verify", "check:bundle", "check:scripts",
 	"check:auth", "setup:d1", "setup:secrets", "setup:repo", "update:upstream",

@@ -16,7 +16,7 @@
       // - 一键部署：Cloudflare 向导按这里的绑定创建 D1 并回写真实 id
       // 直接拿占位值部署会在绑定 D1 时报错，这是有意的：提示你先建库。
       "database_name": "asset-manager-db",
-      "database_id": "REPLACE_WITH_YOUR_D1_ID",
+      "database_id": "5de5408e-5a3f-4764-9600-cb1a95fb7e0e",
       "migrations_dir": "migrations"
     }
   ],

@@ -1,140 +1,81 @@
-# Asset Manager · Personal Portfolio Tracker
+# asset-manager · personal asset tracker
 
-> **Every account, one page.**
-> Stocks, ETFs, crypto and cash from all your brokers and exchanges, brought into a single view —
-> refresh quotes in one click and your total and unrealised P&L are ready. No logging in to each app.
+[简体中文](README.md) | **English**
 
-**Everything runs inside Cloudflare's free tier** (Workers + D1 + static assets): your data lives in your own
-Cloudflare account, there is no server to run, no telemetry and no third-party analytics; a net-worth snapshot
-is taken automatically every day, so the history builds itself.
-
-**English** | [简体中文](README.md)
-
-[![CI](https://github.com/jiangbo202/asset-manager/actions/workflows/ci.yml/badge.svg)](https://github.com/jiangbo202/asset-manager/actions/workflows/ci.yml)
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![Cloudflare Workers](https://img.shields.io/badge/Cloudflare-Workers-f38020?logo=cloudflare&logoColor=white)](https://workers.cloudflare.com/)
+[![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/jiangbo202/asset-manager)
+[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 [![93 KB gzip first load](https://img.shields.io/badge/first%20load-93%20KB%20gzip-blue)](#-does-it-stay-within-the-free-tier)
 
-> **After forking, run `npm run setup:repo` once** — it reads your git remote and points the docs, badges and
-> issue templates at your own repository instead of this one.
+**Every account, one page.** Stocks, ETFs, crypto and cash in a single view; one click refreshes quotes and
+recomputes your total and unrealised P&L — no more logging into each broker to check.
 
----
+Single user, password login, data stays in your own Cloudflare account, and it runs inside the free tier.
+No telemetry, no third-party CDN, no UI or chart library — fork it and change whatever you like.
 
 ## 📸 Screenshots
 
-### Dashboard · key numbers and net-worth trend
+### Overview · key figures and net-worth trend
 
-![Dashboard: total assets, cost, unrealised P&L, price freshness and the trend chart](docs/pic/account_total.png)
+![Overview](docs/pic/account_total.png)
 
-Four cards give you the whole picture at a glance. The trend chart switches between `1M / 3M / 6M / 1Y / ALL`
-and between total and stacked-by-class. “Refresh quotes” fetches the latest prices immediately instead of
-waiting for the daily job.
+### Overview · breakdown and holdings table
 
-### Dashboard · allocation and holdings
+![Breakdown and holdings](docs/pic/have.png)
 
-![Dashboard: donut, treemap and the holdings table](docs/pic/position.png)
+### Holdings · entry and bulk price update
 
-The donut has four dimensions — **class / account / currency / symbol** — and clicking a slice filters the page.
-The treemap drills down into a single account; tick “Merge same symbols” to collapse one stock held at several
-brokers into one block (hover it to see the per-account breakdown). The holdings table sorts by any column,
-including how stale each price is.
-
-### Holdings · entry and bulk price updates
-
-![Holdings page: holdings table and bulk price update](docs/pic/have.png)
-
-Typing a symbol auto-fills the name, currency and market; “Get latest price” fills the price in one click.
-The bulk price table at the bottom lets you update everything in one screen and submit once.
+![Holdings](docs/pic/position.png)
 
 ### Accounts · built-in platform icons
 
-![Accounts page: new account form with the platform icon picker](docs/pic/add_account.png)
-
-**53 built-in icons** for brokers, crypto platforms and banks — letter marks in brand colours, so there are no
-trademark issues. Accounts without an icon get a colour derived from their name.
-
----
-
-## 📑 Contents
-
-1. [Screenshots](#-screenshots)
-2. [What it does](#-what-it-does)
-3. [Deployment in 5 minutes](#-deployment-in-5-minutes)
-4. [First-run checklist](#-first-run-checklist)
-5. [Local development](#-local-development)
-6. [Language and time zone](#-language-and-time-zone)
-7. [Quotes and FX rates](#-quotes-and-fx-rates)
-8. [Backup and restore](#-backup-and-restore)
-9. [Data and privacy](#-data-and-privacy)
-10. [Does it stay within the free tier?](#-does-it-stay-within-the-free-tier)
-11. [FAQ](#-faq)
-12. [Upgrading](#-upgrading)
-13. [Development and contributing](#-development-and-contributing)
-14. [Roadmap](#-roadmap)
-
----
+![Accounts](docs/pic/add_account.png)
 
 ## ✨ What it does
 
 **Bookkeeping**
 
-- Accounts: broker / crypto platform / cash, with market, currency and notes; archivable
-- Holdings: stocks, ETFs, crypto, funds and cash — cash only needs a balance
-- Average-cost P&L, archiving, bulk price updates, and the same symbol in several accounts kept separately
-- Typing a symbol auto-fills name / currency / market, and “Get latest price” fetches the current quote
+- Accounts (broker / exchange / cash, with market, currency, note, archive) and holdings (stock / ETF /
+  crypto / fund / cash)
+- Average-cost P&L; archiving, bulk price updates, the same symbol split across accounts
+- Type a symbol and it fills in name / currency / market, with one-click price fetching
 
-**Looking at the numbers**
+**Seeing the picture**
 
-- Donut chart (class / account / currency / symbol, click to filter) and a treemap (drill down, optional
-  merge-by-symbol)
-- Daily trend: pick a range, show the total or stack by class, hover for that day's breakdown
-- Holdings table sortable by any column, including price staleness; markets are multi-select (picking “crypto” also lists tokenised stocks)
-- **Filters live in the URL**, so refreshing, bookmarking or sharing a link restores the same view
+- Donut chart (class / account / currency / instrument, click a slice to filter) plus a drill-down treemap
+  that can merge the same symbol across accounts
+- Daily net-worth trend (switchable range, total or stacked by class) and a sortable holdings table
+- Filters live in the URL: reload, bookmark or share and you get the same view back
 
-**Market data**
+**Quotes**
 
-- Free public APIs out of the box, **no configuration needed**; each symbol is tried against several providers
-  in order, falling through on failure
-- Batch endpoints are preferred to save requests; rate-limited providers are cooled down and skipped instead of
-  failing silently
-- Bring your own API key (stored encrypted) or point the custom provider at any HTTP quote service
+- Free public APIs by default, **zero configuration**; several providers are tried in order and the reason
+  for each failure is shown
+- Batch endpoints preferred, rate limits cool a provider down and switch to the next one; bring your own
+  API keys (encrypted) or point the custom provider anywhere
+- Missing FX rates are labelled “not converted” instead of silently using 1:1; stablecoins (USDT/USDC, …)
+  are treated as 1:1 USD
 
-**History and traceability**
+**History and automation**
 
-- **Daily snapshots**: the Cron trigger refreshes quotes at your configured hour and takes the day's net-worth
-  snapshot right after (see [Quotes and FX rates](#-quotes-and-fx-rates))
-- Sessions: every signed-in device with OS / browser / IP / sign-in time / last active, “this device” marked,
-  and one-click sign-out per device
-- **FX rates are frozen per day**, so editing a rate later never shifts the historical curve
-- Activity history: every write is recorded, the list shows *what* changed and *what it was*, and expanding a row
-  reveals the field-level diff
-- Backup: export JSON (optionally with history, optionally encrypted with a passphrase); imports are fully
-  validated and **diffed before anything is written**, in either merge or replace mode
-
-**Sharing**
-
-- **Public read-only link** (off by default): turn it on and anyone with the link can see the overview
-  without a password; a sign-in button sits in the top bar. Visitors cannot see account notes,
-  history, settings or backups, and cannot refresh quotes. Turn it off and the link shows the sign-in page again.
-- Pick which **sections** to share: top stats / trend / breakdown (donut & treemap) / holdings table.
-  The trimming happens server-side — if you don’t share the holdings table, quantities and costs never
-  appear in the API response at all
+- Activity history: every write is recorded, the list shows what changed and what it was, expand for a
+  field-level diff
+- Daily snapshots via Cron: refresh quotes at your hour, then take the day's net worth; FX rates are frozen
+  per day so editing a rate later never shifts the historical curve
+- Backup: export JSON (optionally with history, optionally passphrase-encrypted); imports are validated and
+  diffed before anything is written
+- Sessions: every signed-in device with OS / browser / IP / last active, “this device” marked, sign-out per device
+- Cloudflare usage: today's Worker requests and D1 rows read/written against the free-tier limits
 
 **Other**
 
-- Multi-currency with a switchable display currency — holdings missing an FX rate are clearly marked
-  **“not converted”** instead of being silently treated as 1:1; stablecoins (USDT/USDC…) convert at 1:1 USD
-- Quote failures say **which provider was asked, with which symbol, and what we treated it as**
-  (class · market · symbol override); repeated failures are flagged as a likely wrong symbol or setting
-- Saving a holding validates that market and symbol agree (HK / A-share codes must be digits), so those
-  mistakes are caught at entry time
-- Chinese and English (the English dictionary loads on demand) and a configurable time zone
-- Responsive: secondary columns drop on narrow screens, forms collapse to one column
+- Public read-only link (off by default) with **per-section sharing** (top / trend / breakdown / holdings);
+  the trimming happens server-side, so unshared quantities and costs never reach the response
+- Chinese and English, configurable time zone (UTC by default); responsive layout
 
 ## 🚀 Deployment in 5 minutes
 
-**What you do not have to do**: creating D1, applying migrations, writing secrets, building and deploying are all
-handled by the script or the wizard. Only the steps below need a human (accounts, authorisation, passwords).
+**What you do not have to do**: creating D1, applying migrations, writing secrets, building and deploying are
+all handled by the script or the wizard. Only the steps below need a human (accounts, authorisation, passwords).
 
 ### Path A: one-click deploy (no terminal)
 
@@ -146,12 +87,11 @@ handled by the script or the wizard. Only the steps below need a human (accounts
 | 2 | Click `New GitHub connection` and authorise Cloudflare Workers on GitHub | wizard |
 | 3 | Recommended: tick “Create private Git repository”; project name `asset-manager` | wizard |
 | 4 | Click **Deploy** and wait 1–3 minutes | wizard |
-| 5 | Set **Deploy command** to `npm run deploy` (so migrations run on every deploy) | Worker → Settings → Build |
-| 6 | Add two secrets (type *Secret*): `SETUP_TOKEN` and `SESSION_SECRET`, each from `openssl rand -hex 32` | Worker → Settings → Variables and Secrets |
+| 5 | Set **Deploy command** to `npm run deploy` (migrations on every deploy) | Worker → Settings → Build |
+| 6 | Add two secrets (type *Secret*): `SETUP_TOKEN`, `SESSION_SECRET`, each from `openssl rand -hex 32` | Worker → Settings → Variables and Secrets |
 | 7 | Open `https://<project>.<your-subdomain>.workers.dev`, paste `SETUP_TOKEN`, choose your password | browser |
 
-> `SETUP_TOKEN` is shown to you **once** — keep it, you need it the first time you open the site. Do not keep the
-> sample value: the server refuses to initialise with a placeholder, so an instance nobody can take over.
+> `SETUP_TOKEN` is shown once — keep it. Do not keep the sample value: the server refuses to initialise with it.
 
 The wizard creates D1 and writes its real id back into your repository (you will see something like
 `4f191450-…` in the build log). Only if the log complains about a missing D1 do you need to create one and add a
@@ -174,21 +114,6 @@ npm run deploy:safe
 | 3 | **Copy the `SETUP_TOKEN`** — printed exactly once | terminal |
 | 4 | Open the URL, paste the token, set your password | browser |
 
-`deploy:safe` checks your login, creates or reuses D1, builds, applies migrations, deploys the Worker and writes
-the secrets.
-
-### When the build fails / re-testing
-
-| Symptom | What to do |
-|---|---|
-| Build log: `Failed: error occurred while running build command` | Set Build command to `npx vite build` and hit *Retry* (the pre-build check only reports environment problems), or merge the upstream fix into your repo |
-| “Database needs an upgrade” / `no such table` on first load | Step 5 of path A was skipped |
-| 500 “secrets not configured” during initialisation | Step 6 of path A was skipped |
-| Want to re-test the one-click flow | Delete all three: the GitHub repo, the Worker and the D1 database — otherwise names collide |
-
-Field-by-field wizard instructions, an acceptance checklist and troubleshooting:
-**[docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)** (Chinese).
-
 **What about future upstream updates?** The one-click flow gives you a **copy**, so upstream changes do not
 reach you automatically:
 
@@ -197,122 +122,27 @@ npm run update:upstream    # merge upstream (the only conflict it resolves is yo
 git push                   # Workers Builds rebuilds and redeploys
 ```
 
-See [Upgrading](#-upgrading).
+### When something fails
+
+| Symptom | What to do |
+|---|---|
+| Build log: `Failed: error occurred while running build command` | Set Build command to `npx vite build` and hit *Retry*, or merge the upstream fix |
+| “Database needs an upgrade” / `no such table` | Follow-up 5 of path A was skipped |
+| 500 “secrets not configured” during initialisation | Follow-up 6 of path A was skipped |
+| `Missing script: "update:upstream"` | Your copy predates that command: merge once by hand (`git remote add upstream … && git merge upstream/main`) |
+| `refusing to merge unrelated histories` | Template copy shares no ancestor with upstream: align once with `--allow-unrelated-histories` (see [Upgrading](#-upgrading)) |
+| Re-testing the one-click flow | Delete all three: GitHub repo, Worker, D1 |
+
+Field-by-field wizard instructions, an acceptance checklist and full troubleshooting:
+**[docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)** (Chinese).
 
 ## ✅ First-run checklist
 
-Once deployed, these are the steps you do in the browser:
-
 1. Complete initialisation with the `SETUP_TOKEN` and set your own password
 2. Confirm the **display currency** (USD by default) and **time zone** (UTC by default)
-3. For non-USD assets, add FX rates under Settings → FX rates — or click **“Fetch latest rate”**
-4. Create your broker / crypto / cash accounts under Accounts
-5. Add holdings with symbol, quantity, price and average cost under Holdings
-6. Glance at Settings → Data overview to see how much of the free tier you are using
-
-## 💻 Local development
-
-```bash
-cp .dev.vars.example .dev.vars
-npm run db:migrate:local && npm run db:seed:local
-npm run dev            # http://localhost:5173
-```
-
-Local data lives in `.wrangler/state/` and **consumes none of your production quota**; `npm run dev` applies
-local migrations first. Use the `SETUP_TOKEN` from `.dev.vars` on the setup page.
-Full guide: **[docs/LOCAL_DEV.md](docs/LOCAL_DEV.md)** (Chinese).
-
-## 🌐 Language and time zone
-
-**Language**: Settings → language — follow the browser, Simplified Chinese, or English. It applies immediately
-and travels with backups. Server-side messages (validation errors, import warnings, quote failures, activity
-notes) are localised from the request's `Accept-Language` too.
-
-**Time zone**: UTC by default, with 21 common IANA zones built in, and any other name such as `Asia/Shanghai`
-can be typed in.
-
-| What the time zone affects | Detail |
-|---|---|
-| Which day and hour the daily snapshot uses | Based on that zone's calendar day and hour; change the zone and the schedule follows |
-| Effective dates in price / quantity history | Manual entries and fetched prices both use “today” in that zone |
-| Activity history date filters | 2026-09-20 means that day in your zone |
-| How timestamps are displayed | Rendered in that zone, not in the local time of whatever machine you opened |
-
-The database always stores UTC; the time zone only decides how a calendar is interpreted, so changing it never
-shifts historical data.
-
-## 📈 Quotes and FX rates
-
-| Provider | Covers | Notes |
-|---|---|---|
-| CoinGecko | Crypto | No key, several coins per request; use a coin id (`bitcoin`); common ones are mapped |
-| Binance | Crypto | No key, several pairs per request; fallback |
-| Yahoo Finance | Stocks / crypto / FX | Widest coverage: US, HK `.HK`, A-shares `.SS/.SZ`, `BTC-USD`, `HKD=X` |
-| Tencent | HK / A-shares | Several codes per request (`hk00700`); fallback |
-| Frankfurter (ECB) | FX | No key, updated on business days |
-| open.er-api | FX | Fallback with more currencies |
-| Custom | Anything | URL template + dotted JSON path + custom headers |
-
-Symbol mapping (override per holding under “quote symbol”):
-
-```
-700    + HK      → Yahoo 0700.HK   / Tencent hk00700
-600519 + A-share → Yahoo 600519.SS / Tencent sh600519
-BTC    + crypto  → CoinGecko bitcoin / Binance BTCUSDT / Yahoo BTC-USD
-```
-
-### When does it fetch automatically?
-
-**Quotes**: once a day (Cron, at the hour you configure), or whenever you press “Refresh quotes”.
-
-**FX rates** are not a separate job — they ride along with the quote refresh, happen only at those two moments,
-and only for currencies your portfolio actually uses. To get a rate right now, open Settings → FX rates and press
-**“Fetch latest rate”**: providers are tried in priority order and the result is **filled into the field**, which
-you then save with “Save rate”.
-(The button deliberately does not save: manual rates take precedence and are never overwritten, so saving on one
-click would silently freeze that pair.)
-
-### How snapshots are taken
-
-The Cron trigger wakes up every hour and **does only one heavy thing per invocation**:
-
-| When (in your time zone) | What happens |
-|---|---|
-| Exactly the configured hour | Refresh quotes |
-| Any later hour, if the day has no snapshot yet | Take the snapshot |
-
-So the snapshot usually lands an hour after the refresh and uses the prices fetched earlier that day — fine for
-daily data. If a step does not complete, the remaining hours of the same day retry it: the free tier allows only
-10 ms of CPU per invocation, and doing both in one invocation would exceed it consistently.
-
-## 💾 Backup and restore
-
-Three layers; use at least the first two:
-
-1. **In-app export** (Settings → Backup): JSON, optionally including activity history, optionally encrypted with
-   a passphrase (AES-GCM in your browser — the passphrase is never sent to the server). Imports can be previewed
-   as a diff first, in **merge** or **replace** mode.
-2. **Command-line full backup**:
-
-   ```bash
-   npx wrangler d1 export DB --remote --output=backup-$(date +%F).sql
-   # restore: npx wrangler d1 execute DB --remote --file=backup-2026-09-20.sql
-   ```
-
-3. **Cloudflare Time Travel** (free, 7 days): Dashboard → D1 → Time Travel rolls back to any point in time.
-
-> A backup file is your entire portfolio — treat it like a password.
->
-> Backups contain **no credentials**: no password, no sessions, no third-party API keys and no custom-provider
-> headers. On a new environment, initialise again and re-enter the keys you need.
-
-## 🔐 Data and privacy
-
-- All data lives in your own Cloudflare D1 database; there is **no backend server** and nothing is uploaded
-- No analytics, no telemetry, no third-party fonts or CDNs
-- Passwords are stored only as an irreversible verifier — even a database leak does not let anyone log in
-  (see [SECURITY.md](SECURITY.md))
-- Third-party API keys are encrypted with a key derived from `SESSION_SECRET`; the API never returns them
+3. For non-USD assets, add FX rates under Settings → FX rates (or click **“Fetch latest rate”**)
+4. Create accounts, then add holdings with symbol, quantity, price and average cost
+5. Glance at Settings → Data overview to see how much of the free tier you are using
 
 ## 💰 Does it stay within the free tier?
 
@@ -322,270 +152,188 @@ Yes. Typical personal usage, with measured numbers:
 |---|---|---|
 | Worker requests | < 1,000 / day | 100,000 / day |
 | Worker CPU | page reads 1–4 ms; quote refresh ≈ 8 ms; snapshot ≈ 5 ms | 10 ms / request |
-| D1 rows read | < 50,000 / day | 5,000,000 / day |
-| D1 rows written | < 100 / day | 100,000 / day |
-| D1 storage | < 20 MB | 5 GB |
-| Cron | 1 trigger (hourly, active only in the configured hour) | 5 / account |
-| Subrequests | one batch fetch a day, 5–10 requests measured | 50 / invocation |
-| Static assets | 93 KB gzip first load + on-demand chunks | free |
+| D1 rows read / written | < 50,000 / < 100 per day | 5,000,000 / 100,000 per day |
+| D1 storage | < 20 MB | 500 MB per database (5 GB per account) |
+| Static assets | 93 KB gzip first load + on-demand chunks | **free and unlimited** |
 
-The CPU figures come from `npm run watch:cpu`, which streams the `cpuTime` of live invocations. The free tier
-allows 10 ms per invocation, so the whole architecture is built around it:
+The architecture is built around the 10 ms CPU budget: PBKDF2 runs **in the browser**, aggregation happens in
+SQL, every endpoint reads what it needs in **one `db.batch`**, and quote refresh and snapshots are split into
+two invocations. `tests/api/query-budget.test.ts` pins the statement and round-trip budget of every route, so
+adding a serial query back fails CI.
 
-- PBKDF2 for authentication runs **in the browser**; the Worker only does one SHA-256
-- Aggregation happens in SQL, not by walking rows in JS; trend points are downsampled server-side
-- Every endpoint reads what it needs in **one `db.batch`** (measured: a single D1 statement costs roughly
-  0.3 ms locally / 2 ms in production, while several statements inside one batch share a single round trip)
-- Quote refresh and snapshot are **split into two invocations** so they never add up
-- `tests/api/query-budget.test.ts` pins the statement and round-trip budget of every route, so adding a serial
-  query back fails CI
+**Going over never costs money.** The free tier has no overage pricing — you get **errors**, not charges (the
+only way to be billed is to upgrade to Workers Paid, from $5/month):
 
-Settings → Data overview shows your real row counts at any time.
+| What you exceeded | What you see | Recovers |
+|---|---|---|
+| Worker requests > 100,000/day | Cloudflare error page `Error 1027` | at midnight UTC |
+| D1 rows read / written | Endpoints return 503: “today's free quota is used up, resets at midnight UTC, data intact” | at midnight UTC |
+| D1 storage > 500 MB | Writes blocked until you free space | after cleanup |
+
+**Pages do not count**: HTML / JS / CSS are static assets, only `/api/*` invokes the Worker and is counted —
+one overview load is about 3 requests, so 100,000/day ≈ 30,000 page views. Cloudflare also emails you when D1
+hits its daily limit, and stored data is unaffected.
 
 ### Want the actual numbers? (optional)
 
-**Bottom of Settings → “Cloudflare usage”** — paste a **read-only** API token and you get today's real figures:
+Bottom of Settings → “Cloudflare usage”: paste a **read-only** token to see today's real figures with progress
+bars (yellow past 70 %, red past 90 %).
 
-```
-Worker requests (today)      512 / 100,000      ▏
-D1 rows read (today)   4,120,000 / 5,000,000   ████████▏
-D1 rows written (today)     96,500 / 100,000   ██████████▏   ← turns red past 90%
-D1 database size (asset-manager-db)   18.4 MB / 500 MB
-```
-
-Create the token at dashboard → **My Profile → API Tokens → Create Token → Custom token**, with **only two read
-permissions**:
-
-| Permission | Used for |
+| Field | What to use |
 |---|---|
-| Account → **Account Analytics** → Read | Worker request counts |
-| Account → **D1** → Read | D1 rows read/written and database size |
+| API token | dashboard → **My Profile → API Tokens → Create Token → Custom token**, with only two read permissions: **Account Analytics: Read**, **D1: Read** |
+| Account ID | shown in the right-hand sidebar of **Workers & Pages** (or in the URL `dash.cloudflare.com/<id>/…`) |
+| Worker name | defaults to `asset-manager` (a wrong name shows “unavailable”) |
+| D1 database name | defaults to `asset-manager-db` |
 
-> Why a token is needed: those limits are tracked **per account**, and a Worker cannot read them itself. The
-> token is read-only, stored encrypted and never returned by the API (audit logs only record `(set)`); leave it
-> empty and the card simply shows “not configured” — nothing else changes. Numbers are cached locally and only
-> refreshed when you press the button.
+The token is read-only, stored encrypted in your own D1 and never returned by the API (audit logs only record
+`(set)`); leave it empty and the card says “not configured” — nothing else changes. Numbers are cached locally
+and only refreshed when you press the button.
 
-### What happens if I go over the limits? Will I be billed?
+<details>
+<summary>Verify the token from the terminal first (optional, saves a round trip)</summary>
 
-**The free tier never bills you.** Workers Free has no overage pricing at all — going over produces
-**errors**, not charges:
+```bash
+export CF_TOKEN='your token' CF_ACCOUNT='your Account ID'
+# 1) is the token valid?
+curl -s -H "Authorization: Bearer $CF_TOKEN" https://api.cloudflare.com/client/v4/user/tokens/verify | head -c 200
+# 2) does it have D1: Read? (listing databases means yes)
+curl -s -H "Authorization: Bearer $CF_TOKEN" "https://api.cloudflare.com/client/v4/accounts/$CF_ACCOUNT/d1/database" | head -c 300
+```
 
-| What you exceeded | What you see | When it recovers |
-|---|---|---|
-| Worker requests > 100,000/day | Cloudflare's error page (`Error 1027`: the site is temporarily unavailable because the owner reached their plan limit) | Automatically at midnight UTC |
-| D1 rows read / written | Endpoints that touch the database return 503 with “today’s free quota is used up — it resets at midnight UTC and your data is intact” | Automatically at midnight UTC |
-| D1 storage > 5 GB | Writes and table changes are blocked until you free space | Immediately after cleanup |
+Common outcomes: “token invalid or insufficient permissions” = missing a permission; a single row showing
+“unavailable” = wrong Worker or database name (with several databases we refuse to guess); only the database
+size missing = the token lacks `D1: Read`.
 
-**The only way to be billed is to upgrade to Workers Paid yourself** ($5/month: 10 million requests per month,
-D1 switches to usage-based pricing). Stay on Free and there is no bill.
+</details>
 
-Two things worth knowing:
+## 🔐 Data and privacy
 
-- **Pages do not count**: HTML / JS / CSS / icons are **static assets**, and Cloudflare's rule is that static
-  asset requests are *free and unlimited* — only `/api/*` actually invokes the Worker and is counted. So one
-  overview page load costs about 3 requests (portfolio / history / accounts),
-  making 100,000/day ≈ **30,000 page views**, which a personal setup never reaches.
-- **Your data is not lost**: exceeding a D1 limit only makes queries fail; stored data is untouched.
-
-If it ever happens: ① wait for the UTC reset; ② watch the usage graphs under Workers & Pages → your Worker →
-**Metrics** and **D1 → Metrics**; ③ check row counts in Settings → Data overview; ④ Cloudflare also **emails you**
-when D1 hits its daily limit. Note that a public read-only share link spends requests on every visitor reload.
+- No analytics, no telemetry, no third-party fonts or CDNs
+- Apart from the quote providers you enable, the Worker makes no outbound requests; data lives in your own
+  Cloudflare account
+- Passwords are derived with PBKDF2 (300k iterations) **in the browser**; only an irreversible verifier is
+  stored; quote API keys and the usage token are encrypted at rest
+- See [SECURITY.md](SECURITY.md)
 
 ## ❓ FAQ
 
-**I forgot my password.**
-Dashboard → Workers & Pages → D1 → `asset-manager-db` → Console, run `DELETE FROM auth;`, then
-`npm run setup:secrets -- --rotate` to get a new `SETUP_TOKEN` and initialise again. Accounts and holdings are
-untouched.
+**What do I do after the one-click deploy?**
+The wizard only authorises, copies the repo and deploys. Then: D1 binding (usually already done), one
+migration run, and two secrets — see the table above and the
+[deployment guide](docs/DEPLOYMENT.md#a2-部署后必须补的三件事).
 
-> `setup:secrets` is idempotent by default (it never overwrites existing secrets), because `SESSION_SECRET`
-> encrypts your stored API keys — rotating it logs everyone out and requires re-entering those keys, so it takes
-> an explicit `-- --rotate`.
+**Does updating always need a terminal?**
+For now, yes — it is a git merge: `npm run update:upstream && git push`. Deploying itself never does.
+`refusing to merge unrelated histories` means your repo is a template copy (no shared ancestor): align once.
+`Missing script` means your copy predates that command: merge by hand once. See [Upgrading](#-upgrading).
 
-**I lost the `SETUP_TOKEN`.**
-Same as above: delete the `auth` row, then `npm run setup:secrets -- --rotate`. The token is printed only once.
-
-**After upgrading it says “the database needs an upgrade”.**
-The schema is behind the code. Run `npm run db:migrate:local` (local) or `npm run db:migrate:remote`
-(production, or just re-run `npm run deploy:safe`). Migrations are idempotent and never touch existing data.
-
-**`Authentication error [code: 10000]` while deploying.**
-The API token is missing or lacks permission. It needs **Workers Scripts: Edit + D1: Edit**, or use
-`npx wrangler login` instead.
-
-**How do I confirm the scheduled job actually ran?**
-The activity history gets entries with source `system`: “刷新行情…” for the scheduled quote refresh, and
-“定时快照…” / “补拍当日快照…” for snapshots. The Quotes & snapshots card in Settings also shows the
-**last quote refresh** and the **next scheduled run**.
-
-**Does exceeding the free tier cost me money?**
-No. Going over produces errors (`Error 1027` for Worker requests; a 503 explaining “resets at midnight UTC,
-data intact” for D1), never a bill — only an explicit upgrade to Workers Paid can be charged.
-See [Does it stay within the free tier?](#-does-it-stay-within-the-free-tier).
-
-**If I fork it, does “Sync fork” keep me up to date?**
-Not necessarily. Sync fork can only fast-forward when your branch has **no commits of its own**. The one-click
-flow writes your real `database_id` into the repo and commits it, so the branches diverge — GitHub then either
-hides the button or offers to discard commits (wiping your id). Use `npm run update:upstream` instead (it keeps
-your id); see [Upgrading](#-upgrading).
-
-**Does one-click deployment need a terminal later on?**
-Updating from upstream currently needs one terminal command (it is a git merge). If you want to avoid the
-terminal entirely, keep your repo free of local commits (i.e. maintain `database_id` by hand) so the fork
-“Sync fork” button stays usable. Deploying itself never needs a terminal.
-
-**I clicked “Deploy to Cloudflare” — what next?**
-The wizard only authorises GitHub, takes a project name and deploys a copy of the repo. You still need to bind
-D1, run the migrations once and add two secrets — see the deployment guide (Chinese) for the exact steps.
+**How do I confirm the scheduled job ran?**
+Activity history gets entries with source `system` (“刷新行情…” for the scheduled refresh, “定时快照…” /
+“补拍当日快照…” for snapshots). The Quotes & snapshots card in Settings also shows the last refresh and the
+next run.
 
 **How do I share it with someone?**
-Settings → “Public read-only link”, switch it on and send the URL shown there. Visitors see the overview only
-(total, breakdowns, treemap, trend, holdings table) with a “Read-only” badge and a sign-in button. Turn the
-switch off and the same URL shows the sign-in page.
+Settings → “Public read-only link”, switch it on and send the URL. Visitors see only the overview, limited to
+the sections you tick — no account notes, history, settings or backups, and no quote refresh. Switch it off and
+the link shows the sign-in page again.
 
 **Why did prices not update?**
-Quotes refresh once a day, at the hour configured under Settings → Quotes & snapshots (22:00 by default, in your
-time zone). Press “Refresh quotes” to update immediately.
+Check the failure reason in Activity history: it names the provider, the symbol that was requested and what we
+asked it for. Repeated failures usually mean a wrong symbol or configuration (for example a US ticker recorded
+as a Hong Kong one).
 
-**How should I write HK / A-share codes?**
-Any of `700`, `0700`, `3121`, `03121`, with or without the `.HK` suffix — on save they are normalised to the
-HKEX 5-digit form (`00700`, `03121`), the same way your broker statement writes them. At request time they are
-converted to what each provider expects: Yahoo wants the 4-digit `3121.HK`, Tencent the 5-digit `hk03121`.
+**How do I enter Hong Kong / A-share symbols?**
+4 or 5 digits both work (`700` / `0700` / `3121.HK`); they are stored as the 5-digit HKEX code (`00700` /
+`03121`) and converted per provider on request.
 
-**What is the “beacon.min.js blocked by CSP” message in the console?**
-That is Cloudflare's own Web Analytics script (`static.cloudflareinsights.com`); our CSP only allows
-`script-src 'self'`, so it is blocked — which is the intended behaviour (this project ships no third-party
-scripts). Turn Web Analytics off for the site in the Cloudflare dashboard if you want the message gone.
-
-**What is the “rate-limit cooldown”?**
-Free APIs rate-limit by IP. When a provider is limited it is paused for 10 minutes (30 minutes after three
-consecutive failures) and other providers are used instead. Cooldown state and the last error are visible in
-Settings; bring your own API key or a custom provider to avoid it entirely.
-
-**Why are some days flat in the trend chart?**
-There is no snapshot for that day (a late deployment, or the Worker was not triggered); the previous day's value
-is carried forward and marked “carried over”. A missed snapshot is retried later the same day, and you can take
-one manually.
-
-**Can I point it at my own quote service?**
-Yes. Settings → Quotes & snapshots → custom provider: a URL template (`{symbol}` for the symbol, `{key}` for the
-secret) plus a dotted JSON price path such as `data.price`.
-
-**Can several people share one instance?**
-No, and that is intentional: single user, single password, data in your own account.
+**The console reports `beacon.min.js` blocked by CSP.**
+That is Cloudflare's own Web Analytics injection; our CSP only allows `'self'`, so it is expected.
 
 ## 🔄 Upgrading
 
-Export a backup first (Settings → Backup). Upgrades do not touch your data (migrations only change table
-structure), but a backup never hurts.
+Export a backup first (Settings → Backup). Upgrades do not touch your data, but a backup never hurts.
 
-**Your repo is a clone of this one** (`git remote -v` shows the upstream):
+**Your repo is a clone of this one**: `git pull && npm install && npm run deploy:safe`
 
-```bash
-git pull
-npm install
-npm run deploy:safe      # applies new D1 migrations automatically
-```
-
-**You deployed with the “Deploy to Cloudflare” button** — that flow **copies** the repository into your account,
-so later fixes and features do not flow to you automatically; you have to merge them in:
+**Your repo came from the one-click flow** (upstream changes do not reach it automatically):
 
 ```bash
-npm run update:upstream   # upstream URL comes from package.json → repository
-# or explicitly: npm run update:upstream -- https://github.com/<owner>/asset-manager.git
-git push                  # Workers Builds rebuilds and redeploys
+npm run update:upstream && git push
 ```
 
-> **`fatal: refusing to merge unrelated histories`** means your repo is a *template copy* (new repo + initial
-> commit), not a fork — it shares no ancestor with upstream. Align once and it behaves normally afterwards:
+> `refusing to merge unrelated histories` (template copy, no shared ancestor):
 >
 > ```bash
-> git merge --allow-unrelated-histories -X theirs upstream/main   # overlapping files take upstream's version
-> # that resets database_id to upstream's placeholder — put yours back
-> git add -A && git commit -m "restore my database_id"
-> git push
+> git merge --allow-unrelated-histories -X theirs upstream/main
+> # this resets database_id to a placeholder — put yours back, then commit
+> git add -A && git commit -m "restore my database_id" && git push
 > ```
 >
-> Afterwards `git merge-base HEAD upstream/main` prints a hash, and `npm run update:upstream` becomes an
-> ordinary merge (it preserves your `database_id` automatically). **If you edited code, skip `-X theirs`** and
-> resolve the conflicts yourself.
+> If you edited code, drop `-X theirs` and resolve the conflicts yourself. Afterwards `update:upstream` keeps
+> your id automatically.
 
-> **`Missing script: "update:upstream"`** means your copy was made before this command existed — merge once by
-> hand and the command becomes available afterwards:
->
-> ```bash
-> git remote add upstream https://github.com/jiangbo202/asset-manager.git   # skip if it exists
-> git fetch upstream
-> git merge upstream/main        # keep your database_id in wrangler.jsonc on conflict
-> git push
-> ```
+“Database needs an upgrade” after updating means the migration did not run: set the Builds **Deploy command** to
+`npm run deploy`, or run `npm run db:migrate:remote` locally. Details:
+[docs/DEPLOYMENT.md §6](docs/DEPLOYMENT.md#6-从上游更新) (Chinese).
 
-The command checks that your working tree is clean, adds an `upstream` remote, fetches, **lists the commits it
-is about to merge** and then merges. There is exactly one conflict it resolves for you: the `database_id` in
-`wrangler.jsonc` (yours is real, upstream keeps a placeholder) — **yours always wins**. Any other conflict stops
-and tells you what to do.
+## 💻 Local development
 
-> **About the fork “Sync fork” button**: it only works when your copy has **no commits of its own**. The
-> one-click flow writes your real `database_id` into the repo and commits it, which makes your branch diverge
-> from upstream — GitHub then either will not offer the button or offers to *discard* commits (which would wipe
-> your id). So prefer `update:upstream` above (it keeps your id). If you do use Sync fork, check afterwards that
-> `wrangler.jsonc` still has **your** `database_id` and not `REPLACE_WITH_YOUR_D1_ID`.
+```bash
+cp .dev.vars.example .dev.vars
+npm run db:migrate:local && npm run db:seed:local
+npm run dev            # http://localhost:5173
+```
 
-**“Database needs an upgrade” after updating** means the migrations did not run: set Builds **Deploy command** to
-`npm run deploy` (migrations on every deploy) or run `npm run db:migrate:remote` locally.
+Local data lives in `.wrangler/state/` and **costs nothing**; the `SETUP_TOKEN` on the setup page is the one in
+`.dev.vars`. Full guide: [docs/LOCAL_DEV.md](docs/LOCAL_DEV.md) (Chinese).
 
 ## 🛠 Development and contributing
 
 ```bash
-npm run dev        # dev server (workerd + HMR, Worker debug port 9229)
-npm run build      # build frontend and Worker
-npm run preview    # run the built output locally, close to production
+npm run dev        # dev server (workerd + HMR)
+npm run lint       # type checks across four tsconfigs
 npm test           # Vitest, running inside real workerd
-npm run lint       # type-checks four tsconfig projects
-npm run verify     # all of the above + bundle budget + script wiring checks
-npm run watch:cpu  # live CPU time of every invocation (free-tier debugging)
+npm run verify     # all of the above + bundle size + script wiring checks
+npm run watch:cpu  # live CPU time per invocation (free-tier debugging)
 
 npm run deploy:safe      # deploy (D1 → build → migrations → deploy → secrets)
-npm run update:upstream  # align this deployment with the upstream template (for one-click copies)
+npm run update:upstream  # align this deployment with the upstream template
 ```
 
-The stack is deliberately small: **Hono + D1 + React**, with no UI library, no chart library and no state
-management library. Every chart (donut, treemap, trend) is hand-written SVG and CSS.
+The stack is deliberately minimal: **Hono + D1 + React**, no UI library, no chart library, no state manager —
+donut, treemap and trend chart are hand-written SVG.
 
 ```
-src/worker/     Worker: api routes / core infrastructure / data access / services
+src/worker/     Worker: api routes / core / data repositories / services
 src/web/        Frontend: lib (api, i18n, charts…), pages, components
 src/shared/     Shared: types, enum labels, i18n dictionaries, time-zone helpers
 migrations/     D1 migrations (append-only, never edit a shipped file)
-scripts/        Deployment and local-development scripts
-tests/          Vitest, running on the workerd runtime rather than a jsdom mock
+scripts/        Deployment and local-dev scripts
+tests/          Vitest (running in workerd, not a jsdom simulation)
 ```
 
-Read **[CONTRIBUTING.md](CONTRIBUTING.md)** before changing code (conventions, test expectations, doc index).
-The in-depth documentation under [`docs/`](docs) is written in Chinese.
+Read **[CONTRIBUTING.md](CONTRIBUTING.md)** before changing code (Chinese; conventions, testing, docs index).
 
 ## 🗺 Roadmap
 
-- **CSV import**: broker statements with column mapping and duplicate detection
-- **Trading-calendar awareness**: carry the closing price across non-trading days
-- **More automatic FX rates**: ECB coverage is limited
-- **Transaction ledger**: FIFO cost basis, dividends, splits, recurring buys
-- **TOTP two-factor auth**, custom icon upload, multi-user / family sharing
+- CSV import of broker statements, trading-calendar awareness, automatic rates for more currencies
+- Goal: fits inside the free tier, readable code, forkable into something of your own
 
 ## 📚 Documentation
 
-| Document | Contents |
+| Document | When to read it |
 |---|---|
-| [docs/PRD.md](docs/PRD.md) | Requirements, confirmed decisions, acceptance criteria |
-| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Architecture, data model, free-tier guardrails, trade-offs |
-| [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) | Deploy scripts, the three paths, troubleshooting |
-| [docs/LOCAL_DEV.md](docs/LOCAL_DEV.md) | Local development, debugging, D1 operations |
-| [docs/OPERATIONS.md](docs/OPERATIONS.md) | Migrations, backup/restore, upgrades, cron, troubleshooting |
-| [SECURITY.md](SECURITY.md) | Security model and vulnerability reporting |
-| [CONTRIBUTING.md](CONTRIBUTING.md) | Contribution guide |
+| [docs/LOCAL_DEV.md](docs/LOCAL_DEV.md) | Local development, debugging, seed data |
+| [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) | Deployment, wizard fields, troubleshooting |
+| [docs/OPERATIONS.md](docs/OPERATIONS.md) | Migrations, backup/restore, quota monitoring, cron |
+| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Layout, data model, CPU budget, key decisions |
+| [docs/PRD.md](docs/PRD.md) | Requirement IDs (FR-x.x) and design trade-offs |
+| [SECURITY.md](SECURITY.md) | Threat model, auth design, public-sharing boundaries |
+| [CONTRIBUTING.md](CONTRIBUTING.md) | Conventions, testing, docs sync |
+
+The `docs/` files are written in Chinese; the deployment walkthrough is worth reading with a translator.
 
 ## 📄 License
 
-[MIT](LICENSE). A personal bookkeeping tool, **not investment advice**; check the rules that apply to recording
-crypto assets in your jurisdiction.
+MIT — see [LICENSE](LICENSE).
