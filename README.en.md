@@ -133,6 +133,32 @@ trademark issues. Accounts without an icon get a colour derived from their name.
 
 ## 🚀 Deployment in 5 minutes
 
+**What you do not have to do**: creating D1, applying migrations, writing secrets, building and deploying are all
+handled by the script or the wizard. Only the steps below need a human (accounts, authorisation, passwords).
+
+### Path A: one-click deploy (no terminal)
+
+[![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/jiangbo202/asset-manager)
+
+| # | Manual step | Where |
+|---|---|---|
+| 1 | Click the button above | this page |
+| 2 | Click `New GitHub connection` and authorise Cloudflare Workers on GitHub | wizard |
+| 3 | Recommended: tick “Create private Git repository”; project name `asset-manager` | wizard |
+| 4 | Click **Deploy** and wait 1–3 minutes | wizard |
+| 5 | Set **Deploy command** to `npm run deploy` (so migrations run on every deploy) | Worker → Settings → Build |
+| 6 | Add two secrets (type *Secret*): `SETUP_TOKEN` and `SESSION_SECRET`, each from `openssl rand -hex 32` | Worker → Settings → Variables and Secrets |
+| 7 | Open `https://<project>.<your-subdomain>.workers.dev`, paste `SETUP_TOKEN`, choose your password | browser |
+
+> `SETUP_TOKEN` is shown to you **once** — keep it, you need it the first time you open the site. Do not keep the
+> sample value: the server refuses to initialise with a placeholder, so an instance nobody can take over.
+
+The wizard creates D1 and writes its real id back into your repository (you will see something like
+`4f191450-…` in the build log). Only if the log complains about a missing D1 do you need to create one and add a
+binding under Worker → Settings → Bindings (**the variable name must be `DB`**).
+
+### Path B: command line (migrations and secrets handled too)
+
 ```bash
 git clone https://github.com/jiangbo202/asset-manager.git
 cd asset-manager && npm install
@@ -141,40 +167,31 @@ export CLOUDFLARE_API_TOKEN=your-token      # Windows: $env:CLOUDFLARE_API_TOKEN
 npm run deploy:safe
 ```
 
-`deploy:safe` checks your login, creates or reuses the D1 database, builds, applies migrations, deploys the
-Worker and writes the secrets — then prints the `SETUP_TOKEN` **once** in the terminal.
-The token needs **Workers Scripts: Edit + D1: Edit** permissions.
+| # | Manual step | Where |
+|---|---|---|
+| 1 | Create an API token with **Workers Scripts: Edit + D1: Edit** | dashboard → My Profile → API Tokens |
+| 2 | Run the three commands above | terminal |
+| 3 | **Copy the `SETUP_TOKEN`** — printed exactly once | terminal |
+| 4 | Open the URL, paste the token, set your password | browser |
 
-### Or use the one-click deploy
+`deploy:safe` checks your login, creates or reuses D1, builds, applies migrations, deploys the Worker and writes
+the secrets.
 
-[![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/jiangbo202/asset-manager)
+### When the build fails / re-testing
 
-The wizard asks for three things and nothing else: **New GitHub connection** (authorise),
-a project name (`asset-manager`), and **Deploy**. Three follow-ups are still required, or the site will not
-work yet:
-
-1. **D1 database** — the wizard usually creates and binds it from `wrangler.jsonc`; if the build log complains
-   about a missing D1, create one in the dashboard and add a binding (the variable name must be `DB`)
-2. **Create the tables** — `npm run db:migrate:remote`, or set the Builds **Deploy command** to
-   `npm run deploy` so migrations run on every deploy
-3. **Two secrets** (Worker → Settings → Variables and Secrets, both as *Secret*):
-
-| Name | Where it comes from |
+| Symptom | What to do |
 |---|---|
-| `SETUP_TOKEN` | `openssl rand -hex 32` — keep it, you need it the first time you open the site |
-| `SESSION_SECRET` | `openssl rand -hex 32` |
+| Build log: `Failed: error occurred while running build command` | Set Build command to `npx vite build` and hit *Retry* (the pre-build check only reports environment problems), or merge the upstream fix into your repo |
+| “Database needs an upgrade” / `no such table` on first load | Step 5 of path A was skipped |
+| 500 “secrets not configured” during initialisation | Step 6 of path A was skipped |
+| Want to re-test the one-click flow | Delete all three: the GitHub repo, the Worker and the D1 database — otherwise names collide |
 
-> Do not keep the sample values. The server refuses to initialise with a placeholder, so you can never end up
-> with an instance anyone can take over.
-
-**First build failed?** Set Worker → Settings → Build → **Build command** to `npx vite build` and hit *Retry
-deployment* (the pre-build check only reports environment problems and contains no build logic), or merge the
-upstream fix into your repo. **“Database needs an upgrade” on first load** means follow-up 2 is still pending.
-
-Step-by-step field-by-field instructions and troubleshooting: **[docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)**
-(Chinese — the deployment walkthrough is worth reading with a translator if needed).
+Field-by-field wizard instructions, an acceptance checklist and troubleshooting:
+**[docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)** (Chinese).
 
 ## ✅ First-run checklist
+
+Once deployed, these are the steps you do in the browser:
 
 1. Complete initialisation with the `SETUP_TOKEN` and set your own password
 2. Confirm the **display currency** (USD by default) and **time zone** (UTC by default)

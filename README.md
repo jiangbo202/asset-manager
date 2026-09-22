@@ -118,6 +118,31 @@
 
 ## 🚀 部署（5 分钟）
 
+**先说清楚哪些不用你管**：建 D1、应用数据库迁移、写入 Secrets、构建与部署，都由脚本或向导自动完成。
+必须由人做的只有下面这些（账号、授权、密码这类）。
+
+### 路径 A：一键部署（不碰终端）
+
+[![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/jiangbo202/asset-manager)
+
+| # | 手动步骤 | 在哪做 |
+|---|---|---|
+| 1 | 点上面的按钮 | 本页 |
+| 2 | 点 `New GitHub connection`，在 GitHub 授权 Cloudflare Workers | 向导 |
+| 3 | 建议勾「Create private Git repository」；项目名填 `asset-manager` | 向导 |
+| 4 | 点 **Deploy**，等 1–3 分钟 | 向导 |
+| 5 | 把 **Deploy command** 改成 `npm run deploy`（让每次部署自动跑迁移） | Worker → Settings → Build |
+| 6 | 加两个 Secret（类型都选 *Secret*）：`SETUP_TOKEN`、`SESSION_SECRET`，各自 `openssl rand -hex 32` | Worker → Settings → Variables and Secrets |
+| 7 | 打开 `https://<项目名>.<你的子域>.workers.dev`，粘贴 `SETUP_TOKEN`，设置自己的密码 | 浏览器 |
+
+> `SETUP_TOKEN` **只在向导里填一次、自己记好**：首次打开网页要用它。
+> 别沿用示例里的占位值 —— 服务端会拒绝用占位值完成初始化，不会静默部署出一个"用公开口令就能接管"的实例。
+
+D1 会由向导自动创建并把 id 回写进你的仓库（构建日志里能看到形如 `4f191450-…` 的 id）。
+只有当日志报找不到 D1 时，才需要手动建库并在 Worker → Settings → Bindings 加一条 D1 绑定（**变量名必须是 `DB`**）。
+
+### 路径 B：命令行（迁移与 Secrets 也一并做完）
+
 ```bash
 git clone https://github.com/jiangbo202/asset-manager.git
 cd asset-manager && npm install
@@ -126,36 +151,30 @@ export CLOUDFLARE_API_TOKEN=你的token      # Windows: $env:CLOUDFLARE_API_TOKE
 npm run deploy:safe
 ```
 
-`deploy:safe` 依次执行：检查登录 → 创建 / 复用 D1 → 构建 → 应用迁移 → 部署 → 写入 Secrets，
-最后**在终端打印一次** `SETUP_TOKEN`。Token 需要 **Workers 编辑 + D1 编辑**权限。
+| # | 手动步骤 | 在哪做 |
+|---|---|---|
+| 1 | 建一个 API Token，权限勾 **Workers 编辑 + D1 编辑** | 控制台 → My Profile → API Tokens |
+| 2 | 跑上面三条命令 | 终端 |
+| 3 | **抄下终端只打印一次的 `SETUP_TOKEN`** | 终端 |
+| 4 | 打开网址 → 粘贴 token → 设密码 | 浏览器 |
 
-### 也可以一键部署
+`deploy:safe` 依次执行：检查登录 → 创建 / 复用 D1 → 构建 → 应用迁移 → 部署 → 写入 Secrets。
 
-[![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/jiangbo202/asset-manager)
+### 构建失败 / 想重测
 
-向导里只需三步：**New GitHub connection**（授权）→ 项目名填 `asset-manager` → **Deploy**。
-完成后还有三件事要补，否则打不开或初始化失败：
-
-1. **D1 数据库**：向导一般会自动创建并绑定；若构建日志报找不到 D1，就在控制台建一个，
-   然后在 Worker → Settings → Bindings 里加绑定（变量名必须是 `DB`）
-2. **建表**：`npm run db:migrate:remote`，或把 Builds 的 **Deploy command** 改成 `npm run deploy`（每次部署自动迁移）
-3. **两个密钥**（Worker → Settings → Variables and Secrets，都选 Secret）：
-
-| 名称 | 怎么来 |
+| 现象 | 处理 |
 |---|---|
-| `SETUP_TOKEN` | `openssl rand -hex 32`，**自己记好**，首次打开网页要用 |
-| `SESSION_SECRET` | `openssl rand -hex 32` |
+| 构建日志 `Failed: error occurred while running build command` | 把 Build command 临时改成 `npx vite build` 再 Retry（体检脚本只提示环境问题，不含构建逻辑）；或把上游修复合并进你的仓库 |
+| 首页报「数据库需要升级」/ `no such table` | 路径 A 的第 5 步没做 |
+| 初始化报 500「未配置密钥」 | 路径 A 的第 6 步没做 |
+| 想重测一键部署 | 先删干净：GitHub 仓库、Worker、D1 三样都要删，否则撞重名 |
 
-> 别用示例里的占位值：服务端会拒绝用占位值完成初始化，不会静默部署出一个"用公开口令就能接管"的实例。
-
-**首次构建就失败？** 把 Worker → Settings → Build 的 **Build command** 临时改成 `npx vite build` 再 Retry
-（体检脚本只提示环境问题，不含构建逻辑）；或者把上游修复合并进你的仓库（见部署指南）。
-**部署完成后首页报「数据库需要升级」** 就是第 2 步没做。重测前要先清干净（仓库 / Worker / D1 三样），
-照 [部署指南 · 验收清单](docs/DEPLOYMENT.md#a5-验收清单重测时照着勾) 勾一遍即可。
-
-逐步截图级说明（含向导每个字段怎么选）与故障排查见 **[docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)**。
+逐步说明（向导每个字段怎么选）、[验收清单](docs/DEPLOYMENT.md#a5-验收清单重测时照着勾) 与故障排查见
+**[docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)**。
 
 ## ✅ 第一次必做
+
+部署完成后，还需要你在浏览器里做这些：
 
 1. 用 `SETUP_TOKEN` 完成初始化，设置自己的密码
 2. 设置里确认**显示币种**（默认 USD）与**时区**（默认 UTC）
