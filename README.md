@@ -342,6 +342,10 @@ Token 权限不足或未设置。确认含 **Workers 编辑 + D1 编辑**，或�
 写进仓库并提交，分支就分叉了 —— 这时按钮要么不可用，要么提示丢弃提交（会把你的 id 冲掉）。
 稳妥做法还是 `npm run update:upstream`（自动保留你的 id），详见 [升级](#-升级)。
 
+**`git merge upstream/main` 报 `refusing to merge unrelated histories`？**
+这是正常现象：一键部署出来的是「模板复制」，与上游没有共同祖先。加 `--allow-unrelated-histories`
+做一次对齐即可（记得把 `database_id` 写回你自己的），之后更新就是普通合并。命令见 [升级](#-升级)。
+
 **一键部署之后，更新一定要用终端吗？**
 跟进上游更新目前需要一次终端命令（本质是 git 合并）。如果你不想碰终端，可以让仓库保持"没有本地提交"
 （即 `database_id` 手工维护），这样 fork 的 Sync fork 按钮可用 —— 但多数人会觉得比跑一次命令更麻烦。
@@ -405,6 +409,20 @@ npm run update:upstream   # 地址自动取自 package.json 的 repository
 # 或指定：npm run update:upstream -- https://github.com/<上游作者>/asset-manager.git
 git push                  # Workers Builds 会自动重新构建部署
 ```
+
+> **如果报 `fatal: refusing to merge unrelated histories`**：说明你那份是「模板复制」（新仓库 + 初始提交），
+> 与上游**没有共同祖先** —— 一键部署就是这样，不是 fork。先做一次**一次性对齐**，之后就正常了：
+>
+> ```bash
+> git merge --allow-unrelated-histories -X theirs upstream/main   # 新旧代码重叠的文件以上游为准
+> # 上面会把 database_id 改成上游的占位值，写回你自己的（控制台里那个 UUID）
+> git add -A && git commit -m "chore: 写回自己的 database_id"
+> git push
+> ```
+>
+> 对齐后 `git merge-base HEAD upstream/main` 有输出，以后 `npm run update:upstream` 就是普通合并了
+> （它会自动保住你的 `database_id`）。**改过代码的人别用 `-X theirs`**，改用
+> `git merge --allow-unrelated-histories upstream/main` 后逐个看冲突。
 
 > **如果报 `Missing script: "update:upstream"`**：说明你那份副本是在这个命令加进来之前复制的，
 > 得先手动合并一次（之后就能用命令了）：

@@ -442,6 +442,20 @@ npm run update:upstream   # upstream URL comes from package.json → repository
 git push                  # Workers Builds rebuilds and redeploys
 ```
 
+> **`fatal: refusing to merge unrelated histories`** means your repo is a *template copy* (new repo + initial
+> commit), not a fork — it shares no ancestor with upstream. Align once and it behaves normally afterwards:
+>
+> ```bash
+> git merge --allow-unrelated-histories -X theirs upstream/main   # overlapping files take upstream's version
+> # that resets database_id to upstream's placeholder — put yours back
+> git add -A && git commit -m "restore my database_id"
+> git push
+> ```
+>
+> Afterwards `git merge-base HEAD upstream/main` prints a hash, and `npm run update:upstream` becomes an
+> ordinary merge (it preserves your `database_id` automatically). **If you edited code, skip `-X theirs`** and
+> resolve the conflicts yourself.
+
 > **`Missing script: "update:upstream"`** means your copy was made before this command existed — merge once by
 > hand and the command becomes available afterwards:
 >

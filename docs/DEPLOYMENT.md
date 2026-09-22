@@ -239,6 +239,20 @@ npm run update:upstream
 npm run update:upstream -- https://github.com/<上游作者>/asset-manager.git
 ```
 
+> **报 `fatal: refusing to merge unrelated histories`**：一键部署是「模板复制」（新仓库 + 初始提交），
+> 与上游没有共同祖先，git 默认拒绝合并。是一次性对齐，之后 `update:upstream` 就正常了：
+>
+> ```bash
+> git merge --allow-unrelated-histories -X theirs upstream/main   # 重叠文件以上游为准
+> # database_id 会被改成上游占位值 → 写回自己的
+> git add -A && git commit -m "chore: 写回自己的 database_id"
+> git push
+> ```
+>
+> 也可以让脚本代劳（它会先列出两边不同的文件、再询问）：
+> `npm run update:upstream`（自动对齐不询问：`npm run update:upstream -- --yes`）。
+> 改过代码的人不要用 `-X theirs`，先普通合并再看冲突。
+
 > **报 `Missing script: "update:upstream"`**：你那份副本早于这个命令存在，先手动合并一次
 > （合并本身就把命令带进来了，之后就能一直用它）：
 >

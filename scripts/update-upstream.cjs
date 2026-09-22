@@ -9,6 +9,7 @@
  * 用法：
  *   npm run update:upstream                       # 上游地址取自 package.json 的 repository
  *   npm run update:upstream -- https://github.com/xxx/yyy.git
+ *   npm run update:upstream -- --yes              # 历史不相关时自动对齐（不询问）
  *
  * 它做的事：检查工作区干净 → 加/更新 upstream remote → fetch → 列出将要合并的提交 →
  * 合并 upstream/main。若只冲突在 wrangler.jsonc（你填了真实 D1 id，上游是占位值），
@@ -18,6 +19,7 @@
  */
 const fs = require("node:fs");
 const path = require("node:path");
+const readline = require("node:readline");
 const { execFileSync } = require("node:child_process");
 
 const ROOT = process.cwd();
@@ -42,9 +44,94 @@ const fail = (message, hint) => {
 	process.exit(1);
 };
 
+/** 读取工作区 wrangler.jsonc 里的 database_id（对齐后要把它写回去） */
+function readDatabaseId() {
+	try {
+		const config = fs.readFileSync(path.join(ROOT, "wrangler.jsonc"), "utf8");
+		return config.match(/"database_id"\s*:\s*"([^"]*)"/)?.[1] ?? "";
+	} catch {
+		return "";
+	}
+}
+
+function writeDatabaseId(id) {
+	const file = path.join(ROOT, "wrangler.jsonc");
+	const config = fs.readFileSync(file, "utf8");
+	const next = config.replace(/("database_id"\s*:\s*")[^"]*(")/, `$1${id}$2`);
+	if (next === config) return false;
+	fs.writeFileSync(file, next, "utf8");
+	return true;
+}
+
+/** 交互确认（--yes 直接同意；只在真终端里问；管道 / CI 里给命令让用户自己跑） */
+function ask(question) {
+	if (process.argv.includes("--yes") || process.argv.includes("-y")) return Promise.resolve("y");
+	if (!process.stdin.isTTY) return Promise.resolve("");
+	const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+	return new Promise((resolve) => rl.question(question, (answer) => {
+		rl.close();
+		resolve(answer.trim().toLowerCase());
+	}));
+}
+
+/**
+ * 两边历史不相关时的一次性对齐
+ *
+ * 一键部署用的是「模板复制」（新仓库 + 初始提交），不是 fork，所以两边**没有共同祖先**，
+ * `git merge` 会直接以 `fatal: refusing to merge unrelated histories` 拒绝。
+ * 对齐一次之后就有了共同祖先，以后 `npm run update:upstream` 就是普通合并了。
+ *
+ * 用 `-X theirs`：新旧代码有重叠的文件以上游为准（这正是"更新到上游"的本意），
+ * **你独有的改动不受影响**（上游没碰过的文件保持原样）；之后再把 database_id 写回。
+ */
+async function alignUnrelatedHistories(upstream) {
+	const localId = readDatabaseId();
+	const diff = tryGit(["diff", "--name-only", "HEAD", "upstream/main"]);
+	const files = diff.ok ? diff.output.trim().split("\n").filter(Boolean) : [];
+
+	log("检测到两边历史不相关 —— 一键部署是「模板复制」（新仓库 + 初始提交），不是 fork，");
+	log("所以没有共同祖先，git 默认拒绝合并。这需要**一次性对齐**，之后就正常了。");
+	if (files.length > 0) {
+		log(`两边有 ${files.length} 个文件不同，下面这些会以上游版本为准（前 20 个）：`);
+		for (const file of files.slice(0, 20)) console.log(`         ${file}`);
+		if (files.length > 20) console.log(`         …还有 ${files.length - 20} 个`);
+	}
+	console.log(`
+[update] 对齐命令（会保留你的 database_id${localId ? ` = ${localId.slice(0, 8)}…` : ""}）：
+    git merge --allow-unrelated-histories -X theirs upstream/main
+    # 上面的合并会把 database_id 变成上游的占位值，写回自己的：
+    #   （手动改 wrangler.jsonc，或用脚本：npm run update:upstream 会问你）
+    git push
+[update] 如果你**改过代码**，别用 -X theirs：先跑普通的
+    git merge --allow-unrelated-histories upstream/main
+  然后逐个文件看冲突再决定（git status 会列出冲突文件）。`);
+
+	const answer = await ask("[update] 现在自动对齐吗？（会用上游版本覆盖同名文件的改动，database_id 会保住）[y/N] ");
+	if (answer !== "y" && answer !== "yes") {
+		log("已跳过。想自己处理就按上面的命令来。");
+		return;
+	}
+
+	const merged = tryGit(["merge", "--allow-unrelated-histories", "-X", "theirs", "upstream/main"]);
+	if (!merged.ok) {
+		fail("对齐合并失败", `${merged.output}\n想放弃：git merge --abort`);
+	}
+	log("历史已对齐 ✅");
+
+	if (localId && localId !== PLACEHOLDER_D1_ID) {
+		if (writeDatabaseId(localId)) {
+			git(["add", "--", "wrangler.jsonc"]);
+			git(["commit", "-m", "chore: 写回自己的 database_id"]);
+			log(`已把你的 database_id（${localId.slice(0, 8)}…）写回并提交`);
+		}
+	} else {
+		log("注意：这次合并后 database_id 是上游的占位值，记得改成你自己的再 push");
+	}
+}
+
 /** 上游地址：命令行参数优先，否则用 package.json 的 repository */
 function resolveUpstream() {
-	const explicit = (process.argv[2] ?? "").trim();
+	const explicit = (process.argv.slice(2).find((arg) => !arg.startsWith("-")) ?? "").trim();
 	if (explicit) return explicit;
 	try {
 		const pkg = JSON.parse(fs.readFileSync(path.join(ROOT, "package.json"), "utf8"));
@@ -56,7 +143,7 @@ function resolveUpstream() {
 	return "";
 }
 
-function main() {
+async function main() {
 	if (!fs.existsSync(path.join(ROOT, ".git"))) {
 		fail("当前目录不是 git 仓库", "请在你自己的仓库目录里运行（一键部署出来的那份）。");
 	}
@@ -123,7 +210,14 @@ function main() {
 	for (const line of incoming.output.trim().split("\n").slice(0, 20)) console.log(`         ${line}`);
 	if (count > 20) console.log(`         …还有 ${count - 20} 个`);
 
-	// 4. 合并
+	// 4. 先看两边是否有共同祖先；没有就先一次性对齐（模板复制就是这个情况）
+	const sharedBase = tryGit(["merge-base", "HEAD", "upstream/main"]);
+	if (!sharedBase.ok || sharedBase.output.trim() === "") {
+		await alignUnrelatedHistories(upstream);
+		return;
+	}
+
+	// 5. 合并
 	log("合并 upstream/main…");
 	const merged = tryGit(["merge", "--no-edit", "upstream/main"]);
 	if (merged.ok) {
@@ -167,7 +261,7 @@ function main() {
 		log("合并完成（wrangler.jsonc 保留了你的 database_id）✅");
 	}
 
-	// 5. 下一步
+	// 6. 下一步
 	const localId = (() => {
 		try {
 			const config = fs.readFileSync(path.join(ROOT, "wrangler.jsonc"), "utf8");
@@ -190,4 +284,7 @@ function main() {
 ${localId && localId !== PLACEHOLDER_D1_ID ? `\n[update] 你的 D1 id 仍然是 ${localId.slice(0, 8)}…（未被上游占位值覆盖）` : ""}`);
 }
 
-main();
+main().catch((error) => {
+	console.error(`\n[update] ✗ 未预期的错误：${error instanceof Error ? error.message : String(error)}`);
+	process.exit(1);
+});

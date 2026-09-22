@@ -16,6 +16,7 @@
  */
 const fs = require("node:fs");
 const path = require("node:path");
+const { execFileSync } = require("node:child_process");
 
 const ROOT = process.cwd();
 const errors = [];
@@ -78,6 +79,29 @@ if (fs.existsSync(cloudflareDir)) {
  *   - 本地：不检查（setup:d1 本来就会写入真实 id）
  */
 const PLACEHOLDER_D1_ID = "REPLACE_WITH_YOUR_D1_ID";
+
+/**
+ * 判断"当前目录是不是模板仓库本身"：git remote origin 与 package.json 的 repository 指向同一个仓库。
+ *
+ * 本地也要提醒，因为踩过一次：`npm run setup:d1` / `deploy:safe` 会把**真实** database_id
+ * 写回 wrangler.jsonc（这是脚本的正常行为），而之后如果顺手 `git add -A`，真实 id 就被提交、
+ * 推到公开仓库了 —— 别人克隆后部署会去绑定我的库，必然失败。
+ * 你自己的副本（fork / 一键部署产物）不满足这个条件，所以不会被这条打扰。
+ */
+function isTemplateRepo() {
+	const readSlug = (value) => {
+		const match = String(value ?? "").match(/github\.com[:/]([\w.-]+)\/([\w.-]+?)(?:\.git)?$/);
+		return match ? `${match[1]}/${match[2]}`.toLowerCase() : "";
+	};
+	try {
+		const origin = execFileSync("git", ["remote", "get-url", "origin"], { cwd: ROOT, encoding: "utf8" }).trim();
+		const pkg = JSON.parse(fs.readFileSync(path.join(ROOT, "package.json"), "utf8"));
+		const declared = typeof pkg.repository === "string" ? pkg.repository : pkg.repository?.url;
+		return readSlug(origin) !== "" && readSlug(origin) === readSlug(declared);
+	} catch {
+		return false;
+	}
+}
 const IS_WORKERS_CI = Boolean(process.env.WORKERS_CI);
 // 尽量认全各家 CI 的标记：认不出就等于在 CI 里做了本地检查，属主/权限类判断会误伤
 const IS_CI = Boolean(
@@ -104,6 +128,25 @@ if (IS_CI && !IS_WORKERS_CI) {
 		/* 没有 wrangler.jsonc 就跳过 */
 	}
 }
+
+	if (!IS_CI && isTemplateRepo()) {
+		try {
+			const config = fs.readFileSync(path.join(ROOT, "wrangler.jsonc"), "utf8");
+			const id = config.match(/"database_id"\s*:\s*"([^"]*)"/)?.[1] ?? "";
+			if (id !== "" && id !== PLACEHOLDER_D1_ID) {
+				warnings.push(
+					[
+						`wrangler.jsonc 的 database_id 是真实值（${id.slice(0, 8)}…），而这里是模板仓库`,
+						"原因通常是 npm run setup:d1 / deploy:safe 刚回写过它（正常），但提交前要改回占位值：",
+						`  git checkout -- wrangler.jsonc   # 或手动改回 ${PLACEHOLDER_D1_ID}`,
+						"否则别人克隆后会去绑定你的库，部署必然失败。(check:env 在 CI 里也会提示)",
+					].join("\n    "),
+				);
+			}
+		} catch {
+			/* 忽略 */
+		}
+	}
 
 /* ── 3. 目录属主（仅类 Unix；CI 里跳过） ──────────────────
  * 构建容器的检出目录属主未必等于构建用户（例如镜像里是 root），
