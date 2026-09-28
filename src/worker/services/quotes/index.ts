@@ -342,7 +342,7 @@ export async function refreshQuotes(
 			const [base, target] = quote.key.slice(3).split(":");
 			if (base && target) {
 				// 汇率写入也放进同一个 batch（原来是每个币种两次串行往返）
-				statements.push(autoFxRateStatement(db, base, target, quote.price, finishedAtProbe));
+				statements.push(autoFxRateStatement(db, base, target, quote.price, finishedAtProbe, quote.asOf ?? finishedAtProbe));
 				// 只有汇率真的变了才记历史（原来是每次刷新都插一行）
 				if (knownFx.get(`${base}:${target}`) !== quote.price) {
 					statements.push(fxHistoryStatement(db, base, target, quote.price, finishedAtProbe));
@@ -354,8 +354,8 @@ export async function refreshQuotes(
 
 		statements.push(
 			db
-				.prepare(`UPDATE holdings SET price = ?, price_updated_at = ?, updated_at = ? WHERE id = ?`)
-				.bind(quote.price, finishedAtProbe, finishedAtProbe, quote.key),
+				.prepare(`UPDATE holdings SET price = ?, price_updated_at = ?, price_as_of = ?, updated_at = ? WHERE id = ?`)
+				.bind(quote.price, finishedAtProbe, quote.asOf ?? finishedAtProbe, finishedAtProbe, quote.key),
 		);
 		statements.push(
 			db
@@ -372,12 +372,21 @@ export async function refreshQuotes(
 		statements.push(
 			db
 				.prepare(
-					`INSERT INTO quote_cache (key, source, symbol, currency, price, fetched_at, error)
-					 VALUES (?, ?, ?, ?, ?, ?, NULL)
+					`INSERT INTO quote_cache (key, source, symbol, currency, price, fetched_at, as_of, error)
+					 VALUES (?, ?, ?, ?, ?, ?, ?, NULL)
 					 ON CONFLICT(key) DO UPDATE SET source = excluded.source, symbol = excluded.symbol,
-					   currency = excluded.currency, price = excluded.price, fetched_at = excluded.fetched_at, error = NULL`,
+					   currency = excluded.currency, price = excluded.price, fetched_at = excluded.fetched_at,
+					   as_of = excluded.as_of, error = NULL`,
 				)
-				.bind(`${quote.source}:${quote.symbol}:${quote.currency}`, quote.source, quote.symbol, quote.currency, quote.price, finishedAtProbe),
+				.bind(
+					`${quote.source}:${quote.symbol}:${quote.currency}`,
+					quote.source,
+					quote.symbol,
+					quote.currency,
+					quote.price,
+					finishedAtProbe,
+					quote.asOf ?? finishedAtProbe,
+				),
 		);
 	}
 
@@ -524,7 +533,16 @@ export interface QuoteStatus {
 		lastError: string | null;
 		lastSuccessAt: string | null;
 	}>;
-	cache: Array<{ key: string; source: string; symbol: string; price: number; currency: string; fetched_at: string }>;
+	cache: Array<{
+		key: string;
+		source: string;
+		symbol: string;
+		price: number;
+		currency: string;
+		fetched_at: string;
+		/** 上游给的报价时间（ISO）；没有时为 null */
+		as_of: string | null;
+	}>;
 	recentRuns: Array<{
 		id: string;
 		started_at: string;
@@ -584,7 +602,7 @@ export async function getQuoteStatus(env: { DB: D1Database; SESSION_SECRET: stri
 	const [settingsResult, cacheResult, runsResult] = await db.batch([
 		settingsStatement(db),
 		db.prepare(
-			`SELECT key, source, symbol, price, currency, fetched_at FROM quote_cache ORDER BY fetched_at DESC LIMIT 100`,
+			`SELECT key, source, symbol, price, currency, fetched_at, as_of FROM quote_cache ORDER BY fetched_at DESC LIMIT 100`,
 		),
 		db.prepare(
 			`SELECT id, started_at, trigger, updated, failed, requests, report_json FROM quote_runs ORDER BY started_at DESC LIMIT 10`,
@@ -604,6 +622,7 @@ export async function getQuoteStatus(env: { DB: D1Database; SESSION_SECRET: stri
 		price: number;
 		currency: string;
 		fetched_at: string;
+		as_of: string | null;
 	}>;
 	const runs = (runsResult?.results ?? []) as Array<{
 		id: string;

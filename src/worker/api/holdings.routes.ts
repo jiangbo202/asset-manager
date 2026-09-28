@@ -213,7 +213,9 @@ holdings.post("/bulk-price", async (c) => {
 		if (holding.price === price) continue;
 
 		statements.push(
-			c.env.DB.prepare(`UPDATE holdings SET price = ?, price_updated_at = ?, updated_at = ? WHERE id = ?`).bind(
+			c.env.DB.prepare(
+				`UPDATE holdings SET price = ?, price_updated_at = ?, price_as_of = NULL, updated_at = ? WHERE id = ?`,
+			).bind(
 				price,
 				now,
 				now,

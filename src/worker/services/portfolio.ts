@@ -33,6 +33,10 @@ export interface PortfolioHolding {
 	pnlPct: number | null;
 	priceUpdatedAt: string | null;
 	daysSincePriceUpdate: number | null;
+	/** 上游给的报价时间（ISO）；手工价与现金为 null */
+	priceAsOf: string | null;
+	/** 报价时间距今天数（本地 24 小时制）；没有 asOf 时为 null */
+	daysSincePriceAsOf: number | null;
 	fxMissing: boolean;
 	share: number;
 	isCash: boolean;
@@ -92,6 +96,8 @@ export function projectPortfolio(board: Portfolio, sections: readonly PublicSect
 				costDisplay: null,
 				pnlDisplay: null,
 					priceUpdatedAt: null,
+					priceAsOf: null,
+					daysSincePriceAsOf: null,
 				}));
 
 	return {
@@ -158,6 +164,9 @@ export function buildPortfolio(
 			pnlDisplay: pnl === null || rate === null ? null : pnl * rate,
 			priceUpdatedAt: row.price_updated_at,
 			daysSincePriceUpdate: dayDiff(row.price_updated_at),
+			// 报价时间：休市时它是上一次收盘的时刻，可能比 price_updated_at 老好几天
+			priceAsOf: row.price_as_of ?? null,
+			daysSincePriceAsOf: dayDiff(row.price_as_of ?? null),
 			fxMissing: rate === null,
 			share: 0,
 			isCash: row.class === "cash",

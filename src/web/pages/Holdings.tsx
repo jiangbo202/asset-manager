@@ -3,8 +3,8 @@ import { api, type AccountDto, type HoldingListDto, type LookupCandidate } from 
 import { useAsync, useSubmit } from "../lib/useAsync";
 import { shouldFillNameFromLookup, symbolsEqual } from "../lib/holdings";
 import { BrandIcon } from "../lib/icons";
-import { useT } from "../lib/i18n";
-import { money, number, relativeDays, stalenessClass } from "../lib/format";
+import { useT, useTimeZone } from "../lib/i18n";
+import { dateTime, money, number, quoteTime, relativeDays, stalenessClass } from "../lib/format";
 import {
 	ASSET_CLASSES,
 	normalizeHkSymbol,
@@ -60,6 +60,7 @@ function daysSince(iso: string | null): number | null {
 
 export function HoldingsPage() {
 	const t = useT();
+	const timeZone = useTimeZone();
 	const { query, setQuery } = useRouter();
 	const showArchived = query.get("archived") === "1";
 	const filterAccount = query.get("account") ?? "";
@@ -145,7 +146,7 @@ export function HoldingsPage() {
 				case "price":
 					return item.price;
 				case "stale":
-					return daysSince(item.price_updated_at) ?? -1;
+					return daysSince(item.price_as_of ?? item.price_updated_at) ?? -1;
 				default:
 					return item.qty * item.price;
 			}
@@ -712,7 +713,7 @@ export function HoldingsPage() {
 						</thead>
 						<tbody>
 							{items.map((holding) => {
-								const days = daysSince(holding.price_updated_at);
+								const days = daysSince(holding.price_as_of ?? holding.price_updated_at);
 								return (
 									<tr
 										key={holding.id}
@@ -740,7 +741,24 @@ export function HoldingsPage() {
 										<td>{holding.class === "cash" ? "1" : number(holding.price)}</td>
 										<td>{money(holding.qty * holding.price, holding.currency)}</td>
 										<td className={holding.class === "cash" ? "" : stalenessClass(days)}>
-											{holding.class === "cash" ? t("common.none") : relativeDays(t, days)}
+											<span
+												title={
+													holding.price_as_of
+														? t("dashboard.priceAsOfTip", {
+																asOf: quoteTime(holding.price_as_of, timeZone),
+																fetchedAt: holding.price_updated_at
+																	? dateTime(holding.price_updated_at, timeZone)
+																	: t("common.none"),
+															})
+														: t("dashboard.priceFetchedTip", {
+																fetchedAt: holding.price_updated_at
+																	? dateTime(holding.price_updated_at, timeZone)
+																	: t("common.none"),
+															})
+												}
+											>
+												{holding.class === "cash" ? t("common.none") : relativeDays(t, days)}
+											</span>
 										</td>
 										<td>{holding.avg_cost === null ? t("common.none") : number(holding.avg_cost)}</td>
 										<td>

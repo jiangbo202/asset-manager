@@ -279,3 +279,91 @@ describe("适配器解析", () => {
 		expect(result.errors.map((item) => item.symbol)).toEqual(["AAPL"]);
 	});
 });
+
+/**
+ * 报价时间（asOf）：上游给的"这个价格是什么时候的"
+ *
+ * 与 `price_updated_at`（我们什么时候抓的）是两件事：周末点一次刷新，
+ * 抓取时间是"今天"，而上游的报价时间还是上周五收盘。混为一谈的话，
+ * 界面上那个"今天"就会骗人。
+ */
+describe("报价时间（asOf）", () => {
+	it("Yahoo：用 meta.regularMarketTime（epoch 秒）", async () => {
+		const result = await runAdapter(
+			"yahoo",
+			[{ key: "h1", kind: "stock", symbol: "AAPL", currency: "USD", market: "us" }],
+			ctx([
+				{
+					match: (url) => url.includes("AAPL"),
+					// 1700000000 = 2023-11-14T22:13:20Z
+					json: { chart: { result: [{ meta: { currency: "USD", regularMarketPrice: 210, regularMarketTime: 1_700_000_000 } }] } },
+				},
+			]),
+			settings,
+		);
+		expect(result.quotes[0]?.asOf).toBe("2023-11-14T22:13:20.000Z");
+	});
+
+	it("Yahoo：上游没给时间就留空（不猜“现在”）", async () => {
+		const result = await runAdapter(
+			"yahoo",
+			[{ key: "h1", kind: "stock", symbol: "AAPL", currency: "USD", market: "us" }],
+			ctx([
+				{
+					match: (url) => url.includes("AAPL"),
+					json: { chart: { result: [{ meta: { currency: "USD", regularMarketPrice: 210 } }] } },
+				},
+			]),
+			settings,
+		);
+		expect(result.quotes[0]?.asOf ?? null).toBeNull();
+	});
+
+	it("腾讯：fields[30] 是交易所当地时间，港股按 UTC+8 换算", async () => {
+		// 第 4 个字段是当前价，第 31 个（下标 30）是报价时间
+		const fields = ["100", "腾讯控股", "00700", "420.000", "425.000", ...Array(25).fill(""), "2026/09/28 10:28:53"];
+		const result = await runAdapter(
+			"tencent",
+			[{ key: "h1", kind: "stock", symbol: "00700", currency: "HKD", market: "hk" }],
+			ctx([{ match: (url) => url.includes("qt.gtimg.cn"), text: `v_hk00700="${fields.join("~")}";` }]),
+			settings,
+		);
+		expect(result.quotes[0]?.price).toBe(420);
+		expect(result.quotes[0]?.asOf).toBe("2026-09-28T02:28:53.000Z");
+	});
+
+	it("Frankfurter：ECB 按日发布，只给日期就存日期（不做时区换算）", async () => {
+		const result = await runAdapter(
+			"frankfurter",
+			[{ key: "fx:HKD:USD", kind: "fx", symbol: "HKD:USD", currency: "USD" }],
+			ctx([{ match: (url) => url.includes("frankfurter"), json: { base: "HKD", date: "2026-09-25", rates: { USD: 0.128 } } }]),
+			settings,
+		);
+		expect(result.quotes[0]?.asOf).toBe("2026-09-25");
+	});
+
+	it("open.er-api：用上游自己的 time_last_update_unix", async () => {
+		const result = await runAdapter(
+			"erapi",
+			[{ key: "fx:HKD:USD", kind: "fx", symbol: "HKD:USD", currency: "USD" }],
+			ctx([
+				{
+					match: (url) => url.includes("open.er-api.com"),
+					json: { result: "success", rates: { USD: 0.128 }, time_last_update_unix: 1_700_000_000 },
+				},
+			]),
+			settings,
+		);
+		expect(result.quotes[0]?.asOf).toBe("2023-11-14T22:13:20.000Z");
+	});
+
+	it("加密源不给时间：留空，由刷新流程填抓取时刻（加密 24/7，两者等价）", async () => {
+		const result = await runAdapter(
+			"coingecko",
+			[{ key: "h1", kind: "crypto", symbol: "BTC", currency: "USD" }],
+			ctx([{ match: (url) => url.includes("api.coingecko.com"), json: { bitcoin: { usd: 80000 } } }]),
+			settings,
+		);
+		expect(result.quotes[0]?.asOf ?? null).toBeNull();
+	});
+});

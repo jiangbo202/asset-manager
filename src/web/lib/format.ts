@@ -55,6 +55,15 @@ export function dateOnly(iso: string | null | undefined, timeZone: string): stri
 	return formatDate(iso, normalizeTimeZone(timeZone), locale());
 }
 
+/**
+ * 报价时间：只有日期时（ECB 参考汇率这种）原样显示日期，**不做时区换算** ——
+ * 它本来就不是一个“时刻”，硬套时区会把它挪到前一天。
+ */
+export function quoteTime(iso: string | null | undefined, timeZone: string): string {
+	if (!iso) return "";
+	return /^\d{4}-\d{2}-\d{2}$/.test(iso) ? iso : dateTime(iso, timeZone);
+}
+
 /** 相对时间：用于"价格最后更新" */
 export function relativeDays(t: Translator, days: number | null | undefined): string {
 	if (days === null || days === undefined) return t("time.never");

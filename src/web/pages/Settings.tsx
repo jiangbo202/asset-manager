@@ -9,7 +9,7 @@ import {
 } from "../lib/api";
 import { useAsync, useSubmit } from "../lib/useAsync";
 import { useT, useI18n, useTimeZone } from "../lib/i18n";
-import { dateTime, relativeTime } from "../lib/format";
+import { dateTime, quoteTime, relativeTime } from "../lib/format";
 import { decryptBackup, deriveCredential, encryptBackup, isEncryptedBackup, ITERATIONS, randomSaltHex } from "../lib/crypto";
 import { downloadText, humanSize } from "../lib/download";
 import { MarketDataSection } from "./MarketDataSection";
@@ -502,7 +502,15 @@ export function SettingsPage({ onChanged }: { onChanged?: () => void }) {
 											<td className="left muted small">
 												{item.source === "auto" ? t("settings.fxSourceAuto") : t("settings.fxSourceManual")}
 											</td>
-											<td className="left muted hide-sm">{dateTime(item.updated_at, timeZone)}</td>
+											<td className="left muted hide-sm">
+												{dateTime(item.updated_at, timeZone)}
+												{item.as_of && (
+													<span className="small">
+														{" · "}
+														{t("market.asOfShort", { time: quoteTime(item.as_of, timeZone) })}
+													</span>
+												)}
+											</td>
 											<td>
 												<button className="ghost danger" onClick={() => removeFx(item.base, item.quote)}>
 													{t("common.delete")}

@@ -4,9 +4,11 @@ import { useAsync } from "../lib/useAsync";
 import { Donut, PALETTE, Treemap } from "../lib/charts";
 import { TrendChart } from "../lib/trend";
 import {
+	dateTime,
 	money,
 	number,
 	percent,
+	quoteTime,
 	relativeDays,
 	signedMoney,
 	signedPercent,
@@ -17,7 +19,7 @@ import { BrandIcon } from "../lib/icons";
 import type { PublicSection } from "../../shared/public-sections";
 import { buildTreemapItems } from "../lib/treemap";
 import { pnlSummary, staleHoldings } from "../lib/stats";
-import { useT } from "../lib/i18n";
+import { useT, useTimeZone } from "../lib/i18n";
 import { MarketFilter, parseMarketParam } from "../components/MarketFilter";
 import { useRouter } from "../lib/router";
 import { ASSET_CLASSES, classLabel, marketLabel, type Market } from "../../shared/labels";
@@ -65,6 +67,7 @@ export function DashboardPage({
 	sections?: PublicSection[];
 } = {}) {
 	const t = useT();
+	const timeZone = useTimeZone();
 	const { query, setQuery, navigate } = useRouter();
 
 	/** 本人永远全看；访客按分区。注意这只是界面层，"藏"不是边界 —— 服务端会裁剪/拒绝 */
@@ -583,7 +586,24 @@ export function DashboardPage({
 											)}
 										</td>
 										<td className={`hide-sm ${stalenessClass(item.daysSincePriceUpdate)}`}>
-											{relativeDays(t, item.daysSincePriceUpdate)}
+										<span
+											title={
+												item.priceAsOf
+													? t("dashboard.priceAsOfTip", {
+															asOf: quoteTime(item.priceAsOf, timeZone),
+															fetchedAt: item.priceUpdatedAt
+																? dateTime(item.priceUpdatedAt, timeZone)
+																: t("common.none"),
+														})
+													: t("dashboard.priceFetchedTip", {
+															fetchedAt: item.priceUpdatedAt
+																? dateTime(item.priceUpdatedAt, timeZone)
+																: t("common.none"),
+														})
+											}
+										>
+											{relativeDays(t, item.daysSincePriceAsOf ?? item.daysSincePriceUpdate)}
+										</span>
 										</td>
 									</tr>
 								))}

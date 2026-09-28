@@ -8,8 +8,11 @@ import { newId, nowIso } from "../core/utils";
  *  - `manual`：用户在设置页手工维护，**永远不会被自动抓取覆盖**
  *  - `auto`：行情刷新时抓到的，每次刷新都会更新
  *
- * 已知限制（PRD D9）：这里只存"当前值"，所以修改汇率会让所有折算数值整体变化。
+ * 已知限制（PRD D9）：这里只存“当前值”，所以修改汇率会让所有折算数值整体变化。
  * 按日冻结汇率是 TODO。
+ *
+ * `as_of` 是上游给的汇率日期/时刻（ECB 只给日期、er-api 给时刻），
+ * 手工维护的汇率没有上游时间，为 null —— 界面会退回按 `updated_at` 显示。
  */
 
 export interface FxRate {
@@ -18,6 +21,8 @@ export interface FxRate {
 	rate: number;
 	updated_at: string;
 	source: string;
+	/** 上游给的汇率日期/时刻（ISO）；手工维护的为 null */
+	as_of: string | null;
 }
 
 export async function listFxRates(db: D1Database): Promise<FxRate[]> {
@@ -27,16 +32,17 @@ export async function listFxRates(db: D1Database): Promise<FxRate[]> {
 
 /** 当前汇率查询语句（不执行）：便于和其他查询合并成一次 batch */
 export function fxRatesStatement(db: D1Database): D1PreparedStatement {
-	return db.prepare(`SELECT base, quote, rate, updated_at, source FROM fx_rates ORDER BY base, quote`);
+	return db.prepare(`SELECT base, quote, rate, updated_at, source, as_of FROM fx_rates ORDER BY base, quote`);
 }
 
-/** 手工维护（设置页调用） */
+/** 手工维护（设置页调用）。手工值没有上游时间，顺手清掉上一轮的 asOf，免得贴错标签 */
 export async function upsertFxRate(db: D1Database, base: string, quote: string, rate: number): Promise<void> {
 	const now = nowIso();
 	await db
 		.prepare(
 			`INSERT INTO fx_rates (base, quote, rate, updated_at, source) VALUES (?, ?, ?, ?, 'manual')
-			 ON CONFLICT (base, quote) DO UPDATE SET rate = excluded.rate, updated_at = excluded.updated_at, source = 'manual'`,
+			 ON CONFLICT (base, quote) DO UPDATE SET rate = excluded.rate, updated_at = excluded.updated_at,
+			   source = 'manual', as_of = NULL`,
 		)
 		.bind(base, quote, rate, now)
 		.run();
@@ -47,9 +53,15 @@ export async function upsertFxRate(db: D1Database, base: string, quote: string, 
 }
 
 /** 自动抓取：不覆盖手工维护的记录 */
-export async function upsertAutoFxRate(db: D1Database, base: string, quote: string, rate: number): Promise<boolean> {
+export async function upsertAutoFxRate(
+	db: D1Database,
+	base: string,
+	quote: string,
+	rate: number,
+	asOf: string | null = null,
+): Promise<boolean> {
 	const at = nowIso();
-	const result = await autoFxRateStatement(db, base, quote, rate, at).run();
+	const result = await autoFxRateStatement(db, base, quote, rate, at, asOf).run();
 	if ((result.meta.changes ?? 0) === 0) return false;
 
 	await fxHistoryStatement(db, base, quote, rate, at).run();
@@ -68,14 +80,16 @@ export function autoFxRateStatement(
 	quote: string,
 	rate: number,
 	at: string = nowIso(),
+	asOf: string | null = null,
 ): D1PreparedStatement {
 	return db
 		.prepare(
-			`INSERT INTO fx_rates (base, quote, rate, updated_at, source) VALUES (?, ?, ?, ?, 'auto')
-			 ON CONFLICT (base, quote) DO UPDATE SET rate = excluded.rate, updated_at = excluded.updated_at
+			`INSERT INTO fx_rates (base, quote, rate, updated_at, source, as_of) VALUES (?, ?, ?, ?, 'auto', ?)
+			 ON CONFLICT (base, quote) DO UPDATE SET rate = excluded.rate, updated_at = excluded.updated_at,
+			   as_of = excluded.as_of
 			 WHERE fx_rates.source = 'auto'`,
 		)
-		.bind(base, quote, rate, at);
+		.bind(base, quote, rate, at, asOf);
 }
 
 /** 汇率变动历史语句（不执行） */

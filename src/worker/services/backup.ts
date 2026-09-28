@@ -40,6 +40,8 @@ export interface HoldingRecord {
 	price: number;
 	avg_cost: number | null;
 	price_updated_at: string | null;
+	/** 上游给的报价时间（ISO）；手工填的价格为 null */
+	price_as_of: string | null;
 	archived: number;
 	note: string | null;
 	created_at: string;
@@ -69,6 +71,8 @@ export interface FxRateRecord {
 	quote: string;
 	rate: number;
 	updated_at: string;
+	/** 上游给的汇率日期/时刻（ISO）；手工维护的为 null */
+	as_of: string | null;
 }
 
 export interface FxRateHistoryRecord {
@@ -305,6 +309,7 @@ export function parseBackup(input: unknown, t: Translator): { file: BackupFile; 
 			price: num(row.price, `holdings[${index}].price`, { min: 0, max: 1e15 }),
 			avg_cost: numOrNull(row.avg_cost, `holdings[${index}].avg_cost`),
 			price_updated_at: isoOrNull(row.price_updated_at, `holdings[${index}].price_updated_at`),
+			price_as_of: isoOrNull(row.price_as_of, `holdings[${index}].price_as_of`),
 			archived: flag(row.archived),
 			note: strOrNull(row.note, 200),
 			created_at: iso(row.created_at, `holdings[${index}].created_at`),
@@ -351,6 +356,7 @@ export function parseBackup(input: unknown, t: Translator): { file: BackupFile; 
 			quote: currency(row.quote, `fxRates[${index}].quote`),
 			rate: num(row.rate, `fxRates[${index}].rate`, { min: 0.0000001, max: 1e9 }),
 			updated_at: iso(row.updated_at, `fxRates[${index}].updated_at`),
+			as_of: isoOrNull(row.as_of, `fxRates[${index}].as_of`),
 		} satisfies FxRateRecord;
 	});
 
@@ -550,7 +556,7 @@ function countStatements(file: BackupFile, mode: ImportMode): number {
 const ACCOUNT_COLUMNS =
 	"id, name, kind, market, currency, icon_key, icon_data, sort, archived, note, created_at, updated_at";
 const HOLDING_COLUMNS =
-	"id, account_id, class, market, symbol, name, currency, qty, price, avg_cost, price_updated_at, archived, note, created_at, updated_at";
+	"id, account_id, class, market, symbol, name, currency, qty, price, avg_cost, price_updated_at, price_as_of, archived, note, created_at, updated_at";
 
 /** 应用导入：单次 batch 内完成（原子）。数据量超过单批上限时自动分批 */
 export async function applyBackup(
@@ -608,12 +614,13 @@ export async function applyBackup(
 			: ` ON CONFLICT(id) DO UPDATE SET account_id=excluded.account_id, class=excluded.class, market=excluded.market,
 			    symbol=excluded.symbol, name=excluded.name, currency=excluded.currency, qty=excluded.qty,
 			    price=excluded.price, avg_cost=excluded.avg_cost, price_updated_at=excluded.price_updated_at,
+			    price_as_of=excluded.price_as_of,
 			    archived=excluded.archived, note=excluded.note, updated_at=excluded.updated_at`;
 	for (const row of data.holdings) {
 		statements.push(
 			db
 				.prepare(
-					`INSERT INTO holdings (${HOLDING_COLUMNS}) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)${holdingConflict}`,
+					`INSERT INTO holdings (${HOLDING_COLUMNS}) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)${holdingConflict}`,
 				)
 				.bind(
 					row.id,
@@ -627,6 +634,7 @@ export async function applyBackup(
 					row.price,
 					row.avg_cost,
 					row.price_updated_at,
+					row.price_as_of,
 					row.archived,
 					row.note,
 					row.created_at,
@@ -658,10 +666,11 @@ export async function applyBackup(
 		statements.push(
 			db
 				.prepare(
-					`INSERT INTO fx_rates (base, quote, rate, updated_at) VALUES (?,?,?,?)
-					 ON CONFLICT(base, quote) DO UPDATE SET rate=excluded.rate, updated_at=excluded.updated_at`,
+					`INSERT INTO fx_rates (base, quote, rate, updated_at, as_of) VALUES (?,?,?,?,?)
+					 ON CONFLICT(base, quote) DO UPDATE SET rate=excluded.rate, updated_at=excluded.updated_at,
+					   as_of=excluded.as_of`,
 				)
-				.bind(row.base, row.quote, row.rate, row.updated_at),
+				.bind(row.base, row.quote, row.rate, row.updated_at, row.as_of),
 		);
 	}
 	for (const row of data.fxRateHistory) {

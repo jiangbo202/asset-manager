@@ -121,7 +121,11 @@ const zh: Dict = {
 	"dashboard.colShare": "占比",
 	"dashboard.colCost": "成本",
 	"dashboard.colPnl": "盈亏",
-	"dashboard.colPriceUpdated": "价格更新",
+	"dashboard.colPriceUpdated": "报价时间",
+	// 悬停看完整时间：报价时间是上游给的、抓取时间是我们拿到的，
+	// 休市时两者可能差好几天（周末刷新的价格其实还是上周五收盘）
+	"dashboard.priceAsOfTip": "报价时间 {{asOf}} · 抓取于 {{fetchedAt}}",
+	"dashboard.priceFetchedTip": "抓取于 {{fetchedAt}}（上游未提供报价时间）",
 	"dashboard.missingFxBadge": "缺汇率",
 	"dashboard.noData": "暂无可展示的数据",
 	"dashboard.emptyFiltered": "当前筛选条件下没有持仓。换个筛选，或清除筛选看全部。",
@@ -482,6 +486,7 @@ const zh: Dict = {
 	"market.noCache": "还没有缓存。点「立即刷新行情」试试。",
 	"market.colSymbol": "代码",
 	"market.colPrice": "价格",
+	"market.asOfShort": "报价 {{time}}",
 	"market.refreshDone": "刷新完成：{{updated}} 条价格、{{fxUpdated}} 条汇率、{{failed}} 条失败",
 	"market.snapshotDone": "已生成 {{date}} 的快照：{{currency}} {{total}}",
 	"market.kind.stock": "股票",

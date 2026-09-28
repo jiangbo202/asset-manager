@@ -60,6 +60,8 @@ export interface HoldingRow {
 	price: number;
 	avg_cost: number | null;
 	price_updated_at: string | null;
+	/** 上游给的报价时间（ISO）；手工填的价格为 null —— 手工改价会清空它 */
+	price_as_of: string | null;
 	quote_source: string | null;
 	quote_symbol: string | null;
 	archived: number;

@@ -37,6 +37,8 @@ export interface HoldingDto {
 	price: number;
 	avg_cost: number | null;
 	price_updated_at: string | null;
+	/** 上游给的报价时间（ISO）；手工改价会清空它 */
+	price_as_of: string | null;
 	quote_source: string | null;
 	quote_symbol: string | null;
 	archived: number;
@@ -82,6 +84,10 @@ export interface PortfolioHolding {
 	pnlDisplay: number | null;
 	priceUpdatedAt: string | null;
 	daysSincePriceUpdate: number | null;
+	/** 上游给报的报价时间（ISO）；手工填的价格与现金为 null */
+	priceAsOf: string | null;
+	/** 报价时间距今天数（本地 24 小时制）；没有 asOf 时为 null */
+	daysSincePriceAsOf: number | null;
 	fxMissing: boolean;
 	share: number;
 	isCash: boolean;
@@ -109,6 +115,8 @@ export interface FxRateDto {
 	updated_at: string;
 	/** manual = 手工维护（不会被自动抓取覆盖）；auto = 行情抓取写入 */
 	source: string;
+	/** 上游给的汇率日期/时刻（ISO）；手工维护的为 null */
+	as_of: string | null;
 }
 
 export interface SettingsDto {
@@ -192,7 +200,16 @@ export interface QuoteStatusDto {
 	enabled: boolean;
 	lastRunAt: string | null;
 	providers: ProviderStatusDto[];
-	cache: Array<{ key: string; source: string; symbol: string; price: number; currency: string; fetched_at: string }>;
+	cache: Array<{
+		key: string;
+		source: string;
+		symbol: string;
+		price: number;
+		currency: string;
+		fetched_at: string;
+		/** 上游给的报价时间（ISO）；没有时为 null */
+		as_of: string | null;
+	}>;
 	recentRuns: Array<{
 		id: string;
 		started_at: string;

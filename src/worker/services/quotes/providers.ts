@@ -144,7 +144,16 @@ export interface Quote {
 	currency: string;
 	source: ProviderId;
 	symbol: string;
-	/** 上游顺带返回的名称（Yahoo 的 chart 接口会带），用于"输入代码自动填名称" */
+	/**
+	 * 上游给出的“这个价格是什么时候的”（ISO，UTC）。
+	 *
+	 * 与 `price_updated_at`（我们什么时候抓的）是两件事：休市时抓回来的价格是
+	 * 上一次收盘的，两者可能差好几天。上游不给时间的数据源（加密、自定义源）留空，
+	 * 由刷新流程按抓取时刻兜底 —— 加密 24/7，两者实际等价。
+	 * 只有日期没有时刻的（ECB 参考汇率）存 `YYYY-MM-DD`。
+	 */
+	asOf?: string | null;
+	/** 上游顺带返回的名称（Yahoo 的 chart 接口会带），用于“输入代码自动填名称” */
 	name?: string;
 }
 
@@ -510,6 +519,41 @@ async function binanceQuotes(targets: QuoteTarget[], ctx: FetchContext): Promise
 	return { quotes, errors };
 }
 
+/**
+ * 上游的“报价时间”解析（PRD FR-10.11）
+ *
+ * 只做一件事：把各家五花八门的时间字段统一成 ISO。拿不到就返回 null，绝不猜 ——
+ * 猜一个“现在”会让标注变成第二种错误信息。
+ */
+
+/** epoch 秒 → ISO（UTC）。Yahoo 的 regularMarketTime、er-api 的 time_last_update_unix 都是这个格式。 */
+function isoFromEpochSeconds(value: unknown): string | null {
+	const seconds = num(value);
+	if (seconds === null || seconds <= 0) return null;
+	const date = new Date(seconds * 1000);
+	return Number.isFinite(date.getTime()) ? date.toISOString() : null;
+}
+
+/**
+ * 腾讯的 `YYYY/MM/DD HH:mm:ss` → ISO。
+ *
+ * 这个字段是**交易所当地时间**，且不带时区：港股与 A 股都固定 UTC+8
+ * （香港 1979 年后无夏令时、中国无夏令时），所以按 +08:00 换算。
+ */
+function isoFromTencentTime(value: unknown): string | null {
+	if (typeof value !== "string") return null;
+	const match = value.trim().match(/^(\d{4})[/-](\d{2})[/-](\d{2})[ T](\d{2}):(\d{2}):(\d{2})$/);
+	if (!match) return null;
+	const [, year, month, day, hour, minute, second] = match;
+	const date = new Date(`${year}-${month}-${day}T${hour}:${minute}:${second}+08:00`);
+	return Number.isFinite(date.getTime()) ? date.toISOString() : null;
+}
+
+/** 只有日期的情况（ECB 参考汇率按日发布，没有时刻） */
+function isoDateOnly(value: unknown): string | null {
+	return typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value) ? value : null;
+}
+
 const YAHOO_HEADERS = {
 	accept: "application/json",
 	"user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120 Safari/537.36",
@@ -537,6 +581,8 @@ async function yahooQuotes(targets: QuoteTarget[], ctx: FetchContext): Promise<A
 					key: target.key,
 					// Yahoo 返回的是该标的的计价币种
 					price,
+					// 报价时间：休市时它是“上一次收盘的时刻”，盘中就是当前时刻
+					asOf: isoFromEpochSeconds(info?.regularMarketTime),
 					currency: typeof info?.currency === "string" ? info.currency : target.currency,
 					source: "yahoo" as ProviderId,
 					symbol,
@@ -594,6 +640,9 @@ async function tencentQuotes(targets: QuoteTarget[], ctx: FetchContext): Promise
 		}
 		const fields = match[1].split("~");
 		const price = num(fields[3]);
+		// fields[30] 是交易所当地时间的报价时间（如 "2026/09/28 10:28:53"）；
+		// 港股 / A 股都是 UTC+8，用它就能判断这个价是盘中价还是收盘价
+		const asOf = isoFromTencentTime(fields[30]);
 		if (price === null) {
 			errors.push(fail(pair.target.symbol, tr(ctx)("quote.tencentBadField", { symbol: pair.target.symbol }), pair.symbol));
 			continue;
@@ -601,6 +650,7 @@ async function tencentQuotes(targets: QuoteTarget[], ctx: FetchContext): Promise
 		quotes.push({
 			key: pair.target.key,
 			price,
+			asOf,
 			currency: pair.symbol.startsWith("hk") ? "HKD" : "CNY",
 			source: "tencent",
 			symbol: pair.symbol,
@@ -629,6 +679,8 @@ async function frankfurterQuotes(targets: QuoteTarget[], ctx: FetchContext): Pro
 			const data = await requestJson(url, ctx, { accept: "application/json" });
 			const rates = isRecord(data) && isRecord(data.rates) ? data.rates : null;
 			if (!rates) throw new Error("响应缺少 rates");
+			// ECB 参考汇率按工作日发布，上游只给日期（没有时刻）
+			const asOf = isRecord(data) ? isoDateOnly(data.date) : null;
 			for (const entry of entries) {
 				const price = num(rates[entry.quote]);
 				if (price === null) {
@@ -640,6 +692,7 @@ async function frankfurterQuotes(targets: QuoteTarget[], ctx: FetchContext): Pro
 				quotes.push({
 					key: entry.target.key,
 					price,
+					asOf,
 					currency: entry.quote,
 					source: "frankfurter",
 					symbol: `${base}:${entry.quote}`,
@@ -674,6 +727,8 @@ async function erapiQuotes(targets: QuoteTarget[], ctx: FetchContext): Promise<A
 			});
 			const rates = isRecord(data) && isRecord(data.rates) ? data.rates : null;
 			if (!rates) throw new Error("响应缺少 rates");
+			// open.er-api 自己带“上次更新时间”，比我们抓取的时刻准
+			const asOf = isRecord(data) ? isoFromEpochSeconds(data.time_last_update_unix) : null;
 			for (const entry of entries) {
 				const price = num(rates[entry.quote]);
 				if (price === null) {
@@ -685,6 +740,7 @@ async function erapiQuotes(targets: QuoteTarget[], ctx: FetchContext): Promise<A
 				quotes.push({
 					key: entry.target.key,
 					price,
+					asOf,
 					currency: entry.quote,
 					source: "erapi",
 					symbol: `${base}:${entry.quote}`,

@@ -197,7 +197,10 @@ Worker:
 ```
 providers.ts   适配器 + 代码映射（纯函数，易测）
   ├─ 输入归一化：QuoteTarget{ kind, symbol, currency, market, sourceOverride, symbolOverride }
-  ├─ 每个适配器返回统一 Quote{ key, price, currency, source, symbol, name? }
+  ├─ 每个适配器返回统一 Quote{ key, price, currency, source, symbol, name?, asOf? }
+  ├─ asOf（报价时间）：Yahoo `meta.regularMarketTime`、腾讯 `fields[30]`（当地 UTC+8）、
+  │  open.er-api `time_last_update_unix`、ECB 只给日期（存 YYYY-MM-DD）；加密/自定义源不给 → 留空，
+  │  由 index.ts 按抓取时刻兜底。与 price_updated_at（我们何时抓的）是两件事，休市时能差好几天
   └─ 代码映射规则：库里统一存港交所 5 位（03121），请求时 03121+hk→3121.HK（Yahoo 4 位）/ hk03121（腾讯 5 位）、
      600519+cn→600519.SS / BTC→bitcoin 或 BTCUSDT
 index.ts       编排
@@ -257,6 +260,7 @@ lookup.ts      代码查询（输入代码 → 名称/价格/币种/市场）
 |---|---|---|
 | 纯函数单测 | `tests/services/` | 代码映射、适配器解析、健康度冷却、readPath |
 | 口径护栏 | `tests/api/cash-rules.test.ts` | 现金该不该进某个统计（已踩三次坑，集中钉住） |
+| 时间口径 | `tests/api/quote-as-of.test.ts` | 报价时间 vs 抓取时间（上游给/不给/手工改价/公开分享/备份 round-trip） |
 | API 集成 | `tests/api/` | 用 `SELF.fetch` 打真实 Worker + 真实 D1（每个文件前自动应用迁移） |
 | 网络隔离 | 同上 | 适配器层注入假 `fetch`，真实网络只在人工验证时使用 |
 | 体积门禁 | `scripts/check-bundle.cjs` | 首包 > 110KB 或合计 > 160KB 直接失败 |

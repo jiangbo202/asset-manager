@@ -257,7 +257,7 @@ export async function updateHolding(
 	await db
 		.prepare(
 			`UPDATE holdings SET account_id = ?, class = ?, market = ?, symbol = ?, name = ?, currency = ?,
-			        qty = ?, price = ?, avg_cost = ?, price_updated_at = ?, quote_source = ?, quote_symbol = ?,
+			        qty = ?, price = ?, avg_cost = ?, price_updated_at = ?, price_as_of = ?, quote_source = ?, quote_symbol = ?,
 			        archived = ?, note = ?, updated_at = ?
 			 WHERE id = ?`,
 		)
@@ -272,6 +272,9 @@ export async function updateHolding(
 			next.price,
 			next.avg_cost,
 			priceUpdatedAt === undefined ? current.price_updated_at : priceUpdatedAt,
+			// 手工改价 = 这个价格没有上游时间：清空 asOf，界面退回“按更新时间”显示，
+			// 而不是继续拿上一次抓取时的报价时间给手工价贴标签
+			priceUpdatedAt === undefined ? current.price_as_of : null,
 			next.quote_source,
 			next.quote_symbol,
 			next.archived,
