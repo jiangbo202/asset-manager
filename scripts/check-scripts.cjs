@@ -156,7 +156,47 @@ if (readmeTitles["README.md"] && readmeTitles["README.en.md"]) {
 	}
 }
 
-/* 5. 关键脚本齐备 */
+/* 5. 迁移文件的版本标记
+ *
+ * 真实教训：0006（报价时间那批 ALTER TABLE）忘了更新 settings.schema_version。
+ * 后果很隐蔽：列已经加上了，库却仍自称 v5 —— 界面永远停在「数据库需要升级」，
+ * 用户点「已升级，重试」毫无变化（迁移确实应用过，Wrangler 不会再来一遍）。
+ * 两条不变式：
+ *   a) 每个迁移文件都必须碰一下 settings.schema_version
+ *   b) 最后一个碰它的文件，必须把它写成代码里的 SCHEMA_VERSION
+ */
+const migrationDir = path.join(ROOT, "migrations");
+const migrationFiles = fs
+	.readdirSync(migrationDir)
+	.filter((file) => file.endsWith(".sql"))
+	.sort();
+const codeVersion = Number.parseInt(
+	/SCHEMA_VERSION\s*=\s*(\d+)/.exec(fs.readFileSync(path.join(ROOT, "src", "shared", "version.ts"), "utf8"))?.[1] ??
+		"",
+	10,
+);
+const markerPattern = /['"]schema_version['"]\s*,\s*['"](\d+)['"]/;
+let lastMarkerWriter = null;
+for (const file of migrationFiles) {
+	const sql = fs.readFileSync(path.join(migrationDir, file), "utf8");
+	const match = markerPattern.exec(sql);
+	if (!match) {
+		note(
+			`${file} 没有更新 settings.schema_version：列会加上、但库仍自称旧版本，` +
+				`界面会卡在「数据库需要升级」，而迁移不会再跑第二遍`,
+		);
+		continue;
+	}
+	lastMarkerWriter = { file, version: Number.parseInt(match[1], 10) };
+}
+if (lastMarkerWriter && lastMarkerWriter.version !== codeVersion) {
+	note(
+		`${lastMarkerWriter.file} 把 settings.schema_version 写成 ${lastMarkerWriter.version}，` +
+			`但 src/shared/version.ts 的 SCHEMA_VERSION 是 ${codeVersion}`,
+	);
+}
+
+/* 6. 关键脚本齐备 */
 const required = [
 	"dev", "build", "preview", "lint", "test", "verify", "check:bundle", "check:scripts",
 	"check:auth", "setup:d1", "setup:secrets", "setup:repo", "update:upstream",

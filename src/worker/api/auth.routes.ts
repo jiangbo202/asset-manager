@@ -7,6 +7,7 @@ import {
 	getSettings,
 	publicSectionsOf,
 	publicViewOf,
+	reconcileSchemaVersion,
 	setSetting,
 	SETTING_DISPLAY_CURRENCY,
 } from "../data/settings.repo";
@@ -92,7 +93,15 @@ auth.get("/me", async (c) => {
 
 	// 结构版本、语言、时区：一次读完（原来是 3 次单独的 getSetting）
 	const settings = await getSettings(c.env.DB);
-	const schemaVersion = Number.parseInt(settings.schema_version ?? "0", 10) || 0;
+	let schemaVersion = Number.parseInt(settings.schema_version ?? "0", 10) || 0;
+	// 自愈：迁移作者漏写 settings.schema_version 时（真实发生过：0006 只写了 ALTER TABLE），
+	// 列加上去了、库却仍自称旧版本 —— 用户会被锁在「数据库需要升级」页，
+	// 而迁移已经应用过、Wrangler 不会再来一遍，点多少次「重试」都没变化。
+	// 用 Wrangler 自己的迁移记录校正一次，只在这个罕见分支里查一次。
+	if (schemaVersion < SCHEMA_VERSION) {
+		const healed = await reconcileSchemaVersion(c.env.DB, schemaVersion);
+		if (healed !== null) schemaVersion = healed;
+	}
 	const migrationRequired = schemaVersion < SCHEMA_VERSION;
 	const language = settings.language ?? "auto";
 	const timezone = normalizeTimeZone(settings.timezone);

@@ -89,7 +89,9 @@ app.onError((err, c) => {
 				error: {
 					code: "migration_required",
 					message:
-						"数据库结构未升级：本地请运行 `npm run db:migrate:local`，线上请重新部署（部署脚本会自动应用迁移）或运行 `npm run db:migrate:remote`",
+						`数据库结构未升级：本部署（${new URL(c.req.url).host}）连的库缺表/字段。` +
+						"本地请运行 `npm run db:migrate:local`，线上请在本机终端运行 `npm run db:migrate:remote`" +
+						"（`npm run deploy:safe` 也会自动应用）",
 					details: { hint: rawMessage },
 				},
 			},

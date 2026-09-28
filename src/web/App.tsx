@@ -1,8 +1,9 @@
-import { lazy, Suspense, useCallback, useEffect } from "react";
+import { lazy, Suspense, useCallback, useEffect, useState } from "react";
 import { api, type AuthMeDto } from "./lib/api";
 import { useAsync } from "./lib/useAsync";
 import { Link, RouterProvider, useRouter } from "./lib/router";
 import { I18nProvider, useI18n, useT } from "./lib/i18n";
+import { migrationHint } from "./lib/runtime";
 import type { LanguageSetting } from "../shared/i18n";
 import type { PublicSection } from "../shared/public-sections";
 // 首屏只需要 登录 / 初始化 / 总览；其余页面按需加载，避免把设置页和趋势图算进首包
@@ -129,6 +130,8 @@ function Gate() {
 	const me = useAsync<AuthMeDto>(() => api.auth.me(), []);
 	const t = useT();
 	const { applySetting, applyTimeZone, ready } = useI18n();
+	// 点过“重试”之后才显示检查结果：否则首屏就顶着一行“已重新检查”没头没脑
+	const [migrationRetried, setMigrationRetried] = useState(false);
 
 	// 服务端保存的语言与时区偏好：进入页面即生效（localStorage 里也存语言，下次开屏不等网络）
 	const serverLanguage = me.data?.language;
@@ -149,6 +152,9 @@ function Gate() {
 	}, [me]);
 
 	if (me.data?.migrationRequired || me.errorCode === "migration_required") {
+		// 命令要按“这个页面连的是哪个库”给：线上页面印本地命令，等于让用户白跑一次
+		const host = window.location.hostname;
+		const hint = migrationHint(host);
 		return (
 			<div className="center-screen">
 				<div className="card auth-card">
@@ -166,11 +172,30 @@ function Gate() {
 							})}
 						</p>
 					)}
+					<p className="small muted">
+						{hint.local
+							? t("gate.migrationOnLocal", { host })
+							: t("gate.migrationOnRemote", { host })}
+					</p>
 					<div className="token-box">
-						<code>npm run db:migrate:local</code>
+						<code>{hint.command}</code>
 					</div>
-					<p className="small muted">{t("gate.migrationRemote")}</p>
-					<button onClick={() => me.reload()}>{t("gate.migrationRetry")}</button>
+					<p className="small muted">{t("gate.migrationOther", { command: hint.otherCommand })}</p>
+					{migrationRetried && (
+						<p className="small">
+							{me.loading
+								? t("gate.migrationChecking")
+								: t("gate.migrationRetryStill", { current: me.data?.schemaVersion ?? "?" })}
+						</p>
+					)}
+					<button
+						onClick={() => {
+							setMigrationRetried(true);
+							me.reload();
+						}}
+					>
+						{t("gate.migrationRetry")}
+					</button>
 				</div>
 			</div>
 		);

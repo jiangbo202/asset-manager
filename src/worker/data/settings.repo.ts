@@ -118,3 +118,33 @@ export async function getSnapshotHour(db: D1Database): Promise<number> {
 export async function getDisplayCurrency(db: D1Database): Promise<string> {
 	return displayCurrencyOf(await getSettings(db));
 }
+
+/**
+ * 用 Wrangler 自己的迁移记录校正 `settings.schema_version`
+ *
+ * 为什么需要（真实事故）：迁移作者漏写那行 `INSERT INTO settings ('schema_version', 'N')` 时，
+ * 列会加上、但库仍自称旧版本 —— 应用于是把用户锁在「数据库需要升级」页，
+ * 而迁移确实已经应用过、Wrangler 不会再来一遍（终端只会说「No migrations to apply!」），
+ * 于是点多少次「重试」都不会有任何变化。
+ *
+ * 这里读一次 `d1_migrations`（Wrangler 维护），取已应用迁移里的最大编号；
+ * 比当前标记新就写回去。只在“标记落后”这个罕见分支里调用；
+ * 读不到（表不存在、权限异常等）就返回 null，绝不因为自愈失败而影响启动。
+ */
+export async function reconcileSchemaVersion(db: D1Database, current: number): Promise<number | null> {
+	try {
+		const { results } = await db
+			.prepare(`SELECT name FROM d1_migrations ORDER BY id DESC LIMIT 20`)
+			.all<{ name: string }>();
+		const applied = (results ?? [])
+			.map((row) => Number.parseInt(String(row.name).slice(0, 4), 10))
+			.filter((value) => Number.isFinite(value));
+		if (applied.length === 0) return null;
+		const newest = Math.max(...applied);
+		if (newest <= current) return null;
+		await settingStatement(db, "schema_version", String(newest)).run();
+		return newest;
+	} catch {
+		return null;
+	}
+}

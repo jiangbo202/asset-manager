@@ -69,8 +69,11 @@ const en: Dict = {
 	"gate.migrationIntro": "The code is newer than the database schema (missing tables or columns added in this version).",
 	"gate.migrationIdempotent": "Migrations are idempotent and never touch your data.",
 	"gate.migrationVersion": "Current schema v{{current}}, code expects v{{expected}}.",
-	"gate.migrationLocal": "Local:",
-	"gate.migrationRemote": "Remote: run npm run deploy:safe again, or npm run db:migrate:remote on its own",
+	"gate.migrationOnLocal": "This page is talking to your local wrangler dev database ({{host}}) — run the command below, then retry.",
+	"gate.migrationOnRemote": "This page is talking to your production D1 ({{host}}). Run the command below in your terminal — it targets the remote database; migrating your local one has no effect on it.",
+	"gate.migrationOther": "The other side: {{command}}",
+	"gate.migrationChecking": "Checking again…",
+	"gate.migrationRetryStill": "Checked again: the database is still v{{current}} — most likely the command ran against the other database.",
 	"gate.migrationRetry": "Upgraded — retry",
 
 	// ── Dashboard ───────────────────────────────────────────

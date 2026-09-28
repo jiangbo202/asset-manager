@@ -69,8 +69,11 @@ const zh: Dict = {
 	"gate.migrationIntro": "代码是新的，但数据库还停在旧结构（缺少新版本新增的表/字段）。",
 	"gate.migrationIdempotent": "升级是幂等的，不会动已有数据。",
 	"gate.migrationVersion": "当前结构版本 v{{current}}，代码需要 v{{expected}}。",
-	"gate.migrationLocal": "本地：",
-	"gate.migrationRemote": "线上：重跑 npm run deploy:safe，或单独执行 npm run db:migrate:remote",
+	"gate.migrationOnLocal": "本页连的是本机 wrangler dev 的本地库（{{host}}）——跑下面这条命令，再点重试。",
+	"gate.migrationOnRemote": "本页连的是线上 D1（{{host}}）：在你本机终端跑下面这条命令（它作用在线上库）。在本地库上跑迁移不会影响它。",
+	"gate.migrationOther": "另一侧：{{command}}",
+	"gate.migrationChecking": "正在重新检查…",
+	"gate.migrationRetryStill": "已重新检查：数据库仍是 v{{current}} —— 大概率命令跑在了另一个库上。",
 	"gate.migrationRetry": "已升级，重试",
 
 	// ── 总览 ────────────────────────────────────────────────

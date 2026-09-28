@@ -18,3 +18,6 @@
 ALTER TABLE holdings ADD COLUMN price_as_of TEXT;
 ALTER TABLE quote_cache ADD COLUMN as_of TEXT;
 ALTER TABLE fx_rates ADD COLUMN as_of TEXT;
+
+-- 结构标记：**每个迁移都要更新它**（应用靠这个数判断“库是不是落后于代码”）
+INSERT INTO settings (key, value) VALUES ('schema_version', '6') ON CONFLICT (key) DO UPDATE SET value = '6';
