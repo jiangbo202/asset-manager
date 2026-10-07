@@ -18,7 +18,7 @@ import {
 import { BrandIcon } from "../lib/icons";
 import type { PublicSection } from "../../shared/public-sections";
 import { buildTreemapItems } from "../lib/treemap";
-import { pnlSummary, staleHoldings } from "../lib/stats";
+import { groupPnlPct, pnlSummary, staleHoldings } from "../lib/stats";
 import { useT, useTimeZone } from "../lib/i18n";
 import { MarketFilter, parseMarketParam } from "../components/MarketFilter";
 import { useRouter } from "../lib/router";
@@ -26,6 +26,15 @@ import { ASSET_CLASSES, classLabel, marketLabel, type Market } from "../../share
 
 type Dimension = "class" | "account" | "currency" | "instrument";
 type SortKey = "value" | "share" | "pnl" | "name" | "stale";
+
+/**
+ * “按标的”维度的分组键。
+ *
+ * 环形图分组与盈亏分组必须用同一个键，否则图例上的百分比会张冠李戴；
+ * 放在模块级就是为了让两处 useMemo 引用同一个函数（各写一份迟早漂移）。
+ */
+const instrumentKeyOf = (holding: Portfolio["holdings"][number]): string =>
+	holding.symbol ? `${holding.symbol} ${holding.name}` : holding.name;
 
 function Skeleton() {
 	return (
@@ -84,6 +93,8 @@ export function DashboardPage({
 	const stacked = query.get("stack") === "1";
 	// treemap：同一标的跨账户合并统计（默认分开，按账户分组）
 	const mergeSymbols = query.get("merge") === "1";
+	// treemap：按盈亏色阶着色（红亏绿赚），而不是按账户配色
+	const colorByPnl = query.get("color") === "pnl";
 	const [refreshing, setRefreshing] = useState(false);
 	const [refreshNote, setRefreshNote] = useState<string | null>(null);
 
@@ -167,7 +178,7 @@ export function DashboardPage({
 		const buckets = new Map<string, { value: number; share: number }>();
 		for (const holding of data.holdings) {
 			if (holding.marketValueDisplay === null) continue;
-			const key = holding.symbol ? `${holding.symbol} ${holding.name}` : holding.name;
+			const key = instrumentKeyOf(holding);
 			const bucket = buckets.get(key) ?? { value: 0, share: 0 };
 			bucket.value += holding.marketValueDisplay;
 			bucket.share += holding.share;
@@ -178,6 +189,22 @@ export function DashboardPage({
 			.sort((a, b) => b.value - a.value);
 		// t 变化时需要重算标签
 	}, [data, dimension, t]);
+
+	/**
+	 * 当前维度下每个分组的盈亏%：给环形图图例与圆心用。
+	 * 键必须和 donutItems 的 key 一致，否则比例会张冠李戴（按标的维度共用 instrumentKeyOf）。
+	 */
+	const pnlByDimension = useMemo(() => {
+		if (!data) return new Map<string, number | null>();
+		if (dimension === "instrument") return groupPnlPct(data.holdings, instrumentKeyOf);
+		if (dimension === "account") return groupPnlPct(data.holdings, (item) => item.accountId);
+		if (dimension === "currency") return groupPnlPct(data.holdings, (item) => item.currency);
+		return groupPnlPct(data.holdings, (item) => item.class);
+	}, [data, dimension]);
+
+	// 有没有盈亏可看：公开分享未包含明细时服务端会把 pnl 抹成 null，
+	// 此时不显示"按盈亏着色"开关，也不显示任何百分比（而不是涂成 0%）
+	const pnlAvailable = useMemo(() => data?.holdings.some((item) => item.pnlDisplay !== null) ?? false, [data]);
 
 	const treemapItems = useMemo(
 		// 注意：memo 里只能用"早于本 memo 声明"的变量。currency 已提到组件顶部，
@@ -465,6 +492,8 @@ export function DashboardPage({
 								currency={currency}
 								activeKey={activeDonutKey || null}
 								onSelect={dimension === "instrument" ? undefined : handleDonutSelect}
+								pnlOf={(key) => pnlByDimension.get(key) ?? null}
+								pnlPct={pnlAvailable ? pnlPct : null}
 							/>
 						</div>
 						<div className="card panel">
@@ -493,11 +522,26 @@ export function DashboardPage({
 									/>
 									{t("dashboard.mergeSymbols")}
 								</label>
+								{pnlAvailable && (
+									<label
+										className="small"
+										style={{ display: "flex", gap: 6, alignItems: "center", whiteSpace: "nowrap", marginLeft: 10 }}
+									>
+										<input
+											type="checkbox"
+											checked={colorByPnl}
+											style={{ width: "auto" }}
+											onChange={(e) => setQuery({ color: e.target.checked ? "pnl" : null })}
+										/>
+										{t("dashboard.colorByPnl")}
+									</label>
+								)}
 							</div>
 							<Treemap
 								items={treemapItems}
 								currency={currency}
 								colorByChild={Boolean(zoom)}
+								colorMode={colorByPnl ? "pnl" : "palette"}
 								onSelect={mergeSymbols ? undefined : (key) => setQuery({ zoom: key })}
 							/>
 						</div>

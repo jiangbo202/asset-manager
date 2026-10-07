@@ -50,3 +50,47 @@ export function staleHoldings(holdings: PortfolioHolding[], days = 7): Portfolio
 		(item) => !item.isCash && item.daysSincePriceUpdate !== null && item.daysSincePriceUpdate > days,
 	);
 }
+
+/** 参与分组盈亏的两个字段：折算后的成本与盈亏（缺汇率为 null） */
+export interface PnlCarrier {
+	costDisplay: number | null;
+	pnlDisplay: number | null;
+}
+
+/**
+ * 一组持仓的盈亏比例：Σ盈亏 ÷ Σ成本（金额加权）。
+ *
+ * 为什么不"把每条的百分比平均一下"：那样一笔 100 元 +1% 的持仓会和 10 万元 +50% 的
+ * 持仓一样重，小额持仓能把整组的比例带偏。加权才和统计卡的口径一致。
+ *
+ * 现金、未填成本、缺汇率的持仓都不进分母（它们的 costDisplay 是 null）。
+ * 返回 null 时界面必须显示「—」：那是"我们不知道"，涂成 0.0% 就变成"不赚不亏"了。
+ */
+export function pnlPctOf(holdings: readonly PnlCarrier[]): number | null {
+	let cost = 0;
+	let pnl = 0;
+	for (const item of holdings) {
+		if (item.costDisplay === null || item.pnlDisplay === null) continue;
+		cost += item.costDisplay;
+		pnl += item.pnlDisplay;
+	}
+	return cost > 0 ? (pnl / cost) * 100 : null;
+}
+
+/** 按 key 分组后逐组算盈亏%；keyOf 返回 null 的持仓不参与该维度 */
+export function groupPnlPct<T extends PnlCarrier>(
+	items: readonly T[],
+	keyOf: (item: T) => string | null,
+): Map<string, number | null> {
+	const buckets = new Map<string, T[]>();
+	for (const item of items) {
+		const key = keyOf(item);
+		if (key === null) continue;
+		const bucket = buckets.get(key);
+		if (bucket) bucket.push(item);
+		else buckets.set(key, [item]);
+	}
+	const out = new Map<string, number | null>();
+	for (const [key, bucket] of buckets) out.set(key, pnlPctOf(bucket));
+	return out;
+}

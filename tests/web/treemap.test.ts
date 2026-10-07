@@ -19,7 +19,7 @@ const holding = (
 	accountName: string,
 	symbol: string | null,
 	value: number | null,
-	extra: { name?: string } = {},
+	extra: { name?: string; cost?: number | null; pnl?: number | null } = {},
 ) => ({
 	id,
 	accountId,
@@ -27,6 +27,9 @@ const holding = (
 	symbol,
 	name: extra.name ?? symbol ?? "现金",
 	marketValueDisplay: value,
+	// 默认“没有成本”（现金、未填成本的情形）：盈亏比例应为 null，而不是 0%
+	costDisplay: extra.cost ?? null,
+	pnlDisplay: extra.pnl ?? null,
 });
 
 const holdings = [
@@ -144,5 +147,52 @@ describe("treemap 单元格标签", () => {
 		expect(textWidthEm("现金")).toBe(2);
 		expect(textWidthEm("SLDP")).toBeCloseTo(2.24, 2);
 		expect(textWidthEm("嘉信 RKLB")).toBeCloseTo(2 + 0.56 + 2.24, 2);
+	});
+});
+
+/**
+ * 按盈亏着色要用到的分组比例（PRD FR-5.x）
+ *
+ * 规则来自用户在图上的期待："一眼看出谁在赚、谁在亏"。两个容易错的点：
+ *   1. 组级比例必须是 Σ盈亏÷Σ成本（金额加权）—— 把每条的百分比平均会被小额持仓带偏
+ *   2. 现金与未填成本不进分母，整组都没有成本时是 null（界面显示「—」，不是 0.0%）
+ */
+describe("treemap：盈亏比例", () => {
+	it("组级比例是金额加权，不是把百分比平均", () => {
+		const rows = [
+			holding("p1", "a1", "嘉信", "AAA", 10100, { cost: 100, pnl: 1 }), // +1%
+			holding("p2", "a1", "嘉信", "BBB", 15000, { cost: 10000, pnl: 5000 }), // +50%
+		];
+		const items = buildTreemapItems({ holdings: rows, currency: "USD", mergeSymbols: false }, t);
+		// 5001 / 10100 ≈ +49.5%；"平均百分比"会给出 25.5% —— 差的这一截就是小额持仓的重量
+		expect(items[0]?.pnlPct).toBeCloseTo(49.5, 1);
+	});
+
+	it("整组只有现金时为 null（我们要显示「—」，不能显示成 0.0%）", () => {
+		const rows = [holding("c1", "a1", "嘉信", null, 5000, { name: "嘉信现金" })];
+		const items = buildTreemapItems({ holdings: rows, currency: "USD", mergeSymbols: false }, t);
+		expect(items[0]?.pnlPct).toBeNull();
+	});
+
+	it("块级比例按持仓自己算：同一个账户里也能分出赚的和亏的", () => {
+		const rows = [
+			holding("p1", "a1", "嘉信", "AAA", 110, { cost: 100, pnl: 10 }),
+			holding("p2", "a1", "嘉信", "BBB", 90, { cost: 100, pnl: -10 }),
+		];
+		const items = buildTreemapItems({ holdings: rows, currency: "USD", mergeSymbols: false }, t);
+		const byKey = new Map((items[0]?.children ?? []).map((child) => [child.key, child.pnlPct]));
+		expect(byKey.get("p1")).toBeCloseTo(10, 5);
+		expect(byKey.get("p2")).toBeCloseTo(-10, 5);
+		// 组级：(-10+10) / (100+100) = 0%
+		expect(items[0]?.pnlPct).toBeCloseTo(0, 5);
+	});
+
+	it("合并同一标的时，先把各账户的盈亏与成本相加再算", () => {
+		const rows = [
+			holding("p1", "a1", "嘉信", "RKLB", 200, { cost: 100, pnl: 100 }), // +100%
+			holding("p2", "a2", "FirstTrade", "RKLB", 100, { cost: 100, pnl: 0 }), // 0%
+		];
+		const items = buildTreemapItems({ holdings: rows, currency: "USD", mergeSymbols: true }, t);
+		expect(items[0]?.pnlPct).toBeCloseTo(50, 5); // 100 / 200
 	});
 });

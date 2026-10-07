@@ -1,6 +1,7 @@
 import type { PortfolioHolding } from "../../shared/api-types";
 import type { Translator } from "../../shared/i18n";
 import { money } from "./format";
+import { pnlPctOf } from "./stats";
 
 /**
  * 输出结构（与 charts.tsx 的 TreemapNode 一致）。
@@ -12,7 +13,9 @@ export interface TreemapItem {
 	key: string;
 	name: string;
 	value: number;
-	children?: Array<{ key: string; name: string; value: number; title?: string }>;
+	/** 该组的盈亏%（Σ盈亏÷Σ成本）；现金、未填成本、不分享明细时为 null */
+	pnlPct?: number | null;
+	children?: Array<{ key: string; name: string; value: number; title?: string; pnlPct?: number | null }>;
 }
 
 /**
@@ -30,7 +33,15 @@ export interface TreemapItem {
 
 export type TreemapHolding = Pick<
 	PortfolioHolding,
-	"id" | "accountId" | "accountName" | "symbol" | "name" | "marketValueDisplay"
+	| "id"
+	| "accountId"
+	| "accountName"
+	| "symbol"
+	| "name"
+	| "marketValueDisplay"
+	// 盈亏着色要用（PRD FR-5.x）：口径统一走 lib/stats.ts，不在这里自己算
+	| "costDisplay"
+	| "pnlDisplay"
 >;
 
 /** 组内只有一个子块时，它正好铺满整组（squarify 的行为），于是"合并成一块"成立 */
@@ -50,14 +61,15 @@ export function buildTreemapItems(
 	if (options.mergeSymbols) {
 		const bySymbol = new Map<
 			string,
-			{ label: string; value: number; parts: Array<{ accountName: string; value: number }> }
+			{ label: string; value: number; holdings: TreemapHolding[]; parts: Array<{ accountName: string; value: number }> }
 		>();
 		let grandTotal = 0;
 		for (const holding of usable) {
 			const value = holding.marketValueDisplay as number;
 			const label = holding.symbol ?? holding.name;
-			const entry = bySymbol.get(label) ?? { label, value: 0, parts: [] };
+			const entry = bySymbol.get(label) ?? { label, value: 0, holdings: [], parts: [] };
 			entry.value += value;
+			entry.holdings.push(holding);
 			entry.parts.push({ accountName: holding.accountName, value });
 			bySymbol.set(label, entry);
 			grandTotal += value;
@@ -88,6 +100,8 @@ export function buildTreemapItems(
 					key: `symbol:${entry.label}`,
 					name: entry.label,
 					value: Number(entry.value.toFixed(2)),
+					// 合并后按各账户相加再算比例：Σ盈亏÷Σ成本（不是把两个百分比平均）
+					pnlPct: pnlPctOf(entry.holdings),
 					children: mergedChild(entry.label, entry.value, title, `merged:${entry.label}`),
 				};
 			})
@@ -95,6 +109,8 @@ export function buildTreemapItems(
 	}
 
 	const groups = new Map<string, TreemapItem>();
+	// 每组的成员：用来算组级盈亏%（金额加权）
+	const groupMembers = new Map<string, TreemapHolding[]>();
 	for (const holding of usable) {
 		const value = holding.marketValueDisplay as number;
 		const group = groups.get(holding.accountId) ?? {
@@ -111,15 +127,18 @@ export function buildTreemapItems(
 			name: needsPrefix ? `${holding.accountName} ${label}` : label,
 			title: `${holding.accountName} · ${label}`,
 			value: Number(value.toFixed(2)),
+			pnlPct: pnlPctOf([holding]),
 		});
 		group.value += value;
 		groups.set(holding.accountId, group);
+		groupMembers.set(holding.accountId, [...(groupMembers.get(holding.accountId) ?? []), holding]);
 	}
 
 	return [...groups.values()]
 		.map((group) => ({
 			...group,
 			value: Number(group.value.toFixed(2)),
+			pnlPct: pnlPctOf(groupMembers.get(group.key) ?? []),
 			children: (group.children ?? []).sort((a, b) => b.value - a.value),
 		}))
 		.sort((a, b) => b.value - a.value);

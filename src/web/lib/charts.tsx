@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { BreakdownItem } from "../../shared/api-types";
-import { money } from "../lib/format";
+import { money, signedPercent } from "../lib/format";
+import { pnlColor } from "./pnl-color";
 import { treemapLabel } from "./treemap";
 import { useT } from "./i18n";
 
@@ -33,12 +34,18 @@ export function Donut({
 	size = 240,
 	activeKey,
 	onSelect,
+	pnlOf,
+	pnlPct,
 }: {
 	items: BreakdownItem[];
 	currency: string;
 	size?: number;
 	activeKey?: string | null;
 	onSelect?: (key: string) => void;
+	/** 每个分组（class/account/currency/instrument）的盈亏%；null = 拿不到（现金、缺汇率、不分享明细） */
+	pnlOf?: (key: string) => number | null;
+	/** 整体盈亏%，显示在圆环中心总额下面 */
+	pnlPct?: number | null;
 }) {
 	const t = useT();
 	const data = items.filter((item) => item.value > 0);
@@ -59,6 +66,7 @@ export function Donut({
 						const length = (item.value / total) * circumference;
 						const dash = Math.max(length - 1.5, 0.5);
 						const dimmed = activeKey != null && activeKey !== item.key;
+						const itemPnl = pnlOf?.(item.key) ?? null;
 						const element = (
 							<circle
 								key={item.key}
@@ -74,37 +82,53 @@ export function Donut({
 								style={onSelect ? { cursor: "pointer" } : undefined}
 								onClick={onSelect ? () => onSelect(item.key) : undefined}
 							>
-								<title>{`${item.label}：${money(item.value, currency)}（${item.share.toFixed(1)}%）`}</title>
+								<title>
+									{`${item.label}：${money(item.value, currency)}（${item.share.toFixed(1)}%）`}
+									{itemPnl === null ? "" : ` · ${signedPercent(itemPnl)}`}
+								</title>
 							</circle>
 						);
 						offset += length;
 						return element;
 					})}
 				</g>
-				<text x="50%" y="46%" textAnchor="middle" fontSize="12" fill="currentColor" opacity="0.6">
+				<text x="50%" y="44%" textAnchor="middle" fontSize="12" fill="currentColor" opacity="0.6">
 					{t("common.total")}
 				</text>
-				<text x="50%" y="57%" textAnchor="middle" fontSize="16" fontWeight="600" fill="currentColor">
+				<text x="50%" y="55%" textAnchor="middle" fontSize="16" fontWeight="600" fill="currentColor">
 					{money(total, currency, 0)}
 				</text>
+				{pnlPct !== null && pnlPct !== undefined && (
+					<text x="50%" y="66%" textAnchor="middle" fontSize="12" fill="currentColor" opacity="0.85">
+						{signedPercent(pnlPct)}
+					</text>
+				)}
 			</svg>
 
 			<ul className="legend">
-				{data.map((item, index) => (
-					<li key={item.key}>
-						<button
-							type="button"
-							className={`legend-row ${activeKey === item.key ? "on" : ""}`}
-							onClick={onSelect ? () => onSelect(item.key) : undefined}
-							disabled={!onSelect}
-						>
-							<span className="swatch" style={{ background: colorAt(index) }} />
-							<span className="legend-name">{item.label}</span>
-							<span className="muted small">{item.share.toFixed(1)}%</span>
-							<span className="legend-value">{money(item.value, currency, 0)}</span>
-						</button>
-					</li>
-				))}
+				{data.map((item, index) => {
+					const itemPnl = pnlOf?.(item.key) ?? null;
+					return (
+						<li key={item.key}>
+							<button
+								type="button"
+								className={`legend-row ${activeKey === item.key ? "on" : ""}`}
+								onClick={onSelect ? () => onSelect(item.key) : undefined}
+								disabled={!onSelect}
+							>
+								<span className="swatch" style={{ background: colorAt(index) }} />
+								<span className="legend-name">{item.label}</span>
+								<span className="muted small">{item.share.toFixed(1)}%</span>
+								{itemPnl !== null && (
+									<span className={`small ${itemPnl > 0 ? "positive" : itemPnl < 0 ? "negative" : "muted"}`}>
+										{signedPercent(itemPnl)}
+									</span>
+								)}
+								<span className="legend-value">{money(item.value, currency, 0)}</span>
+							</button>
+						</li>
+					);
+				})}
 			</ul>
 		</div>
 	);
@@ -114,10 +138,14 @@ export interface TreemapNode {
 	key: string;
 	name: string;
 	value: number;
+	/** 该组的盈亏%（Σ盈亏÷Σ成本）；null = 拿不到（现金、缺汇率、不分享明细） */
+	pnlPct?: number | null;
 	children?: Array<{
 		key: string;
 		name: string;
 		value: number;
+		/** 该块的盈亏%（单条持仓，或合并后的整个标的） */
+		pnlPct?: number | null;
 		/**
 		 * 鼠标悬停时的完整说明（可以用 \n 换行）。
 		 * 方块上写不下那么多字（小方块只显示 name），所以两者分开：
@@ -208,12 +236,15 @@ export function Treemap({
 	currency,
 	height = 320,
 	colorByChild = false,
+	colorMode = "palette",
 	onSelect,
 }: {
 	items: TreemapNode[];
 	currency: string;
 	height?: number;
 	colorByChild?: boolean;
+	/** palette = 按账户/标的配色（默认）；pnl = 按盈亏色阶着色，红亏绿赚 */
+	colorMode?: "palette" | "pnl";
 	onSelect?: (groupKey: string) => void;
 }) {
 	const t = useT();
@@ -249,6 +280,7 @@ export function Treemap({
 		value: number;
 		color: string;
 		groupKey: string;
+		pnlPct: number | null;
 	}> = [];
 	groups.forEach((group, groupIndex) => {
 		const box = groupRects[groupIndex];
@@ -258,13 +290,21 @@ export function Treemap({
 		children.forEach((child, childIndex) => {
 			const innerRect = inner[childIndex];
 			if (!innerRect) return;
+			// 盈亏色阶优先用块自己的比例（同一账户里也分赚和亏），拿不到才退回组级
+			const leafPnl = child.pnlPct ?? group.pnlPct ?? null;
 			leaves.push({
 				rect: { x: box.x + innerRect.x, y: box.y + innerRect.y, w: innerRect.w, h: innerRect.h },
 				name: child.name,
 				title: child.title,
 				value: child.value,
-				color: colorByChild ? colorAt(childIndex) : colorAt(groupIndex),
+				color:
+					colorMode === "pnl"
+						? pnlColor(leafPnl)
+						: colorByChild
+							? colorAt(childIndex)
+							: colorAt(groupIndex),
 				groupKey: group.key,
+				pnlPct: leafPnl,
 			});
 		});
 	});
@@ -280,8 +320,9 @@ export function Treemap({
 							key={`${leaf.groupKey}-${leaf.name}-${index}`}
 							className="treemap-cell"
 							title={
-								leaf.title ??
-								`${leaf.name}：${money(leaf.value, currency)}（${((leaf.value / total) * 100).toFixed(1)}%）`
+								(leaf.title ??
+									`${leaf.name}：${money(leaf.value, currency)}（${((leaf.value / total) * 100).toFixed(1)}%）`) +
+								(leaf.pnlPct === null ? "" : ` · ${signedPercent(leaf.pnlPct)}`)
 							}
 							style={{
 								left: `${leaf.rect.x}%`,
@@ -300,19 +341,37 @@ export function Treemap({
 				})}
 			</div>
 			<div className="treemap-legend">
-				{groups.map((group, index) => (
-					<button
-						key={group.key}
-						type="button"
-						className="legend-row"
-						onClick={onSelect ? () => onSelect(group.key) : undefined}
-						disabled={!onSelect}
-					>
-						<span className="swatch" style={{ background: colorByChild ? "var(--muted)" : colorAt(index) }} />
-						<span className="legend-name">{group.name}</span>
-						<span className="legend-value">{money(group.value, currency, 0)}</span>
-					</button>
-				))}
+				{groups.map((group, index) => {
+					const groupPnl = group.pnlPct ?? null;
+					return (
+						<button
+							key={group.key}
+							type="button"
+							className="legend-row"
+							onClick={onSelect ? () => onSelect(group.key) : undefined}
+							disabled={!onSelect}
+						>
+							<span
+								className="swatch"
+								style={{
+									background:
+										colorMode === "pnl"
+											? pnlColor(groupPnl)
+											: colorByChild
+												? "var(--muted)"
+												: colorAt(index),
+								}}
+							/>
+							<span className="legend-name">{group.name}</span>
+							{groupPnl !== null && (
+								<span className={`small ${groupPnl > 0 ? "positive" : groupPnl < 0 ? "negative" : "muted"}`}>
+									{signedPercent(groupPnl)}
+								</span>
+							)}
+							<span className="legend-value">{money(group.value, currency, 0)}</span>
+						</button>
+					);
+				})}
 			</div>
 		</div>
 	);
