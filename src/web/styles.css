@@ -521,6 +521,31 @@ label.field > span {
 	overflow-x: auto;
 }
 
+/* 总览的持仓明细：列多，在 ~1100–1400px 这种常见窗口下会把最后一列挤出屏幕。
+   三件事把宽度压回来（**不截断数字**，只截断名称）：
+     1. 单元格左右内边距收到 6px
+     2. 名称列截断，完整名称留在悬停提示里
+     3. 盈亏的比例、类别的市场后缀在中等宽度下隐藏（金额与类别本身仍显示） */
+.holdings-table th,
+.holdings-table td {
+	padding-left: 6px;
+	padding-right: 6px;
+}
+
+.holdings-table td.cell-name {
+	max-width: 190px;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+/* 阈值取 1280：1170（13" 笔记本，用户实际宽度）与 1280 两个最常见档位都保证不出横向滚动，
+   更宽的屏幕才显示这几个字 —— 宁可少几个字，也不要最后一列被挤出屏幕 */
+@media (max-width: 1280px) {
+	.holdings-table .hide-md {
+		display: none;
+	}
+}
+
 table {
 	width: 100%;
 	border-collapse: collapse;

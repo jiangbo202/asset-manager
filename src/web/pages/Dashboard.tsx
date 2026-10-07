@@ -572,7 +572,8 @@ export function DashboardPage({
 						</select>
 					</div>
 					<div className="card table-wrap">
-						<table>
+						{/* holdings-table：列宽微调（名称截断 + 紧凑内边距），见 styles.css */}
+						<table className="holdings-table">
 							<thead>
 								<tr>
 									<th className="left">{t("dashboard.colName")}</th>
@@ -590,7 +591,8 @@ export function DashboardPage({
 							<tbody>
 								{rows.map((item) => (
 									<tr key={item.id}>
-										<td className="left">
+										{/* 公司名可能很长（"Space Exploration Technologies Corp."），截断后完整名字放悬停 */}
+										<td className="left cell-name" title={`${item.symbol ? `${item.symbol} ` : ""}${item.name}`}>
 											{item.symbol ? <strong>{item.symbol}</strong> : item.name}
 											{item.symbol && <span className="muted small"> {item.name}</span>}
 										</td>
@@ -603,7 +605,7 @@ export function DashboardPage({
 										<td className="left hide-sm">
 											{classLabel(t, item.class)}
 											{item.market && (
-												<span className="muted small"> · {marketLabel(t, item.market as Market)}</span>
+												<span className="muted small hide-md"> · {marketLabel(t, item.market as Market)}</span>
 											)}
 										</td>
 										<td className="hide-sm">{number(item.qty)}</td>
