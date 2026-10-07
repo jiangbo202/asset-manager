@@ -236,15 +236,19 @@ export function Treemap({
 	currency,
 	height = 320,
 	colorByChild = false,
-	colorMode = "palette",
+	showPnl = false,
 	onSelect,
 }: {
 	items: TreemapNode[];
 	currency: string;
 	height?: number;
 	colorByChild?: boolean;
-	/** palette = 按账户/标的配色（默认）；pnl = 按盈亏色阶着色，红亏绿赚 */
-	colorMode?: "palette" | "pnl";
+	/**
+	 * 显示盈亏：色块按盈亏色阶着色（红亏绿赚），图例与悬停带上比例。
+	 * 关闭时与加这个功能之前完全一样（按账户/标的配色，不出现任何盈亏数字）——
+	 * 图例与悬停提示也必须跟着关，否则会出现「图例里有 %、色块却没按盈亏着色」的错位。
+	 */
+	showPnl?: boolean;
 	onSelect?: (groupKey: string) => void;
 }) {
 	const t = useT();
@@ -297,12 +301,7 @@ export function Treemap({
 				name: child.name,
 				title: child.title,
 				value: child.value,
-				color:
-					colorMode === "pnl"
-						? pnlColor(leafPnl)
-						: colorByChild
-							? colorAt(childIndex)
-							: colorAt(groupIndex),
+				color: showPnl ? pnlColor(leafPnl) : colorByChild ? colorAt(childIndex) : colorAt(groupIndex),
 				groupKey: group.key,
 				pnlPct: leafPnl,
 			});
@@ -322,7 +321,7 @@ export function Treemap({
 							title={
 								(leaf.title ??
 									`${leaf.name}：${money(leaf.value, currency)}（${((leaf.value / total) * 100).toFixed(1)}%）`) +
-								(leaf.pnlPct === null ? "" : ` · ${signedPercent(leaf.pnlPct)}`)
+								(showPnl && leaf.pnlPct !== null ? ` · ${signedPercent(leaf.pnlPct)}` : "")
 							}
 							style={{
 								left: `${leaf.rect.x}%`,
@@ -354,16 +353,11 @@ export function Treemap({
 							<span
 								className="swatch"
 								style={{
-									background:
-										colorMode === "pnl"
-											? pnlColor(groupPnl)
-											: colorByChild
-												? "var(--muted)"
-												: colorAt(index),
+									background: showPnl ? pnlColor(groupPnl) : colorByChild ? "var(--muted)" : colorAt(index),
 								}}
 							/>
 							<span className="legend-name">{group.name}</span>
-							{groupPnl !== null && (
+							{showPnl && groupPnl !== null && (
 								<span className={`small ${groupPnl > 0 ? "positive" : groupPnl < 0 ? "negative" : "muted"}`}>
 									{signedPercent(groupPnl)}
 								</span>

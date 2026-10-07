@@ -257,7 +257,10 @@ export interface TrendPoint {
 	total: number;
 	/**
 	 * 当日成本（显示币种），用来算悬停里的浮动盈亏 = total − cost。
-	 * 早期快照没存成本、或全部持仓都没填成本时为 null（界面显示「—」，不估）。
+	 *
+	 * 历史快照没记成本（字段是后加的）时按“成本 = 总额”填充，即**盈亏 0** ——
+	 * 这是明确的显示口径（要求历史点显示 0 而不是「—」），不是在猜数据。
+	 * 公开分享未包含持仓明细时整条被裁成 null，所以访客看不到这个 0。
 	 */
 	cost?: number | null;
 	byClass: Record<string, number>;

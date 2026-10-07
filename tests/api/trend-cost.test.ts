@@ -14,8 +14,8 @@ interface Envelope<T> {
  * 悬停提示要显示"那一天赚了多少"，而浮动盈亏 = 当日总额 − 当日成本，
  * 所以快照必须把成本一起记下来。三个要钉住的点：
  *   1. 成本按**当日冻结汇率**折算 —— 与总额同口径，否则盈亏里会混进汇率变动
- *   2. 早期快照没有成本 → null，界面显示「—」（不估、也不显示成 0）
- *   3. 公开分享未包含持仓明细时，成本被抹掉（与 /api/portfolio 的裁剪同级）
+ *   2. 历史快照没记成本（字段是后加的）→ 按“成本 = 总额”填充，即盈亏 0（用户要求显示 0 而不是「—」）
+ *   3. 公开分享未包含持仓明细时，成本被抹成 null（裁剪发生在填充之后，所以访客不会看到那个 0）
  */
 
 /** 快照 + 一只 10 股 @120、成本 100 的股票：市值 1200、成本 1000、浮动盈亏 +200 */
@@ -75,7 +75,8 @@ describe("走势图的浮动盈亏（当日总额 − 当日成本）", () => {
 
 		const anon = await trend();
 		const point = anon.body.data.points.at(-1);
-		// 总额仍然给（走势本来就是分享的区域），成本不给
+		// 总额仍然给（走势本来就是分享的区域），成本不给：
+		// 注意这个裁剪发生在“历史填充”之后，所以访客不会看到被填成 0 的盈亏
 		expect(point?.total).toBe(1200);
 		expect(anon.body.data.points.every((row) => row.cost === null)).toBe(true);
 
@@ -89,7 +90,7 @@ describe("走势图的浮动盈亏（当日总额 − 当日成本）", () => {
 		expect(shared.body.data.points.at(-1)?.cost).toBe(1000);
 	});
 
-	it("早期快照没有成本字段 → null（显示「—」，不估成 0）", async () => {
+	it("历史快照没有成本字段 → 按「成本 = 总额」填充，即盈亏 0（不显示「—」）", async () => {
 		await seed(cookie);
 		// 模拟旧版本写入的明细：只有 v，没有 cost
 		await env.DB.prepare(`UPDATE snapshots SET detail_json = ?`)
@@ -99,7 +100,9 @@ describe("走势图的浮动盈亏（当日总额 − 当日成本）", () => {
 		const series = await trend(cookie);
 		const point = series.body.data.points.at(-1);
 		expect(point?.total).toBe(1200);
-		expect(point?.cost).toBeNull();
+		// 填充口径：成本 = 总额，所以悬停里显示 0 而不是「—」
+		expect(point?.cost).toBe(1200);
+		expect((point?.total ?? 0) - (point?.cost ?? 0)).toBe(0);
 	});
 
 	it("没填成本的持仓不进成本合计（否则等于宣称成本为零）", async () => {

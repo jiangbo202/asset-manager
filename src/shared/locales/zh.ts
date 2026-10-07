@@ -106,7 +106,7 @@ const zh: Dict = {
 	"dashboard.treemapHint": "点方块或图例可下钻到账户；标签带账户名，区分不同券商的同一标的",
 	"dashboard.treemapHintMerged": "同一标的合并为一块（金额 = 各账户合计），悬停可看账户明细；下钻请取消勾选",
 	"dashboard.mergeSymbols": "同一标的合并",
-	"dashboard.showPnl": "显示盈亏",
+	"dashboard.showPnl": "盈亏",
 	"dashboard.tooltipCost": "成本",
 	"dashboard.treemapTotalLine": "{{name}} 合计 {{value}}（占 {{percent}}%）",
 	"dashboard.treemapAccountLine": "　{{name}} {{value}}（{{percent}}%）",

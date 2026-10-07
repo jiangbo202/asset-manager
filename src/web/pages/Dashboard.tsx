@@ -541,7 +541,7 @@ export function DashboardPage({
 								items={treemapItems}
 								currency={currency}
 								colorByChild={Boolean(zoom)}
-								colorMode={showPnl ? "pnl" : "palette"}
+								showPnl={showPnl}
 								onSelect={mergeSymbols ? undefined : (key) => setQuery({ zoom: key })}
 							/>
 						</div>

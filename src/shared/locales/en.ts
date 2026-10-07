@@ -106,7 +106,7 @@ const en: Dict = {
 	"dashboard.treemapHint": "Click a block or legend entry to drill into an account. Labels carry the account name so the same symbol stays distinguishable.",
 	"dashboard.treemapHintMerged": "Same symbols are merged into one block (amount = sum across accounts); hover for the breakdown, uncheck to drill in.",
 	"dashboard.mergeSymbols": "Merge same symbols",
-	"dashboard.showPnl": "Show P/L",
+	"dashboard.showPnl": "P/L",
 	"dashboard.tooltipCost": "Cost",
 	"dashboard.treemapTotalLine": "{{name}} total {{value}} ({{percent}}%)",
 	"dashboard.treemapAccountLine": "　{{name}} {{value}} ({{percent}}%)",

@@ -49,7 +49,7 @@ interface DetailEntry {
 	 * 持仓成本（原币种）。
 	 *
 	 * 后来才加的：走势图的悬停要显示「当日浮动盈亏」，而盈亏 = 当日总额 − 当日成本。
-	 * 早期快照没有这个字段，那些日子只能显示「—」—— 历史补不回来，所以宁可空着也不估。
+	 * 早期快照没有这个字段 —— 那些日子按“成本 = 总额（盈亏 0）”处理（见 buildTrendSeries）。
 	 */
 	cost?: number;
 }
@@ -324,8 +324,8 @@ export async function buildTrendSeries(
 	const raw: Array<{
 		date: string;
 		total: number;
-		/** 当日成本（显示币种）；全部持仓都没有成本时为 null */
-		cost: number | null;
+		/** 当日成本（显示币种）；历史快照没记成本时按“成本 = 总额”填充（盈亏 0） */
+		cost: number;
 		byClass: Record<string, number>;
 		byAccount: Record<string, number>;
 	}> = [];
@@ -392,7 +392,10 @@ export async function buildTrendSeries(
 		raw.push({
 			date: row.date,
 			total: Number(total.toFixed(2)),
-			cost: hasCost ? Number(cost.toFixed(2)) : null,
+			// 历史快照没记成本（字段是后加的）：按“成本 = 总额”、即**盈亏 0** 填充 ——
+			// 这是一个明确的显示口径（要求历史点显示 0 而不是「—」），不是在猜数据：
+			// 公开分享时整条 cost 会被裁成 null（见 portfolio.routes），访客看不到这个 0。
+			cost: hasCost ? Number(cost.toFixed(2)) : Number(total.toFixed(2)),
 			byClass: Object.fromEntries(Object.entries(byClass).map(([key, value]) => [key, Number(value.toFixed(2))])),
 			byAccount: Object.fromEntries(Object.entries(byAccount).map(([key, value]) => [key, Number(value.toFixed(2))])),
 		});
