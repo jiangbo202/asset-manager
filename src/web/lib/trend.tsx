@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import type { TrendPoint } from "../../shared/api-types";
 import { classLabel } from "../../shared/labels";
-import { money } from "./format";
+import { money, signedMoney, signedPercent, trendClass } from "./format";
+import { pnlPctOf } from "./stats";
 import { useT } from "./i18n";
 
 /**
@@ -242,6 +243,24 @@ export function TrendChart({
 						{hoverPoint.filled && t("dashboard.filledDay")}
 					</div>
 					<div style={{ fontWeight: 600 }}>{money(hoverValue.total, currency)}</div>
+					{/* 当日浮动盈亏 = 当日总额 − 当日成本。早期快照没存成本，那些天只能显示「—」 */}
+					{hoverPoint.cost !== null && hoverPoint.cost !== undefined && (
+						<>
+							<div className="small muted">
+								{t("dashboard.tooltipCost")} {money(hoverPoint.cost, currency)}
+							</div>
+							{(() => {
+								const pnl = hoverValue.total - (hoverPoint.cost as number);
+								const pct = pnlPctOf([{ costDisplay: hoverPoint.cost as number, pnlDisplay: pnl }]);
+								return (
+									<div className={`small ${trendClass(pnl)}`}>
+										{t("dashboard.pnlTotal")} {signedMoney(pnl, currency)}
+										{pct === null ? "" : `（${signedPercent(pct)}）`}
+									</div>
+								);
+							})()}
+						</>
+					)}
 					{stacked &&
 						hoverValue.segments
 							.filter((segment) => segment.to - segment.from > 0)

@@ -255,6 +255,11 @@ export interface RefreshReportDto {
 export interface TrendPoint {
 	date: string;
 	total: number;
+	/**
+	 * 当日成本（显示币种），用来算悬停里的浮动盈亏 = total − cost。
+	 * 早期快照没存成本、或全部持仓都没填成本时为 null（界面显示「—」，不估）。
+	 */
+	cost?: number | null;
 	byClass: Record<string, number>;
 	byAccount: Record<string, number>;
 	/** 当日没有快照，沿用前一日 */

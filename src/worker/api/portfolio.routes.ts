@@ -100,7 +100,14 @@ portfolio.get("/history", async (c) => {
 			snapshots,
 		},
 	});
-	return ok(c, { ...series, range });
+	// 公开只读分享：成本与“持仓明细”同级敏感 —— 只分享走势的访客不该拿到我的成本曲线
+	// （悬停里的浮动盈亏需要它，所以这里抹掉而不是不返回，前端会自动只显示总额）
+	const trendSections = c.get("publicSections");
+	const visible =
+		!trendSections || trendSections.includes("holdings")
+			? series
+			: { ...series, points: series.points.map((point) => ({ ...point, cost: null })) };
+	return ok(c, { ...visible, range });
 });
 
 /** 快照列表（设置页用于排查"哪几天没拍"） */

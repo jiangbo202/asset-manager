@@ -93,8 +93,8 @@ export function DashboardPage({
 	const stacked = query.get("stack") === "1";
 	// treemap：同一标的跨账户合并统计（默认分开，按账户分组）
 	const mergeSymbols = query.get("merge") === "1";
-	// treemap：按盈亏色阶着色（红亏绿赚），而不是按账户配色
-	const colorByPnl = query.get("color") === "pnl";
+	// 图上的浮动盈亏：默认关闭（保持图面简洁），开启后环形图/treemap 才显示比例
+	const showPnl = query.get("pnl") === "1";
 	const [refreshing, setRefreshing] = useState(false);
 	const [refreshNote, setRefreshNote] = useState<string | null>(null);
 
@@ -413,6 +413,20 @@ export function DashboardPage({
 			<div className="section">
 				<div className="section-head">
 					<h2>{t("dashboard.distribution")}</h2>
+					{pnlAvailable && (
+						<label
+							className="small"
+							style={{ display: "flex", gap: 6, alignItems: "center", whiteSpace: "nowrap" }}
+						>
+							<input
+								type="checkbox"
+								checked={showPnl}
+								style={{ width: "auto" }}
+								onChange={(e) => setQuery({ pnl: e.target.checked ? "1" : null })}
+							/>
+							{t("dashboard.showPnl")}
+						</label>
+					)}
 					<div className="seg">
 						{(["class", "account", "currency", "instrument"] as Dimension[]).map((item) => (
 							<button
@@ -492,8 +506,8 @@ export function DashboardPage({
 								currency={currency}
 								activeKey={activeDonutKey || null}
 								onSelect={dimension === "instrument" ? undefined : handleDonutSelect}
-								pnlOf={(key) => pnlByDimension.get(key) ?? null}
-								pnlPct={pnlAvailable ? pnlPct : null}
+								pnlOf={showPnl ? (key) => pnlByDimension.get(key) ?? null : undefined}
+								pnlPct={showPnl ? pnlPct : null}
 							/>
 						</div>
 						<div className="card panel">
@@ -522,26 +536,12 @@ export function DashboardPage({
 									/>
 									{t("dashboard.mergeSymbols")}
 								</label>
-								{pnlAvailable && (
-									<label
-										className="small"
-										style={{ display: "flex", gap: 6, alignItems: "center", whiteSpace: "nowrap", marginLeft: 10 }}
-									>
-										<input
-											type="checkbox"
-											checked={colorByPnl}
-											style={{ width: "auto" }}
-											onChange={(e) => setQuery({ color: e.target.checked ? "pnl" : null })}
-										/>
-										{t("dashboard.colorByPnl")}
-									</label>
-								)}
 							</div>
 							<Treemap
 								items={treemapItems}
 								currency={currency}
 								colorByChild={Boolean(zoom)}
-								colorMode={colorByPnl ? "pnl" : "palette"}
+								colorMode={showPnl ? "pnl" : "palette"}
 								onSelect={mergeSymbols ? undefined : (key) => setQuery({ zoom: key })}
 							/>
 						</div>

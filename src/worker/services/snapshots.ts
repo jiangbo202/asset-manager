@@ -45,6 +45,13 @@ interface DetailEntry {
 	m: string | null;
 	/** market value（原币种） */
 	v: number;
+	/**
+	 * 持仓成本（原币种）。
+	 *
+	 * 后来才加的：走势图的悬停要显示「当日浮动盈亏」，而盈亏 = 当日总额 − 当日成本。
+	 * 早期快照没有这个字段，那些日子只能显示「—」—— 历史补不回来，所以宁可空着也不估。
+	 */
+	cost?: number;
 }
 
 export interface TakeSnapshotResult {
@@ -91,6 +98,8 @@ export async function takeSnapshot(
 			u: item.currency,
 			m: item.market,
 			v: Number(item.marketValue.toFixed(6)),
+			// 没填成本的持仓（现金、未填）不写这个字段：写入 0 会被当成"成本为零"
+			...(item.cost === null ? {} : { cost: Number(item.cost.toFixed(6)) }),
 		});
 	}
 
@@ -312,9 +321,18 @@ export async function buildTrendSeries(
 	}
 
 	// 先算出每个快照日的真实值
-	const raw: Array<{ date: string; total: number; byClass: Record<string, number>; byAccount: Record<string, number> }> = [];
+	const raw: Array<{
+		date: string;
+		total: number;
+		/** 当日成本（显示币种）；全部持仓都没有成本时为 null */
+		cost: number | null;
+		byClass: Record<string, number>;
+		byAccount: Record<string, number>;
+	}> = [];
 	for (const row of rows) {
 		let total = 0;
+		let cost = 0;
+		let hasCost = false;
 		const byClass: Record<string, number> = {};
 		const byAccount: Record<string, number> = {};
 
@@ -343,6 +361,11 @@ export async function buildTrendSeries(
 				}
 				const value = entry.v * rate;
 				total += value;
+				// 成本用同一个汇率折算（与总额同口径，否则盈亏里会混进汇率变动）
+				if (typeof entry.cost === "number") {
+					cost += entry.cost * rate;
+					hasCost = true;
+				}
 				byClass[entry.c] = (byClass[entry.c] ?? 0) + value;
 				byAccount[entry.a] = (byAccount[entry.a] ?? 0) + value;
 			}
@@ -369,6 +392,7 @@ export async function buildTrendSeries(
 		raw.push({
 			date: row.date,
 			total: Number(total.toFixed(2)),
+			cost: hasCost ? Number(cost.toFixed(2)) : null,
 			byClass: Object.fromEntries(Object.entries(byClass).map(([key, value]) => [key, Number(value.toFixed(2))])),
 			byAccount: Object.fromEntries(Object.entries(byAccount).map(([key, value]) => [key, Number(value.toFixed(2))])),
 		});
